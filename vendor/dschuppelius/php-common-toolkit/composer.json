@@ -1,0 +1,38 @@
+{
+  "name": "dschuppelius/php-common-toolkit",
+  "description": "Project description.",
+  "type": "library",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Daniel Joerg Schuppelius",
+      "email": "info@schuppelius.org"
+    }
+  ],
+  "autoload": {
+    "psr-4": {
+      "CommonToolkit\\": "src/"
+    }
+  },
+  "prefer-stable": true,
+  "require": {
+    "php": ">=8.2 <8.5",
+    "ext-bcmath": "*",
+    "ext-dom": "*",
+    "ext-intl": "*",
+    "ext-zip": "*",
+    "dschuppelius/php-config-toolkit": "^0.2.26"
+  },
+
+  "autoload-dev": {
+    "psr-4": {
+      "Tests\\": "tests/"
+    }
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.3@dev"
+  },
+  "scripts": {
+    "test": "vendor/bin/phpunit"
+  }
+}

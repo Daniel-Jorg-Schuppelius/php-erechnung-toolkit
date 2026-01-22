@@ -1,0 +1,71 @@
+{
+    "shellExecutables": {
+        "mimetype": {
+            "path": "file",
+            "required": false,
+            "description": "Mimetypes of files",
+            "folders2Check": [
+                "/usr/share/misc/magic"
+            ],
+            "package": "file",
+            "arguments": [
+                "-b",
+                "--mime-type",
+                "-m /usr/share/misc/magic",
+                "[INPUT]"
+            ]
+        },
+        "mime-encoding": {
+            "path": "file",
+            "required": false,
+            "description": "Mime Encoding of files",
+            "folders2Check": [
+                "/usr/share/misc/magic"
+            ],
+            "package": "file",
+            "arguments": [
+                "-b",
+                "--mime-encoding",
+                "-m /usr/share/misc/magic",
+                "[INPUT]"
+            ]
+        },
+        "chardet": {
+            "path": "chardet",
+            "required": false,
+            "description": "Character Set Detector",
+            "package": "python3-chardet",
+            "arguments": [
+                "--minimal [INPUT]"
+            ]
+        },
+        "uchardet": {
+            "path": "uchardet",
+            "required": false,
+            "description": "uchardet CLI",
+            "package": "uchardet",
+            "arguments": ["[INPUT]"]
+        },
+        "java": {
+            "path": "java",
+            "required": true,
+            "description": "Runtime Environment for Java",
+            "package": "default-jre",
+            "arguments": []
+        },
+        "java-program": {
+            "path": "java",
+            "required": true,
+            "description": "Runtime Environment for Java-Programs",
+            "package": "default-jre",
+            "arguments": ["-jar [PROGRAM]"]
+        },
+        "java-class": {
+            "path": "java",
+            "required": true,
+            "description": "Runtime Environment for Javaclasses",
+            "package": "default-jre",
+            "arguments": ["-cp [CLASSPATH] [MAINCLASS]", "class [CLASS]"]
+        }
+    }
+}

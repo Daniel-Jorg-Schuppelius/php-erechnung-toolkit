@@ -1,0 +1,33 @@
+{
+    "name": "dschuppelius/php-config-toolkit",
+    "description": "Ein Toolkit für JSON-basierte Konfigurationsverwaltung",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Daniel Joerg Schuppelius",
+            "email": "info@schuppelius.org"
+        }
+    ],
+    "prefer-stable": true,
+    "autoload": {
+        "psr-4": {
+            "ConfigToolkit\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^11.3@dev"
+    },
+    "require": {
+        "php": ">=8.0 <8.5",
+        "dschuppelius/php-error-toolkit": "^2.0"
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit"
+    }
+}

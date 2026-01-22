@@ -1,0 +1,46 @@
+{
+    "shellExecutables": {
+        "ping": {
+            "path": "ping",
+            "required": true,
+            "description": "Ping"
+        },
+        "mutt": {
+            "path": "/usr/bin/mutt",
+            "required": false,
+            "description": "Mail User Agent",
+            "arguments": [
+                "-s",
+                "'[subject]'"
+            ],
+            "debugArguments": [
+                "-s",
+                "'[subject]'"
+            ]
+        },
+        "java": {
+            "path": "/usr/bin/java",
+            "required": false,
+            "description": "Java Runtime Environment",
+            "arguments": [
+                "-jar"
+            ],
+            "debugArguments": [
+                "-jar"
+            ]
+        }
+    },
+    "javaExecutables": {
+        "pdfbox": {
+            "path": "/usr/local/bin/pdfbox-app-3.0.0-alpha2.jar",
+            "required": false,
+            "description": "PDFBox",
+            "arguments": [
+                "ExtractText"
+            ],
+            "debugArguments": [
+                "ExtractText"
+            ]
+        }
+    }
+}

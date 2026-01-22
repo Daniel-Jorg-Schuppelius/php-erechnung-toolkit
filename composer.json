@@ -1,0 +1,55 @@
+{
+  "name": "daniel-jorg-schuppelius/php-erechnung-toolkit",
+  "description": "PHP library for creating, parsing and validating electronic invoices (XRechnung, ZUGFeRD/Factur-X) according to EN 16931.",
+  "type": "library",
+  "license": "AGPL-3.0-or-later",
+  "keywords": [
+    "e-rechnung",
+    "xrechnung",
+    "zugferd",
+    "factur-x",
+    "en16931",
+    "ubl",
+    "cii",
+    "einvoicing",
+    "invoice",
+    "peppol"
+  ],
+  "authors": [
+    {
+      "name": "Daniel Joerg Schuppelius",
+      "email": "info@schuppelius.org"
+    }
+  ],
+  "require": {
+    "php": ">=8.2 <8.5",
+    "dschuppelius/php-common-toolkit": "^1.0",
+    "ext-dom": "*",
+    "ext-libxml": "*"
+  },
+  "autoload": {
+    "psr-4": {
+      "ERechnungToolkit\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "Tests\\": "tests/"
+    }
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^11.3",
+    "dschuppelius/php-pdf-toolkit": "^1.0"
+  },
+  "suggest": {
+    "dschuppelius/php-pdf-toolkit": "Required for ZUGFeRD/Factur-X PDF generation with embedded XML invoices"
+  },
+  "prefer-stable": true,
+  "config": {
+    "sort-packages": true,
+    "optimize-autoloader": true
+  },
+  "scripts": {
+    "test": "vendor/bin/phpunit"
+  }
+}
