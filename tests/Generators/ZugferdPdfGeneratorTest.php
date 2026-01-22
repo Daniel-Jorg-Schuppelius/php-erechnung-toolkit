@@ -122,14 +122,12 @@ HTML;
         $this->assertStringStartsWith('%PDF-', $pdfBytes);
     }
 
-    public function testGenerateThrowsExceptionWithoutPdfToolkit(): void {
+    public function testGenerateReturnsNullWithoutPdfToolkit(): void {
         // Dieser Test prüft das Verhalten wenn PDF-Toolkit nicht verfügbar ist
-        // Wir können das nicht direkt mocken, da die Klasse final ist
-        // Stattdessen prüfen wir die isAvailable-Methode
 
         $generator = new ZugferdPdfGenerator();
 
-        // Wenn PDF-Toolkit nicht verfügbar, erwarten wir eine Exception
+        // Wenn PDF-Toolkit nicht verfügbar, erwarten wir null-Rückgabe
         if (!$generator->isAvailable()) {
             $invoice = ERechnungDocumentBuilder::create('TEST-001')
                 ->withIssueDate(new DateTimeImmutable())
@@ -140,10 +138,8 @@ HTML;
                 ->addLine('Test', 1, 100.00)
                 ->build();
 
-            $this->expectException(\RuntimeException::class);
-            $this->expectExceptionMessage('php-pdf-toolkit');
-
-            $generator->generate($invoice);
+            $result = $generator->generate($invoice);
+            $this->assertNull($result);
         } else {
             // PDF-Toolkit ist verfügbar, Test als bestanden markieren
             $this->assertTrue(true);
