@@ -22,6 +22,7 @@ use ERechnungToolkit\Entities\PaymentTerms;
 use ERechnungToolkit\Entities\PostalAddress;
 use ERechnungToolkit\Enums\ERechnungProfile;
 use ERechnungToolkit\Enums\InvoiceType;
+use ERechnungToolkit\Enums\NoteSubjectCode;
 use ERechnungToolkit\Enums\PaymentMeansCode;
 use ERechnungToolkit\Enums\TaxCategory;
 use ERechnungToolkit\Enums\UnitCode;
@@ -437,9 +438,16 @@ final class ERechnungDocumentBuilder {
 
     /**
      * Adds a note to the invoice.
+     * 
+     * @param string $note The note text
+     * @param NoteSubjectCode|null $subjectCode Optional subject code (UNTDID 4451) for categorization
      */
-    public function addNote(string $note): self {
-        $this->notes[] = $note;
+    public function addNote(string $note, ?NoteSubjectCode $subjectCode = null): self {
+        if ($subjectCode !== null) {
+            $this->notes[] = NoteSubjectCode::formatNote($note, $subjectCode);
+        } else {
+            $this->notes[] = $note;
+        }
         return $this;
     }
 

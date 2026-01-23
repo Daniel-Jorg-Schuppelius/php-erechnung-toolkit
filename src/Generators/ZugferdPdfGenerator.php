@@ -14,6 +14,7 @@ namespace ERechnungToolkit\Generators;
 
 use ERechnungToolkit\Entities\Document;
 use ERechnungToolkit\Enums\ERechnungProfile;
+use ERechnungToolkit\Enums\NoteSubjectCode;
 use ERRORToolkit\Traits\ErrorLog;
 
 /**
@@ -359,7 +360,17 @@ HTML;
         $commentBoxHtml = '';
         $notes = $invoice->getNotes();
         if (!empty($notes)) {
-            $notesText = implode('<br>', array_map('htmlspecialchars', $notes));
+            // Formatiere Notes mit Subject Code Label als Präfix
+            $formattedNotes = array_map(function (string $note): string {
+                $parsed = NoteSubjectCode::parseNote($note);
+                $text = htmlspecialchars($parsed['text']);
+                if ($parsed['code'] !== null) {
+                    $label = htmlspecialchars($parsed['code']->getLabel());
+                    return "<strong>{$label}:</strong> {$text}";
+                }
+                return $text;
+            }, $notes);
+            $notesText = implode('<br>', $formattedNotes);
             $commentBoxHtml = <<<HTML
     <div class="comment-box">
         <div class="section-label">Hinweise:</div>

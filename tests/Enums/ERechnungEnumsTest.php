@@ -15,6 +15,7 @@ namespace Tests\Enums;
 use ERechnungToolkit\Enums\AllowanceChargeReasonCode;
 use ERechnungToolkit\Enums\ERechnungProfile;
 use ERechnungToolkit\Enums\InvoiceType;
+use ERechnungToolkit\Enums\NoteSubjectCode;
 use ERechnungToolkit\Enums\PaymentMeansCode;
 use ERechnungToolkit\Enums\TaxCategory;
 use ERechnungToolkit\Enums\UnitCode;
@@ -195,5 +196,83 @@ class ERechnungEnumsTest extends BaseTestCase {
         $this->assertEquals('Stück', UnitCode::PIECE->label());
         $this->assertEquals('Stunde', UnitCode::HOUR->label());
         $this->assertEquals('Pauschale', UnitCode::LUMP_SUM->label());
+    }
+
+    // NoteSubjectCode Tests
+    public function testNoteSubjectCodeValues(): void {
+        $this->assertEquals('ADU', NoteSubjectCode::ADU->value);
+        $this->assertEquals('REG', NoteSubjectCode::REG->value);
+        $this->assertEquals('AAI', NoteSubjectCode::AAI->value);
+        $this->assertEquals('SUR', NoteSubjectCode::SUR->value);
+    }
+
+    public function testNoteSubjectCodeLabel(): void {
+        $this->assertEquals('Allgemeine Informationen', NoteSubjectCode::ADU->getLabel());
+        $this->assertEquals('Regulatorische Hinweise', NoteSubjectCode::REG->getLabel());
+        $this->assertEquals('Zahlungsinformationen', NoteSubjectCode::AAI->getLabel());
+    }
+
+    public function testNoteSubjectCodePrefix(): void {
+        $this->assertEquals('#ADU#', NoteSubjectCode::ADU->getPrefix());
+        $this->assertEquals('#REG#', NoteSubjectCode::REG->getPrefix());
+        $this->assertEquals('#TAX#', NoteSubjectCode::TAX->getPrefix());
+    }
+
+    public function testNoteSubjectCodeFormatNote(): void {
+        $note = 'Dies ist eine Testnotiz';
+        $formatted = NoteSubjectCode::formatNote($note, NoteSubjectCode::ADU);
+        $this->assertEquals('#ADU#Dies ist eine Testnotiz', $formatted);
+    }
+
+    public function testNoteSubjectCodeParseNote(): void {
+        // Mit Subject Code
+        $parsed = NoteSubjectCode::parseNote('#ADU#General information');
+        $this->assertSame(NoteSubjectCode::ADU, $parsed['code']);
+        $this->assertEquals('General information', $parsed['text']);
+
+        // Ohne Subject Code
+        $parsed = NoteSubjectCode::parseNote('Plain note without code');
+        $this->assertNull($parsed['code']);
+        $this->assertEquals('Plain note without code', $parsed['text']);
+    }
+
+    public function testNoteSubjectCodeFromPrefix(): void {
+        $code = NoteSubjectCode::fromPrefix('#ADU#');
+        $this->assertSame(NoteSubjectCode::ADU, $code);
+
+        $code = NoteSubjectCode::fromPrefix('#REG#');
+        $this->assertSame(NoteSubjectCode::REG, $code);
+
+        $code = NoteSubjectCode::fromPrefix('#UNKNOWN#');
+        $this->assertNull($code);
+    }
+
+    public function testNoteSubjectCodeHelperMethods(): void {
+        $general = NoteSubjectCode::forGeneralInfo();
+        $this->assertSame(NoteSubjectCode::ADU, $general);
+
+        $payment = NoteSubjectCode::forPaymentInfo();
+        $this->assertSame(NoteSubjectCode::AAI, $payment);
+
+        $paymentTerms = NoteSubjectCode::forPaymentTerms();
+        $this->assertSame(NoteSubjectCode::AAB, $paymentTerms);
+
+        $legal = NoteSubjectCode::forLegalInfo();
+        $this->assertSame(NoteSubjectCode::ABL, $legal);
+
+        $regulatory = NoteSubjectCode::forRegulatory();
+        $this->assertSame(NoteSubjectCode::REG, $regulatory);
+
+        $tax = NoteSubjectCode::forTax();
+        $this->assertSame(NoteSubjectCode::TXD, $tax);
+
+        $customs = NoteSubjectCode::forCustoms();
+        $this->assertSame(NoteSubjectCode::CUS, $customs);
+
+        $terms = NoteSubjectCode::forTermsAndConditions();
+        $this->assertSame(NoteSubjectCode::AAR, $terms);
+
+        $delivery = NoteSubjectCode::forDeliveryConditions();
+        $this->assertSame(NoteSubjectCode::AAN, $delivery);
     }
 }

@@ -16,6 +16,7 @@ use CommonToolkit\Enums\CurrencyCode;
 use ERechnungToolkit\Contracts\Abstracts\DocumentAbstract;
 use ERechnungToolkit\Enums\ERechnungProfile;
 use ERechnungToolkit\Enums\InvoiceType;
+use ERechnungToolkit\Enums\NoteSubjectCode;
 use ERechnungToolkit\Enums\PaymentMeansCode;
 use ERechnungToolkit\Generators\ERechnungGenerator;
 use DateTimeImmutable;
@@ -162,10 +163,40 @@ final class Document extends DocumentAbstract {
     }
 
     /**
+     * Returns all notes as formatted strings (with #XXX# prefix if subject code was set).
+     * 
      * @return string[]
      */
     public function getNotes(): array {
         return $this->notes;
+    }
+
+    /**
+     * Returns all notes as structured array with parsed subject codes.
+     * 
+     * @return array<int, array{code: NoteSubjectCode|null, text: string}>
+     */
+    public function getNotesStructured(): array {
+        return array_map(
+            fn(string $note) => NoteSubjectCode::parseNote($note),
+            $this->notes
+        );
+    }
+
+    /**
+     * Returns notes filtered by subject code.
+     * 
+     * @return string[] Note texts (without prefix)
+     */
+    public function getNotesBySubjectCode(NoteSubjectCode $subjectCode): array {
+        $result = [];
+        foreach ($this->notes as $note) {
+            $parsed = NoteSubjectCode::parseNote($note);
+            if ($parsed['code'] === $subjectCode) {
+                $result[] = $parsed['text'];
+            }
+        }
+        return $result;
     }
 
     public function getTaxTotal(): ?TaxTotal {
@@ -196,9 +227,16 @@ final class Document extends DocumentAbstract {
 
     /**
      * Adds a note to the invoice.
+     * 
+     * @param string $note The note text
+     * @param NoteSubjectCode|null $subjectCode Optional subject code (UNTDID 4451) for categorization
      */
-    public function addNote(string $note): self {
-        $this->notes[] = $note;
+    public function addNote(string $note, ?NoteSubjectCode $subjectCode = null): self {
+        if ($subjectCode !== null) {
+            $this->notes[] = NoteSubjectCode::formatNote($note, $subjectCode);
+        } else {
+            $this->notes[] = $note;
+        }
         return $this;
     }
 

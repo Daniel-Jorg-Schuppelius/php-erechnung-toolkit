@@ -25,6 +25,7 @@ use ERechnungToolkit\Entities\TaxSubtotal;
 use ERechnungToolkit\Entities\TaxTotal;
 use ERechnungToolkit\Enums\ERechnungProfile;
 use ERechnungToolkit\Enums\InvoiceType;
+use ERechnungToolkit\Enums\NoteSubjectCode;
 use ERechnungToolkit\Enums\PaymentMeansCode;
 use ERechnungToolkit\Enums\TaxCategory;
 use ERechnungToolkit\Enums\UnitCode;
@@ -270,6 +271,46 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertCount(2, $notes);
         $this->assertEquals('Erste Bemerkung', $notes[0]);
         $this->assertEquals('Zweite Bemerkung', $notes[1]);
+    }
+
+    public function testNotesWithSubjectCode(): void {
+        $document = Document::create(
+            id: 'INV-2026-001',
+            issueDate: new DateTimeImmutable('2026-01-22'),
+            seller: $this->seller,
+            buyer: $this->buyer
+        );
+
+        // Note ohne Subject Code
+        $document->addNote('Einfache Bemerkung');
+        // Note mit Subject Code
+        $document->addNote('Rechtlicher Hinweis', NoteSubjectCode::REG);
+        $document->addNote('Zahlungshinweis', NoteSubjectCode::forPaymentInfo());
+
+        // getNotes() gibt formatierte Strings zurück
+        $notes = $document->getNotes();
+        $this->assertCount(3, $notes);
+        $this->assertEquals('Einfache Bemerkung', $notes[0]);
+        $this->assertEquals('#REG#Rechtlicher Hinweis', $notes[1]);
+        $this->assertEquals('#AAI#Zahlungshinweis', $notes[2]);
+
+        // getNotesStructured() gibt strukturierte Daten zurück
+        $structured = $document->getNotesStructured();
+        $this->assertCount(3, $structured);
+
+        $this->assertNull($structured[0]['code']);
+        $this->assertEquals('Einfache Bemerkung', $structured[0]['text']);
+
+        $this->assertSame(NoteSubjectCode::REG, $structured[1]['code']);
+        $this->assertEquals('Rechtlicher Hinweis', $structured[1]['text']);
+
+        $this->assertSame(NoteSubjectCode::AAI, $structured[2]['code']);
+        $this->assertEquals('Zahlungshinweis', $structured[2]['text']);
+
+        // getNotesBySubjectCode() filtert nach Code
+        $regNotes = $document->getNotesBySubjectCode(NoteSubjectCode::REG);
+        $this->assertCount(1, $regNotes);
+        $this->assertEquals('Rechtlicher Hinweis', $regNotes[0]);
     }
 
     public function testPaymentTerms(): void {
