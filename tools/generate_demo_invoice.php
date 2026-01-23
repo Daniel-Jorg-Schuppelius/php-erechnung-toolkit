@@ -111,7 +111,12 @@ $doc->setTaxTotal(new TaxTotal(
     subtotals: [new TaxSubtotal($net, $tax, TaxCategory::STANDARD, 19.0)]
 ));
 
+// Hinweise/Notizen hinzufügen
+$doc->addNote("Zahlbar innerhalb von 30 Tagen ohne Abzug.");
+$doc->addNote("Lieferung erfolgte am " . (new DateTimeImmutable())->format('d.m.Y') . ".");
+
 echo "✓ Summen: Netto {$net} EUR, MwSt {$tax} EUR, Brutto {$gross} EUR\n";
+echo "✓ Hinweise: " . count($doc->getNotes()) . " Notizen hinzugefügt\n";
 echo "✓ Profil: " . $doc->getProfile()->name . "\n\n";
 
 // PDF generieren

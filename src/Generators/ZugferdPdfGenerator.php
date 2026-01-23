@@ -517,8 +517,6 @@ E-Mail: {$sellerEmail}
 </tr>
 </table>
 
-{$commentBoxHtml}
-
 <div class="meta-section"><br /><br />
 <table>
 <tr><th>Kunden-Nr.</th><th>Bestell-Nr.</th><th>Ihre USt-IdNr.</th><th>Zahlungsbedingungen</th></tr>
@@ -540,14 +538,12 @@ E-Mail: {$sellerEmail}
 <tr class="total"><td class="spacer"></td><td class="label">Gesamtbetrag</td><td class="value">{$grossAmount} {$currency}</td></tr>
 </table>
 </div>
-
+{$commentBoxHtml}
 <div class="payment-section">
 <p>{$bankInfoText}</p>
 <p>Bei Fragen wenden Sie sich an: {$sellerEmail}, {$sellerPhone}</p>
 </div>
-
 <div class="zugferd-note" style="text-align: center; font-size: 7pt; color: #666; padding-top: 35pt; border-top: 1px solid #ddd;"><strong>Elektronische Rechnung (ZUGFeRD/Factur-X)</strong> &mdash; Diese Rechnung enthält eine maschinenlesbare XML-Datei gemäß EN 16931.</div>
-
 </body>
 </html>
 HTML;
