@@ -89,7 +89,7 @@ foreach ($document->getLines() as $line) {
 ## Supported Profiles
 
 | Profile | Description |
-|---------|-------------|
+| ------- | ----------- |
 | MINIMUM | ZUGFeRD 2.x MINIMUM |
 | BASIC_WL | ZUGFeRD 2.x BASIC WL |
 | BASIC | ZUGFeRD 2.x BASIC |
@@ -134,6 +134,7 @@ $pdfBytes = $pdfGenerator->generate($invoice, $customHtml);
 ```
 
 The generated PDF:
+
 - Is PDF/A-3 compliant for long-term archiving
 - Contains the embedded XML invoice (CII format)
 - Can be processed automatically by accounting software
