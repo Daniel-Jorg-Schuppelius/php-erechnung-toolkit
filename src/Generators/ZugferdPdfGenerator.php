@@ -175,17 +175,53 @@ final class ZugferdPdfGenerator {
 
         $bankingHtml = '';
         if ($seller->hasBankingInfo()) {
+            $bankName = $seller->getBankName() ?? '';
             $bankingHtml = <<<HTML
-            <div class="banking">
-                <h3>Bankverbindung</h3>
-                <p><strong>IBAN:</strong> {$seller->getIban()}</p>
-                <p><strong>BIC:</strong> {$seller->getBic()}</p>
-            </div>
+                <td>
+                    <div class="section-title">Bankverbindung</div>
+                    <p>IBAN: {$seller->getIban()}</p>
+                    <p>BIC: {$seller->getBic()}</p>
+                    <p>{$bankName}</p>
+                </td>
 HTML;
         }
 
+        // Kontaktdaten für Fußzeile
+        $sellerContactHtml = '';
+        $contactParts = [];
+        if ($seller->getContactEmail()) {
+            $contactParts[] = "E-Mail: {$seller->getContactEmail()}";
+        }
+        if ($seller->getContactPhone()) {
+            $contactParts[] = "Tel.: {$seller->getContactPhone()}";
+        }
+        if (!empty($contactParts)) {
+            $sellerContactHtml = '<p>' . implode('</p><p>', $contactParts) . '</p>';
+        }
+
         $buyerReference = $invoice->getBuyerReference();
-        $buyerRefHtml = $buyerReference ? "<p><strong>Leitweg-ID/Referenz:</strong> {$buyerReference}</p>" : '';
+        $buyerRefHtml = $buyerReference ? "<p>Leitweg-ID: {$buyerReference}</p>" : '';
+
+        // Kompakte Absenderzeile für Fensterkuvert
+        $sellerOneLine = $seller->getName();
+        if ($sellerAddress) {
+            $parts = [];
+            if ($street = $sellerAddress->getStreetName()) {
+                $line = $street;
+                if ($building = $sellerAddress->getBuildingNumber()) {
+                    $line .= ' ' . $building;
+                }
+                $parts[] = $line;
+            }
+            if ($postalCode = $sellerAddress->getPostalCode()) {
+                $parts[] = $postalCode . ' ' . ($sellerAddress->getCity() ?? '');
+            } elseif ($city = $sellerAddress->getCity()) {
+                $parts[] = $city;
+            }
+            if (!empty($parts)) {
+                $sellerOneLine .= ' · ' . implode(' · ', $parts);
+            }
+        }
 
         return <<<HTML
 <!DOCTYPE html>
@@ -194,78 +230,119 @@ HTML;
     <meta charset="UTF-8">
     <title>{$invoiceTypeLabel} {$invoice->getId()}</title>
     <style>
+        @page { 
+            size: A4; 
+            margin: 20mm 15mm 20mm 20mm; 
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
             font-family: DejaVu Sans, Arial, Helvetica, sans-serif; 
             font-size: 10pt; 
             line-height: 1.4;
             color: #333;
+            width: 100%;
         }
-        .header { margin-bottom: 30px; }
-        .header h1 { font-size: 18pt; color: #000; margin-bottom: 5px; }
-        .header .invoice-id { font-size: 12pt; color: #666; }
         
-        .parties { display: table; width: 100%; margin-bottom: 30px; }
-        .party { display: table-cell; width: 50%; vertical-align: top; }
-        .party h3 { font-size: 10pt; color: #666; margin-bottom: 5px; text-transform: uppercase; }
-        .party .name { font-weight: bold; font-size: 11pt; }
-        .party p { margin: 2px 0; }
+        /* Kopfbereich mit Absender rechts */
+        .letterhead { width: 100%; margin-bottom: 10px; }
+        .letterhead td { vertical-align: top; }
+        .letterhead .sender-block { text-align: right; }
+        .letterhead .sender-block .company-name { font-size: 14pt; font-weight: bold; color: #000; }
+        .letterhead .sender-block p { font-size: 9pt; color: #555; margin: 2px 0; }
         
-        .meta { margin-bottom: 20px; padding: 10px; background: #f5f5f5; }
-        .meta p { display: inline-block; margin-right: 30px; }
+        /* Adressbereich (Fensterkuvert-kompatibel) */
+        .address-area { width: 100%; margin-bottom: 20px; }
+        .address-area td { vertical-align: top; }
+        .address-area .recipient { width: 55%; }
+        .address-area .sender-line { font-size: 7pt; color: #666; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 8px; }
+        .address-area .recipient-address { font-size: 10pt; line-height: 1.5; }
+        .address-area .recipient-address .name { font-weight: bold; }
+        .address-area .invoice-details { width: 45%; padding-left: 20px; }
+        .address-area .invoice-details table { width: 100%; }
+        .address-area .invoice-details td { padding: 3px 0; font-size: 9pt; }
+        .address-area .invoice-details td.label { color: #666; width: 45%; }
+        .address-area .invoice-details td.value { font-weight: bold; text-align: right; }
         
+        /* Rechnungstitel */
+        .invoice-title { font-size: 16pt; font-weight: bold; margin: 20px 0 15px 0; border-bottom: 2px solid #333; padding-bottom: 5px; }
+        
+        /* Positionstabelle */
         table.lines { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
         table.lines th { 
-            background: #333; color: #fff; padding: 8px; 
-            text-align: left; font-size: 9pt;
+            background: #f5f5f5; color: #333; padding: 8px; 
+            text-align: left; font-size: 9pt; font-weight: bold;
+            border-bottom: 2px solid #333;
         }
         table.lines th.right, table.lines td.right { text-align: right; }
-        table.lines td { padding: 8px; border-bottom: 1px solid #ddd; }
-        table.lines tr:nth-child(even) { background: #fafafa; }
+        table.lines td { padding: 8px; border-bottom: 1px solid #ddd; font-size: 9pt; }
+        table.lines tr:hover { background: #fafafa; }
         
-        .totals { width: 300px; margin-left: auto; margin-bottom: 30px; }
+        /* Summenbereich */
+        .totals { width: 300px; margin-left: auto; margin-bottom: 25px; }
         .totals table { width: 100%; }
-        .totals td { padding: 5px 0; }
+        .totals td { padding: 5px 0; font-size: 9pt; }
         .totals td.right { text-align: right; }
-        .totals .grand-total { font-weight: bold; font-size: 12pt; border-top: 2px solid #333; }
+        .totals tr.subtotal td { border-top: 1px solid #ddd; }
+        .totals tr.grand-total td { font-weight: bold; font-size: 11pt; border-top: 2px solid #333; padding-top: 8px; }
         
-        .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; font-size: 9pt; color: #666; }
-        .banking { margin-top: 20px; }
-        .banking h3 { font-size: 10pt; margin-bottom: 5px; }
+        /* Fußbereich */
+        .footer { margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd; }
+        .footer table { width: 100%; }
+        .footer td { vertical-align: top; font-size: 8pt; color: #666; padding-right: 20px; }
+        .footer .section-title { font-weight: bold; color: #333; margin-bottom: 3px; }
         
         .zugferd-note { 
-            margin-top: 30px; padding: 10px; 
-            background: #e8f4e8; border: 1px solid #4a4; 
-            font-size: 8pt; 
+            margin-top: 20px; padding: 8px 10px; 
+            background: #f0f7f0; border-left: 3px solid #4a4; 
+            font-size: 8pt; color: #555;
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>{$invoiceTypeLabel}</h1>
-        <div class="invoice-id">Nr. {$invoice->getId()}</div>
-    </div>
+    <!-- Briefkopf mit Absender rechts -->
+    <table class="letterhead">
+        <tr>
+            <td style="width: 50%;"></td>
+            <td class="sender-block">
+                <div class="company-name">{$seller->getName()}</div>
+                {$sellerAddressHtml}
+                {$vatIdHtml}
+            </td>
+        </tr>
+    </table>
     
-    <div class="parties">
-        <div class="party">
-            <h3>Rechnungssteller</h3>
-            <p class="name">{$seller->getName()}</p>
-            {$sellerAddressHtml}
-            {$vatIdHtml}
-        </div>
-        <div class="party">
-            <h3>Rechnungsempfänger</h3>
-            <p class="name">{$buyer->getName()}</p>
-            {$buyerAddressHtml}
-            {$buyerVatIdHtml}
-            {$buyerRefHtml}
-        </div>
-    </div>
+    <!-- Adressbereich und Rechnungsdetails nebeneinander -->
+    <table class="address-area">
+        <tr>
+            <td class="recipient">
+                <div class="sender-line">{$sellerOneLine}</div>
+                <div class="recipient-address">
+                    <div class="name">{$buyer->getName()}</div>
+                    {$buyerAddressHtml}
+                    {$buyerRefHtml}
+                </div>
+            </td>
+            <td class="invoice-details">
+                <table>
+                    <tr>
+                        <td class="label">Rechnungsnummer:</td>
+                        <td class="value">{$invoice->getId()}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Rechnungsdatum:</td>
+                        <td class="value">{$issueDate}</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Fällig am:</td>
+                        <td class="value">{$dueDate}</td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
     
-    <div class="meta">
-        <p><strong>Rechnungsdatum:</strong> {$issueDate}</p>
-        <p><strong>Fällig am:</strong> {$dueDate}</p>
-    </div>
+    <!-- Rechnungstitel -->
+    <div class="invoice-title">{$invoiceTypeLabel}</div>
     
     <table class="lines">
         <thead>
@@ -298,14 +375,27 @@ HTML;
         </table>
     </div>
     
+    <!-- Fußzeile mit Firmendaten -->
     <div class="footer">
-        {$bankingHtml}
+        <table>
+            <tr>
+                <td>
+                    <div class="section-title">{$seller->getName()}</div>
+                    {$sellerAddressHtml}
+                </td>
+                <td>
+                    <div class="section-title">Kontakt</div>
+                    {$sellerContactHtml}
+                    {$vatIdHtml}
+                </td>
+                {$bankingHtml}
+            </tr>
+        </table>
     </div>
     
     <div class="zugferd-note">
-        <strong>📄 Elektronische Rechnung (ZUGFeRD/Factur-X)</strong><br>
-        Diese Rechnung enthält eine maschinenlesbare XML-Datei gemäß EN 16931. 
-        Die strukturierten Daten können für die automatische Verarbeitung verwendet werden.
+        📄 <strong>Elektronische Rechnung (ZUGFeRD/Factur-X)</strong> – 
+        Diese Rechnung enthält eine maschinenlesbare XML-Datei gemäß EN 16931.
     </div>
 </body>
 </html>
