@@ -46,8 +46,8 @@ enum NoteSubjectCode: string {
     case AAX = 'AAX'; // License information
     case AAY = 'AAY'; // Certification statements
     case AAZ = 'AAZ'; // Clean on board statements
-    
-    // Business specific
+
+        // Business specific
     case ABL = 'ABL'; // Legal information
     case ABN = 'ABN'; // Contract information
     case ABO = 'ABO'; // Parties to transaction
@@ -58,27 +58,27 @@ enum NoteSubjectCode: string {
     case ABT = 'ABT'; // Shipment description
     case ABU = 'ABU'; // Transaction reference number description
     case ABV = 'ABV'; // Transport contract references
-    
-    // Common codes for E-Invoicing
+
+        // Common codes for E-Invoicing
     case ACB = 'ACB'; // Additional information
     case ACC = 'ACC'; // Clause on copyright
     case ACD = 'ACD'; // Container remarks
     case ACE = 'ACE'; // Contract clause
     case ACF = 'ACF'; // Contract description
-    
+
     case ADU = 'ADU'; // General information (most common for general notes)
-    
+
     case CUS = 'CUS'; // Customs information
-    
+
     case PUR = 'PUR'; // Purchasing information
-    
+
     case REG = 'REG'; // Regulatory information
-    
+
     case SUR = 'SUR'; // Surety/bond requirement
-    
+
     case TAX = 'TAX'; // Tax declaration
     case TXD = 'TXD'; // Tax declaration (alternative)
-    
+
     case WHI = 'WHI'; // Warehouse instructions
     case ZZZ = 'ZZZ'; // Mutually defined
 
@@ -155,13 +155,13 @@ enum NoteSubjectCode: string {
     public static function fromPrefix(string $prefix): ?self {
         // Remove # characters if present
         $code = trim($prefix, '#');
-        
+
         foreach (self::cases() as $case) {
             if ($case->value === $code) {
                 return $case;
             }
         }
-        
+
         return null;
     }
 
@@ -180,7 +180,7 @@ enum NoteSubjectCode: string {
                 'text' => trim($matches[2]),
             ];
         }
-        
+
         return [
             'code' => null,
             'text' => $note,
@@ -198,7 +198,7 @@ enum NoteSubjectCode: string {
         if ($code === null) {
             return $text;
         }
-        
+
         return $code->getPrefix() . $text;
     }
 
