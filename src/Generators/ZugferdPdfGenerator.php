@@ -163,6 +163,18 @@ final class ZugferdPdfGenerator {
         $sellerAddressHtml = $sellerAddress ? $this->formatAddress($sellerAddress) : '';
         $buyerAddressHtml = $buyerAddress ? $this->formatAddress($buyerAddress) : '';
 
+        // Tabellen-Format für Letterhead und Adressen
+        $sellerAddressTableHtml = $sellerAddress ? $this->formatAddressTable($sellerAddress) : '';
+        $buyerAddressTableHtml = $buyerAddress ? $this->formatAddressTable($buyerAddress, false) : '';
+        $vatIdTableHtml = $seller->getVatId()
+            ? "<tr><td class=\"label\">USt-IdNr.:</td><td>{$seller->getVatId()}</td></tr>"
+            : '';
+
+        $buyerReference = $invoice->getBuyerReference();
+        $buyerRefTableHtml = $buyerReference
+            ? "<tr><td class=\"label\">Leitweg-ID:</td><td>{$buyerReference}</td></tr>"
+            : '';
+
         $invoiceTypeLabel = $invoice->getInvoiceType()->label();
         $issueDate = $invoice->getIssueDate()->format('d.m.Y');
         $dueDate = $invoice->getDueDate()?->format('d.m.Y') ?? '-';
@@ -199,9 +211,6 @@ HTML;
             $sellerContactHtml = '<p>' . implode('</p><p>', $contactParts) . '</p>';
         }
 
-        $buyerReference = $invoice->getBuyerReference();
-        $buyerRefHtml = $buyerReference ? "<p>Leitweg-ID: {$buyerReference}</p>" : '';
-
         // Kompakte Absenderzeile für Fensterkuvert
         $sellerOneLine = $seller->getName();
         if ($sellerAddress) {
@@ -223,6 +232,149 @@ HTML;
             }
         }
 
+        // Einzeilige Adresse für Kopfbereich
+        $sellerAddressOneLine = '';
+        if ($sellerAddress) {
+            $parts = [];
+            if ($street = $sellerAddress->getStreetName()) {
+                $line = $street;
+                if ($building = $sellerAddress->getBuildingNumber()) {
+                    $line .= ' ' . $building;
+                }
+                $parts[] = $line;
+            }
+            if ($postalCode = $sellerAddress->getPostalCode()) {
+                $parts[] = $postalCode . ' ' . ($sellerAddress->getCity() ?? '');
+            }
+            if ($country = $sellerAddress->getCountry()) {
+                $parts[] = $country->getLabel();
+            }
+            $sellerAddressOneLine = implode(', ', $parts);
+        }
+
+        // Kontakt einzeilig für Kopfbereich
+        $sellerContactOneLine = '';
+        $contactParts = [];
+        if ($seller->getContactPhone()) {
+            $contactParts[] = "Tel.: {$seller->getContactPhone()}";
+        }
+        if ($seller->getContactEmail()) {
+            $contactParts[] = $seller->getContactEmail();
+        }
+        $sellerContactOneLine = implode(' · ', $contactParts);
+
+        // Käuferadresse als einfache Zeilen
+        $buyerAddressLines = '';
+        if ($buyerAddress) {
+            $lines = [];
+            if ($street = $buyerAddress->getStreetName()) {
+                $line = $street;
+                if ($building = $buyerAddress->getBuildingNumber()) {
+                    $line .= ' ' . $building;
+                }
+                $lines[] = $line;
+            }
+            if ($postalCode = $buyerAddress->getPostalCode()) {
+                $lines[] = $postalCode . ' ' . ($buyerAddress->getCity() ?? '');
+            } elseif ($city = $buyerAddress->getCity()) {
+                $lines[] = $city;
+            }
+            if ($country = $buyerAddress->getCountry()) {
+                $lines[] = $country->getLabel();
+            }
+            $buyerAddressLines = implode('<br>', $lines);
+        }
+
+        // Seller VAT ID für Rechnungsbox
+        $sellerVatId = $seller->getVatId() ?? '-';
+
+        // Seller Kontaktdaten
+        $sellerPhone = $seller->getContactPhone() ?? '-';
+        $sellerEmail = $seller->getContactEmail() ?? '-';
+        $contactName = $seller->getContactName() ?? '-';
+
+        // Seller Adresse als Zeilen
+        $sellerAddressLines = '';
+        $sellerAddressOneLine = '';
+        if ($sellerAddress) {
+            $lines = [];
+            if ($street = $sellerAddress->getStreetName()) {
+                $line = $street;
+                if ($building = $sellerAddress->getBuildingNumber()) {
+                    $line .= ' ' . $building;
+                }
+                $lines[] = $line;
+            }
+            if ($postalCode = $sellerAddress->getPostalCode()) {
+                $lines[] = $postalCode . ' ' . ($sellerAddress->getCity() ?? '');
+            } elseif ($city = $sellerAddress->getCity()) {
+                $lines[] = $city;
+            }
+            $sellerAddressLines = implode('<br>', $lines);
+            $sellerAddressOneLine = implode(', ', $lines);
+        }
+
+        // Buyer Reference Row für Rechnungsbox
+        $buyerRefRow = '';
+        if ($buyerReference = $invoice->getBuyerReference()) {
+            $buyerRefRow = "<tr><td class=\"label\">Leitweg-ID</td><td class=\"value\">{$buyerReference}</td></tr>";
+        }
+
+        // Kundenummer (Endpoint-ID oder Buyer-Reference)
+        $customerNumber = $buyer->getEndpointId() ?? $invoice->getBuyerReference() ?? '-';
+
+        // Bestellnummer
+        $orderReference = $invoice->getOrderReference() ?? '-';
+
+        // Zahlungsbedingungen
+        $paymentTerms = $invoice->getPaymentTerms();
+        $paymentTermsText = $paymentTerms?->getNote() ?? 'Zahlbar innerhalb von 14 Tagen ohne Abzug.';
+        $paymentTermsShort = 'Fällig bei Erhalt';
+        if ($invoice->getDueDate()) {
+            $days = $invoice->getIssueDate()->diff($invoice->getDueDate())->days;
+            $paymentTermsShort = "{$days} Tage netto";
+        }
+
+        // Lieferadresse (falls vorhanden)
+        $deliveryAddressHtml = '';
+        $deliveryParty = $invoice->getDeliveryParty();
+        if ($deliveryParty && $deliveryParty->getPostalAddress()) {
+            $delAddr = $deliveryParty->getPostalAddress();
+            $delLines = [];
+            if ($street = $delAddr->getStreetName()) {
+                $line = $street;
+                if ($building = $delAddr->getBuildingNumber()) {
+                    $line .= ' ' . $building;
+                }
+                $delLines[] = $line;
+            }
+            if ($postalCode = $delAddr->getPostalCode()) {
+                $delLines[] = $postalCode . ' ' . ($delAddr->getCity() ?? '');
+            }
+            $deliveryAddressHtml = '<div class="section-label">Lieferadresse:</div><div class="address-block">' .
+                $deliveryParty->getName() . '<br>' . implode('<br>', $delLines) . '</div>';
+        }
+
+        // Kommentar-Box (falls Notizen vorhanden)
+        $commentBoxHtml = '';
+        $notes = $invoice->getNotes();
+        if (!empty($notes)) {
+            $notesText = implode('<br>', array_map('htmlspecialchars', $notes));
+            $commentBoxHtml = <<<HTML
+    <div class="comment-box">
+        <div class="section-label">Hinweise:</div>
+        <div>{$notesText}</div>
+    </div>
+HTML;
+        }
+
+        // Bankinfo-Text für Fußbereich
+        $bankInfoText = '';
+        if ($seller->hasBankingInfo()) {
+            $bankName = $seller->getBankName() ?? '';
+            $bankInfoText = "Alle Zahlungen an: {$seller->getName()}, IBAN: {$seller->getIban()}, BIC: {$seller->getBic()} ({$bankName})";
+        }
+
         return <<<HTML
 <!DOCTYPE html>
 <html lang="de">
@@ -232,171 +384,170 @@ HTML;
     <style>
         @page { 
             size: A4; 
-            margin: 20mm 15mm 20mm 20mm; 
+            margin: 5mm 20mm 25mm 20mm;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
-            font-family: DejaVu Sans, Arial, Helvetica, sans-serif; 
-            font-size: 10pt; 
-            line-height: 1.4;
+            font-family: Arial, sans-serif; 
+            font-size: 9pt; 
+            line-height: 150%;
             color: #333;
-            width: 100%;
         }
         
-        /* Kopfbereich mit Absender rechts */
-        .letterhead { width: 100%; margin-bottom: 10px; }
-        .letterhead td { vertical-align: top; }
-        .letterhead .sender-block { text-align: right; }
-        .letterhead .sender-block .company-name { font-size: 14pt; font-weight: bold; color: #000; }
-        .letterhead .sender-block p { font-size: 9pt; color: #555; margin: 2px 0; }
+        /* Tabellen-Grundlagen */
+        table { border-collapse: collapse; width: 100%; }
+        td, th { vertical-align: top; }
         
-        /* Adressbereich (Fensterkuvert-kompatibel) */
-        .address-area { width: 100%; margin-bottom: 20px; }
-        .address-area td { vertical-align: top; }
-        .address-area .recipient { width: 55%; }
-        .address-area .sender-line { font-size: 7pt; color: #666; border-bottom: 1px solid #ccc; padding-bottom: 3px; margin-bottom: 8px; }
-        .address-area .recipient-address { font-size: 10pt; line-height: 1.5; }
-        .address-area .recipient-address .name { font-weight: bold; }
-        .address-area .invoice-details { width: 45%; padding-left: 20px; }
-        .address-area .invoice-details table { width: 100%; }
-        .address-area .invoice-details td { padding: 3px 0; font-size: 9pt; }
-        .address-area .invoice-details td.label { color: #666; width: 45%; }
-        .address-area .invoice-details td.value { font-weight: bold; text-align: right; }
+        /* Kopfbereich - Absender rechtsbündig */
+        .header-section { margin-bottom: 10pt; }
+        .sender-block { text-align: right; font-size: 9pt; line-height: 160%; }
+        .sender-block .company-name { font-size: 14pt; font-weight: bold; margin-bottom: 5pt; }
         
-        /* Rechnungstitel */
-        .invoice-title { font-size: 16pt; font-weight: bold; margin: 20px 0 15px 0; border-bottom: 2px solid #333; padding-bottom: 5px; }
+        /* Hauptbereich - Adresse links, Rechnung rechts auf gleicher Höhe */
+        .main-section { margin-bottom: 50pt; }
+        .main-section td { padding: 0; }
+        .main-section .left-col { width: 55%; }
+        .main-section .right-col { width: 45%; text-align: right; vertical-align: top; }
+        .invoice-title { font-size: 22pt; font-weight: bold; color: #595959; text-transform: uppercase; margin-bottom: 8pt; }
+        .invoice-meta { font-size: 10pt; line-height: 180%; }
+        
+        /* Absenderzeile klein über Empfänger */
+        .sender-line { font-size: 7pt; color: #666; border-bottom: 1px solid #999; padding-bottom: 2pt; margin-bottom: 8pt; display: inline-block; }
+        
+        /* Empfängeradresse */
+        .address-block { font-size: 10pt; line-height: 170%; }
+        
+        /* Kommentar-Box */
+        .comment-box { 
+            padding: 12pt 0; 
+            margin-bottom: 20pt;
+            border-top: 1px solid #ddd;
+            border-bottom: 1px solid #ddd;
+        }
+        .comment-box .section-label { margin-bottom: 8pt; font-weight: bold; font-size: 9pt; color: #666; }
+        
+        /* Meta-Zeile */
+        .meta-section { margin-bottom: 25pt; }
+        .meta-section table { width: 100%; }
+        .meta-section th { 
+            text-align: left; 
+            font-size: 8pt; 
+            font-weight: normal;
+            color: #666;
+            padding: 0 15pt 3pt 0;
+            border-bottom: 1px solid #ddd;
+        }
+        .meta-section td { 
+            font-size: 9pt;
+            font-weight: bold;
+            padding: 8pt 15pt 0 0;
+        }
         
         /* Positionstabelle */
-        table.lines { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        table.lines th { 
-            background: #f5f5f5; color: #333; padding: 8px; 
-            text-align: left; font-size: 9pt; font-weight: bold;
+        .lines-section { margin-bottom: 20pt; }
+        .lines-table { width: 100%; }
+        .lines-table th { 
+            text-align: left; 
+            font-size: 8pt; 
+            font-weight: bold;
+            color: #666;
+            text-transform: uppercase;
+            padding: 8pt 10pt 8pt 0;
             border-bottom: 2px solid #333;
         }
-        table.lines th.right, table.lines td.right { text-align: right; }
-        table.lines td { padding: 8px; border-bottom: 1px solid #ddd; font-size: 9pt; }
-        table.lines tr:hover { background: #fafafa; }
+        .lines-table th.right { text-align: right; padding-right: 0; }
+        .lines-table td { 
+            padding: 10pt 10pt 10pt 0;
+            border-bottom: 1px solid #eee;
+            font-size: 9pt;
+        }
+        .lines-table td.qty { text-align: left; }
+        .lines-table td.amount { text-align: right; padding-right: 0; }
+        .lines-table tr:last-child td { border-bottom: 2px solid #333; }
         
-        /* Summenbereich */
-        .totals { width: 300px; margin-left: auto; margin-bottom: 25px; }
-        .totals table { width: 100%; }
-        .totals td { padding: 5px 0; font-size: 9pt; }
-        .totals td.right { text-align: right; }
-        .totals tr.subtotal td { border-top: 1px solid #ddd; }
-        .totals tr.grand-total td { font-weight: bold; font-size: 11pt; border-top: 2px solid #333; padding-top: 8px; }
+        /* Summenbereich - rechtsbündig zur Tabelle */
+        .totals-section { margin-bottom: 30pt; }
+        .totals-table { width: 100%; }
+        .totals-table td { padding: 6pt 0; font-size: 9pt; }
+        .totals-table td.spacer { width: 50%; }
+        .totals-table td.label { text-align: right; padding-right: 20pt; }
+        .totals-table td.value { text-align: right; width: 16%; }
+        .totals-table tr.total td { 
+            font-weight: bold; 
+            font-size: 11pt; 
+            padding-top: 10pt;
+            border-top: 1px solid #333;
+        }
         
-        /* Fußbereich */
-        .footer { margin-top: 30px; padding-top: 15px; border-top: 1px solid #ddd; }
-        .footer table { width: 100%; }
-        .footer td { vertical-align: top; font-size: 8pt; color: #666; padding-right: 20px; }
-        .footer .section-title { font-weight: bold; color: #333; margin-bottom: 3px; }
+        /* Zahlungshinweise */
+        .payment-section { margin-bottom: 25pt; }
+        .payment-section p { font-size: 9pt; line-height: 160%; margin-bottom: 5pt; }
         
-        .zugferd-note { 
-            margin-top: 20px; padding: 8px 10px; 
-            background: #f0f7f0; border-left: 3px solid #4a4; 
-            font-size: 8pt; color: #555;
+        .thank-you { 
+            text-align: center; 
+            font-weight: bold; 
+            font-size: 10pt;
+            color: #333;
+        }
+        
+        /* E-Rechnungs-Hinweis am Ende */
+        .zugferd-note {
+            text-align: center;
+            font-size: 7pt;
+            color: #666;
+            padding-top: 15pt;
+            border-top: 1px solid #ddd;
         }
     </style>
 </head>
 <body>
-    <!-- Briefkopf mit Absender rechts -->
-    <table class="letterhead">
-        <tr>
-            <td style="width: 50%;"></td>
-            <td class="sender-block">
-                <div class="company-name">{$seller->getName()}</div>
-                {$sellerAddressHtml}
-                {$vatIdHtml}
-            </td>
-        </tr>
-    </table>
-    
-    <!-- Adressbereich und Rechnungsdetails nebeneinander -->
-    <table class="address-area">
-        <tr>
-            <td class="recipient">
-                <div class="sender-line">{$sellerOneLine}</div>
-                <div class="recipient-address">
-                    <div class="name">{$buyer->getName()}</div>
-                    {$buyerAddressHtml}
-                    {$buyerRefHtml}
-                </div>
-            </td>
-            <td class="invoice-details">
-                <table>
-                    <tr>
-                        <td class="label">Rechnungsnummer:</td>
-                        <td class="value">{$invoice->getId()}</td>
-                    </tr>
-                    <tr>
-                        <td class="label">Rechnungsdatum:</td>
-                        <td class="value">{$issueDate}</td>
-                    </tr>
-                    <tr>
-                        <td class="label">Fällig am:</td>
-                        <td class="value">{$dueDate}</td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-    
-    <!-- Rechnungstitel -->
-    <div class="invoice-title">{$invoiceTypeLabel}</div>
-    
-    <table class="lines">
-        <thead>
-            <tr>
-                <th style="width: 8%;">Pos.</th>
-                <th style="width: 40%;">Bezeichnung</th>
-                <th class="right" style="width: 10%;">Menge</th>
-                <th style="width: 8%;">Einheit</th>
-                <th class="right" style="width: 14%;">Einzelpreis</th>
-                <th class="right" style="width: 10%;">MwSt.</th>
-                <th class="right" style="width: 14%;">Gesamt</th>
-            </tr>
-        </thead>
-        <tbody>
-            {$linesHtml}
-        </tbody>
-    </table>
-    
-    <div class="totals">
-        <table>
-            <tr>
-                <td>Nettobetrag:</td>
-                <td class="right">{$netAmount} {$currency}</td>
-            </tr>
-            {$taxHtml}
-            <tr class="grand-total">
-                <td>Gesamtbetrag:</td>
-                <td class="right">{$grossAmount} {$currency}</td>
-            </tr>
-        </table>
-    </div>
-    
-    <!-- Fußzeile mit Firmendaten -->
-    <div class="footer">
-        <table>
-            <tr>
-                <td>
-                    <div class="section-title">{$seller->getName()}</div>
-                    {$sellerAddressHtml}
-                </td>
-                <td>
-                    <div class="section-title">Kontakt</div>
-                    {$sellerContactHtml}
-                    {$vatIdHtml}
-                </td>
-                {$bankingHtml}
-            </tr>
-        </table>
-    </div>
-    
-    <div class="zugferd-note">
-        📄 <strong>Elektronische Rechnung (ZUGFeRD/Factur-X)</strong> – 
-        Diese Rechnung enthält eine maschinenlesbare XML-Datei gemäß EN 16931.
-    </div>
+
+<div style="text-align: right; font-size: 9pt; line-height: 150%;">
+<div style="font-size: 14pt; font-weight: bold; margin-bottom: 3pt;">{$seller->getName()}</div>
+{$sellerAddressLines}
+<br><br>
+Tel: {$sellerPhone}<br>
+E-Mail: {$sellerEmail}
+</div>
+
+<table style="width: 100%; margin-bottom: 80pt;">
+<tr>
+<td style="width: 55%; vertical-align: top;"><div style="font-size: 7pt; color: #666; border-bottom: 1px solid #999; padding-bottom: 2pt; margin-bottom: 8pt; display: inline-block;">{$seller->getName()} · {$sellerAddressOneLine}</div><div style="font-size: 10pt; line-height: 170%;"><strong>{$buyer->getName()}</strong><br>{$buyerAddressLines}</div></td>
+<td style="width: 45%; text-align: right; vertical-align: top;"><br><br><div style="font-size: 22pt; font-weight: bold; color: #595959; text-transform: uppercase; margin-bottom: 8pt;">{$invoiceTypeLabel}</div><div style="font-size: 10pt; line-height: 180%;"><strong>Nr. {$invoice->getId()}</strong><br>Datum: {$issueDate}<br>Fällig: {$dueDate}</div></td>
+</tr>
+</table>
+
+{$commentBoxHtml}
+
+<div class="meta-section"><br /><br />
+<table>
+<tr><th>Kunden-Nr.</th><th>Bestell-Nr.</th><th>Ihre USt-IdNr.</th><th>Zahlungsbedingungen</th></tr>
+<tr><td>{$customerNumber}</td><td>{$orderReference}</td><td>{$sellerVatId}</td><td>{$paymentTermsShort}</td></tr>
+</table>
+</div>
+
+<div class="lines-section">
+<table class="lines-table">
+<tr><th style="width: 12%;">Menge</th><th style="width: 50%;">Beschreibung</th><th class="right" style="width: 19%;">Einzelpreis</th><th class="right" style="width: 19%;">Betrag</th></tr>
+{$linesHtml}
+</table>
+</div>
+
+<div class="totals-section">
+<table class="totals-table">
+<tr><td class="spacer"></td><td class="label">Zwischensumme</td><td class="value">{$netAmount} {$currency}</td></tr>
+{$taxHtml}
+<tr class="total"><td class="spacer"></td><td class="label">Gesamtbetrag</td><td class="value">{$grossAmount} {$currency}</td></tr>
+</table>
+</div>
+
+<div class="payment-section">
+<p>{$bankInfoText}</p>
+<p>Bei Fragen wenden Sie sich an: {$sellerEmail}, {$sellerPhone}</p>
+</div>
+
+<div class="zugferd-note" style="text-align: center; font-size: 7pt; color: #666; padding-top: 35pt; border-top: 1px solid #ddd;"><strong>Elektronische Rechnung (ZUGFeRD/Factur-X)</strong> &mdash; Diese Rechnung enthält eine maschinenlesbare XML-Datei gemäß EN 16931.</div>
+
 </body>
 </html>
 HTML;
@@ -408,27 +559,27 @@ HTML;
     private function generateLinesHtml(Document $invoice): string {
         $html = '';
         $currency = $invoice->getCurrency()->value;
-        $pos = 1;
 
         foreach ($invoice->getLines() as $line) {
-            $quantity = number_format($line->getQuantity(), 2, ',', '.');
-            $unitPrice = number_format($line->getUnitPrice(), 2, ',', '.');
-            $netAmount = number_format($line->getNetAmount(), 2, ',', '.');
-            $taxPercent = number_format($line->getTaxPercent(), 0);
+            $quantity = number_format($line->getQuantity(), 0, ',', '.');
             $unit = $line->getUnitCode()->abbreviation();
+            $unitPrice = number_format($line->getUnitPrice(), 2, ',', '.') . ' ' . $currency;
+            $netAmount = number_format($line->getNetAmount(), 2, ',', '.') . ' ' . $currency;
+
+            $itemName = htmlspecialchars($line->getItemName());
+            $itemDescription = '';
+            if ($desc = $line->getItemDescription()) {
+                $itemDescription = "<br><small>" . htmlspecialchars($desc) . "</small>";
+            }
 
             $html .= <<<HTML
-            <tr>
-                <td>{$pos}</td>
-                <td>{$line->getItemName()}</td>
-                <td class="right">{$quantity}</td>
-                <td>{$unit}</td>
-                <td class="right">{$unitPrice} {$currency}</td>
-                <td class="right">{$taxPercent}%</td>
-                <td class="right">{$netAmount} {$currency}</td>
-            </tr>
+        <tr>
+            <td class="qty">{$quantity} {$unit}</td>
+            <td>{$itemName}{$itemDescription}</td>
+            <td class="amount">{$unitPrice}</td>
+            <td class="amount">{$netAmount}</td>
+        </tr>
 HTML;
-            $pos++;
         }
 
         return $html;
@@ -444,18 +595,18 @@ HTML;
 
         if ($taxTotal === null) {
             $taxAmount = number_format($invoice->getTaxAmount(), 2, ',', '.');
-            return "<tr><td>MwSt.:</td><td class=\"right\">{$taxAmount} {$currency}</td></tr>";
+            return "<tr><td class=\"spacer\"></td><td class=\"label\">Mehrwertsteuer</td><td class=\"value\">{$taxAmount} {$currency}</td></tr>";
         }
 
         foreach ($taxTotal->getSubtotals() as $subtotal) {
             $percent = number_format($subtotal->getPercent(), 0);
             $taxAmount = number_format($subtotal->getTaxAmount(), 2, ',', '.');
-            $category = $subtotal->getCategory()->label();
 
             $html .= <<<HTML
             <tr>
-                <td>MwSt. {$percent}% ({$category}):</td>
-                <td class="right">{$taxAmount} {$currency}</td>
+                <td class="spacer"></td>
+                <td class="label">Mehrwertsteuer ({$percent}%)</td>
+                <td class="value">{$taxAmount} {$currency}</td>
             </tr>
 HTML;
         }
@@ -497,5 +648,45 @@ HTML;
         }
 
         return implode("\n", $parts);
+    }
+
+    /**
+     * Formatiert eine Adresse als HTML-Tabellenzeilen.
+     * 
+     * @param object $address Die Adresse
+     * @param bool $withLabels Wenn true, wird "Adresse:" als Label angezeigt
+     */
+    private function formatAddressTable(object $address, bool $withLabels = true): string {
+        $rows = [];
+        $firstLabel = $withLabels ? 'Adresse:' : '';
+
+        if ($street = $address->getStreetName()) {
+            $line = $street;
+            if ($building = $address->getBuildingNumber()) {
+                $line .= ' ' . $building;
+            }
+            $rows[] = "<tr><td class=\"label\">{$firstLabel}</td><td class=\"value\">{$line}</td></tr>";
+        }
+
+        if ($additional = $address->getAdditionalStreetName()) {
+            $rows[] = "<tr><td class=\"label\"></td><td class=\"value\">{$additional}</td></tr>";
+        }
+
+        $cityLine = '';
+        if ($postalCode = $address->getPostalCode()) {
+            $cityLine .= $postalCode . ' ';
+        }
+        if ($city = $address->getCity()) {
+            $cityLine .= $city;
+        }
+        if ($cityLine) {
+            $rows[] = "<tr><td class=\"label\"></td><td class=\"value\">{$cityLine}</td></tr>";
+        }
+
+        if ($country = $address->getCountry()) {
+            $rows[] = "<tr><td class=\"label\"></td><td class=\"value\">{$country->value}</td></tr>";
+        }
+
+        return implode("\n", $rows);
     }
 }
