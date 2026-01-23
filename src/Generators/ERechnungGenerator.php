@@ -17,8 +17,7 @@ use ERechnungToolkit\Entities\Document;
 use ERechnungToolkit\Entities\InvoiceLine;
 use ERechnungToolkit\Entities\Party;
 use ERechnungToolkit\Entities\PostalAddress;
-use ERechnungToolkit\Entities\TaxSubtotal;
-use ERechnungToolkit\Enums\InvoiceType;
+use ERRORToolkit\Traits\ErrorLog;
 use DOMDocument;
 use DOMElement;
 
@@ -32,6 +31,7 @@ use DOMElement;
  * @package ERechnungToolkit\Generators
  */
 final class ERechnungGenerator {
+    use ErrorLog;
     private const UBL_NS = 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2';
     private const UBL_CN_NS = 'urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2';
     private const CAC_NS = 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2';
@@ -46,6 +46,8 @@ final class ERechnungGenerator {
      * Generates UBL XML for XRechnung.
      */
     public function generateUbl(Document $document): string {
+        $this->logDebug('Generating UBL XML', ['id' => $document->getId(), 'type' => $document->getInvoiceType()->name]);
+
         $dom = new DOMDocument('1.0', 'UTF-8');
         $dom->formatOutput = true;
 
@@ -317,6 +319,8 @@ final class ERechnungGenerator {
      * Generates UN/CEFACT CII XML for ZUGFeRD/Factur-X.
      */
     public function generateCii(Document $document): string {
+        $this->logDebug('Generating CII XML', ['id' => $document->getId(), 'type' => $document->getInvoiceType()->name]);
+
         $dom = new DOMDocument('1.0', 'UTF-8');
         $dom->formatOutput = true;
 

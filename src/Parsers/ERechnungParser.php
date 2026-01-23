@@ -28,10 +28,14 @@ use ERechnungToolkit\Enums\InvoiceType;
 use ERechnungToolkit\Enums\PaymentMeansCode;
 use ERechnungToolkit\Enums\TaxCategory;
 use ERechnungToolkit\Enums\UnitCode;
+use ERRORToolkit\Traits\ErrorLog;
 use DateTimeImmutable;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
+use Exception;
+use InvalidArgumentException;
+use RuntimeException;
 
 /**
  * Parser for E-Rechnung XML documents.
@@ -43,6 +47,7 @@ use DOMXPath;
  * @package ERechnungToolkit\Parsers
  */
 final class ERechnungParser {
+    use ErrorLog;
     private const UBL_NS = 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2';
     private const UBL_CN_NS = 'urn:oasis:names:specification:ubl:schema:xsd:CreditNote-2';
     private const CAC_NS = 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2';
@@ -77,7 +82,7 @@ final class ERechnungParser {
             if (!empty($errors)) {
                 $errorMsg .= ': ' . $errors[0]->message;
             }
-            throw new \RuntimeException($errorMsg);
+            $this->logErrorAndThrow(RuntimeException::class, $errorMsg);
         }
 
         libxml_use_internal_errors($internalErrors);
@@ -86,25 +91,28 @@ final class ERechnungParser {
         $this->setupXPath();
 
         if ($this->isUbl) {
+            $this->logDebug('Parsing UBL document', ['isCreditNote' => $this->isCreditNote]);
             return $this->parseUbl();
         } elseif ($this->isCii) {
+            $this->logDebug('Parsing CII document');
             return $this->parseCii();
         }
 
-        throw new \RuntimeException('Unknown E-Rechnung format. Expected UBL or CII.');
+        $this->logErrorAndThrow(RuntimeException::class, 'Unknown E-Rechnung format. Expected UBL or CII.');
     }
 
     /**
      * Parses an E-Rechnung document from file.
      */
     public function parseFile(string $filePath): Document {
+        $this->logDebug('Parsing E-Rechnung from file', ['path' => $filePath]);
         if (!file_exists($filePath)) {
-            throw new \InvalidArgumentException("File not found: {$filePath}");
+            $this->logErrorAndThrow(InvalidArgumentException::class, "File not found: {$filePath}");
         }
 
         $xml = file_get_contents($filePath);
         if ($xml === false) {
-            throw new \RuntimeException("Failed to read file: {$filePath}");
+            $this->logErrorAndThrow(RuntimeException::class, "Failed to read file: {$filePath}");
         }
 
         return $this->parse($xml);
@@ -114,10 +122,15 @@ final class ERechnungParser {
      * Detects the XML format (UBL or CII).
      */
     private function detectFormat(): void {
+        // Reset format flags for reuse of parser instance
+        $this->isUbl = false;
+        $this->isCii = false;
+        $this->isCreditNote = false;
+
         $root = $this->dom->documentElement;
 
         if ($root === null) {
-            throw new \RuntimeException('No root element found in XML document');
+            $this->logErrorAndThrow(RuntimeException::class, 'No root element found in XML document');
         }
 
         $ns = $root->namespaceURI;
@@ -339,7 +352,7 @@ final class ERechnungParser {
         }
         try {
             return new DateTimeImmutable($value);
-        } catch (\Exception) {
+        } catch (Exception) {
             return null;
         }
     }
@@ -553,7 +566,7 @@ final class ERechnungParser {
         // Format 102 = YYYYMMDD
         try {
             return DateTimeImmutable::createFromFormat('Ymd', $dateStr) ?: new DateTimeImmutable($dateStr);
-        } catch (\Exception) {
+        } catch (Exception) {
             return null;
         }
     }

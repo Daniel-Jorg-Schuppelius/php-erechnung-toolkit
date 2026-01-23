@@ -25,6 +25,7 @@ use ERechnungToolkit\Enums\InvoiceType;
 use ERechnungToolkit\Enums\PaymentMeansCode;
 use ERechnungToolkit\Enums\TaxCategory;
 use ERechnungToolkit\Enums\UnitCode;
+use ERRORToolkit\Traits\ErrorLog;
 use DateTimeImmutable;
 
 /**
@@ -47,6 +48,7 @@ use DateTimeImmutable;
  * @package ERechnungToolkit\Builders
  */
 final class ERechnungDocumentBuilder {
+    use ErrorLog;
     private string $id;
     private DateTimeImmutable $issueDate;
     private InvoiceType $invoiceType = InvoiceType::INVOICE;
@@ -451,11 +453,15 @@ final class ERechnungDocumentBuilder {
     public function build(): Document {
         // Validate required fields
         if ($this->sellerName === null) {
+            $this->logError('Seller name is required');
             throw new \InvalidArgumentException('Seller name is required');
         }
         if ($this->buyerName === null) {
+            $this->logError('Buyer name is required');
             throw new \InvalidArgumentException('Buyer name is required');
         }
+
+        $this->logDebug('Building E-Rechnung document', ['id' => $this->id, 'profile' => $this->profile->name]);
 
         // Build seller party
         $seller = new Party(

@@ -14,6 +14,7 @@ namespace ERechnungToolkit\Parsers;
 
 use ERechnungToolkit\Entities\Document;
 use ERRORToolkit\Traits\ErrorLog;
+use Throwable;
 
 /**
  * Parser für ZUGFeRD/Factur-X PDF-Rechnungen.
@@ -59,8 +60,7 @@ final class ZugferdPdfParser {
      */
     public function isZugferdPdf(string $pdfPath): bool {
         if (!$this->isAvailable()) {
-            $this->logError('ZUGFeRD PDF parsing requires dschuppelius/php-pdf-toolkit');
-            return false;
+            return $this->logErrorAndReturn(false, 'ZUGFeRD PDF parsing requires dschuppelius/php-pdf-toolkit');
         }
 
         $reader = $this->getReader();
@@ -91,16 +91,14 @@ final class ZugferdPdfParser {
      */
     public function extractXml(string $pdfPath): ?string {
         if (!$this->isAvailable()) {
-            $this->logError('ZUGFeRD PDF parsing requires dschuppelius/php-pdf-toolkit. Install with: composer require dschuppelius/php-pdf-toolkit');
-            return null;
+            return $this->logErrorAndReturn(null, 'ZUGFeRD PDF parsing requires dschuppelius/php-pdf-toolkit. Install with: composer require dschuppelius/php-pdf-toolkit');
         }
 
         $reader = $this->getReader();
         $xml = $reader->extractInvoiceXml($pdfPath);
 
         if ($xml === null) {
-            $this->logError('No ZUGFeRD/Factur-X XML found in PDF', ['path' => $pdfPath]);
-            return null;
+            return $this->logErrorAndReturn(null, 'No ZUGFeRD/Factur-X XML found in PDF', ['path' => $pdfPath]);
         }
 
         $this->logDebug('Extracted ZUGFeRD XML from PDF', [
@@ -122,12 +120,11 @@ final class ZugferdPdfParser {
 
         try {
             return $parser->parse($xml);
-        } catch (\Throwable $e) {
-            $this->logError('Failed to parse ZUGFeRD XML', [
+        } catch (Throwable $e) {
+            return $this->logErrorAndReturn(null, 'Failed to parse ZUGFeRD XML', [
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString()
             ]);
-            return null;
         }
     }
 
