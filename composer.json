@@ -21,9 +21,16 @@
       "email": "info@schuppelius.org"
     }
   ],
+  "repositories": [
+    {
+      "type": "vcs",
+      "url": "git@github.com:Daniel-Jorg-Schuppelius/php-pdf-toolkit.git",
+      "canonical": false
+    }
+  ],
   "require": {
     "php": ">=8.2 <8.5",
-    "dschuppelius/php-common-toolkit": "^1.0",
+    "dschuppelius/php-common-toolkit": "^1.1",
     "ext-dom": "*",
     "ext-libxml": "*"
   },
@@ -39,10 +46,10 @@
   },
   "require-dev": {
     "phpunit/phpunit": "^11.3",
-    "dschuppelius/php-pdf-toolkit": "^1.0"
+    "daniel-jorg-schuppelius/php-pdf-toolkit": "^0.3"
   },
   "suggest": {
-    "dschuppelius/php-pdf-toolkit": "Required for ZUGFeRD/Factur-X PDF generation with embedded XML invoices"
+    "daniel-jorg-schuppelius/php-pdf-toolkit": "Required for ZUGFeRD/Factur-X PDF generation with embedded XML invoices"
   },
   "prefer-stable": true,
   "config": {
