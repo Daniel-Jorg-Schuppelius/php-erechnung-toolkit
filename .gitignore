@@ -408,3 +408,4 @@ phpunit.xml
 .env
 /public/bundles/
 /vendor/
+composer.lock
