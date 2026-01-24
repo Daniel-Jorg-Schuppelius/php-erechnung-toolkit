@@ -315,11 +315,8 @@ HTML;
             $sellerAddressOneLine = implode(', ', $lines);
         }
 
-        // Buyer Reference Row für Rechnungsbox
-        $buyerRefRow = '';
-        if ($buyerReference = $invoice->getBuyerReference()) {
-            $buyerRefRow = "<tr><td class=\"label\">Leitweg-ID</td><td class=\"value\">{$buyerReference}</td></tr>";
-        }
+        // Leitweg-ID (Buyer Reference) für XRechnung
+        $buyerReference = $invoice->getBuyerReference() ?? '';
 
         // Kundenummer (Endpoint-ID oder Buyer-Reference)
         $customerNumber = $buyer->getEndpointId() ?? $invoice->getBuyerReference() ?? '-';
@@ -328,8 +325,6 @@ HTML;
         $orderReference = $invoice->getOrderReference() ?? '-';
 
         // Zahlungsbedingungen
-        $paymentTerms = $invoice->getPaymentTerms();
-        $paymentTermsText = $paymentTerms?->getNote() ?? 'Zahlbar innerhalb von 14 Tagen ohne Abzug.';
         $paymentTermsShort = 'Fällig bei Erhalt';
         if ($invoice->getDueDate()) {
             $days = $invoice->getIssueDate()->diff($invoice->getDueDate())->days;
@@ -383,7 +378,7 @@ HTML;
         $bankInfoText = '';
         if ($seller->hasBankingInfo()) {
             $bankName = $seller->getBankName() ?? '';
-            $bankInfoText = "Alle Zahlungen an: {$seller->getName()}, IBAN: {$seller->getIban()}, BIC: {$seller->getBic()} ({$bankName})";
+            $bankInfoText = "<strong>Zahlung:</strong> {$seller->getName()}, IBAN: {$seller->getIban()}, BIC: {$seller->getBic()} ({$bankName})";
         }
 
         return <<<HTML
@@ -481,7 +476,7 @@ HTML;
         .totals-table { width: 100%; }
         .totals-table td { padding: 6pt 0; font-size: 9pt; }
         .totals-table td.spacer { width: 50%; }
-        .totals-table td.label { text-align: right; padding-right: 20pt; }
+        .totals-table td.label { text-align: right; padding-right: 0; }
         .totals-table td.value { text-align: right; width: 16%; }
         .totals-table tr.total td { 
             font-weight: bold; 
@@ -493,13 +488,6 @@ HTML;
         /* Zahlungshinweise */
         .payment-section { margin-bottom: 25pt; }
         .payment-section p { font-size: 9pt; line-height: 160%; margin-bottom: 5pt; }
-        
-        .thank-you { 
-            text-align: center; 
-            font-weight: bold; 
-            font-size: 10pt;
-            color: #333;
-        }
         
         /* E-Rechnungs-Hinweis am Ende */
         .zugferd-note {
@@ -530,8 +518,8 @@ E-Mail: {$sellerEmail}
 
 <div class="meta-section"><br /><br />
 <table>
-<tr><th>Kunden-Nr.</th><th>Bestell-Nr.</th><th>Ihre USt-IdNr.</th><th>Zahlungsbedingungen</th></tr>
-<tr><td>{$customerNumber}</td><td>{$orderReference}</td><td>{$sellerVatId}</td><td>{$paymentTermsShort}</td></tr>
+<tr><th>Kunden-Nr.</th><th>Bestell-Nr.</th><th>Leitweg-ID</th><th>Ihre USt-IdNr.</th><th>Zahlungsbedingungen</th></tr>
+<tr><td>{$customerNumber}</td><td>{$orderReference}</td><td>{$buyerReference}</td><td>{$sellerVatId}</td><td>{$paymentTermsShort}</td></tr>
 </table>
 </div>
 
@@ -550,9 +538,9 @@ E-Mail: {$sellerEmail}
 </table>
 </div>
 {$commentBoxHtml}
+{$deliveryAddressHtml}
 <div class="payment-section">
 <p>{$bankInfoText}</p>
-<p>Bei Fragen wenden Sie sich an: {$sellerEmail}, {$sellerPhone}</p>
 </div>
 <div class="zugferd-note" style="text-align: center; font-size: 7pt; color: #666; padding-top: 35pt; border-top: 1px solid #ddd;"><strong>Elektronische Rechnung (ZUGFeRD/Factur-X)</strong> &mdash; Diese Rechnung enthält eine maschinenlesbare XML-Datei gemäß EN 16931.</div>
 </body>
