@@ -209,7 +209,7 @@ final class ERechnungDocumentBuilder {
         string $street,
         string $postalCode,
         string $city,
-        CountryCode|string $country = CountryCode::Germany,
+        CountryCode|string|null $country = null,
         ?string $additionalLine = null
     ): self {
         $this->sellerAddress = new PostalAddress(
@@ -217,7 +217,7 @@ final class ERechnungDocumentBuilder {
             additionalStreetName: $additionalLine,
             postalCode: $postalCode,
             city: $city,
-            country: $country
+            country: $country ?? CountryCode::Germany
         );
         return $this;
     }
@@ -254,7 +254,7 @@ final class ERechnungDocumentBuilder {
         string $street,
         string $postalCode,
         string $city,
-        CountryCode|string $country = CountryCode::Germany,
+        CountryCode|string|null $country = null,
         ?string $additionalLine = null
     ): self {
         $this->buyerAddress = new PostalAddress(
@@ -262,7 +262,7 @@ final class ERechnungDocumentBuilder {
             additionalStreetName: $additionalLine,
             postalCode: $postalCode,
             city: $city,
-            country: $country
+            country: $country ?? CountryCode::Germany
         );
         return $this;
     }
@@ -326,8 +326,8 @@ final class ERechnungDocumentBuilder {
         float $quantity,
         float $unitPrice,
         float $taxPercent = 19.0,
-        UnitCode $unitCode = UnitCode::PIECE,
-        TaxCategory $taxCategory = TaxCategory::STANDARD,
+        ?UnitCode $unitCode = null,
+        ?TaxCategory $taxCategory = null,
         ?string $itemDescription = null,
         ?string $sellersItemId = null
     ): self {
@@ -335,11 +335,11 @@ final class ERechnungDocumentBuilder {
         $line = new InvoiceLine(
             id: (string)$this->lineCounter,
             quantity: $quantity,
-            unitCode: $unitCode,
+            unitCode: $unitCode ?? UnitCode::PIECE,
             netAmount: round($quantity * $unitPrice, 2),
             itemName: $itemName,
             unitPrice: $unitPrice,
-            taxCategory: $taxCategory,
+            taxCategory: $taxCategory ?? TaxCategory::STANDARD,
             taxPercent: $taxPercent,
             itemDescription: $itemDescription,
             sellersItemId: $sellersItemId
