@@ -119,6 +119,13 @@ echo "✓ Summen: Netto {$net} EUR, MwSt {$tax} EUR, Brutto {$gross} EUR\n";
 echo "✓ Hinweise: " . count($doc->getNotes()) . " Notizen hinzugefügt\n";
 echo "✓ Profil: " . $doc->getProfile()->name . "\n\n";
 
+// HTML-Vorschau generieren
+$htmlFile = str_replace('.pdf', '.html', $outputFile);
+$htmlGenerator = new ERechnungToolkit\Generators\InvoiceHtmlGenerator();
+$html = $htmlGenerator->generate($doc);
+file_put_contents($htmlFile, $html);
+echo "✓ HTML-Vorschau: {$htmlFile}\n\n";
+
 // PDF generieren
 echo "Generiere PDF...\n";
 
