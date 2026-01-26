@@ -21,13 +21,6 @@
       "email": "info@schuppelius.org"
     }
   ],
-  "repositories": [
-    {
-      "type": "vcs",
-      "url": "git@github.com:Daniel-Jorg-Schuppelius/php-pdf-toolkit.git",
-      "canonical": false
-    }
-  ],
   "require": {
     "php": ">=8.2 <8.5",
     "ext-dom": "*",
