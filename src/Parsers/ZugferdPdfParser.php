@@ -48,8 +48,12 @@ final class ZugferdPdfParser {
             return false;
         }
 
-        $reader = $this->getReader();
-        return $reader->isAvailable();
+        try {
+            $reader = $this->getReader();
+            return $reader->isAvailable();
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**
