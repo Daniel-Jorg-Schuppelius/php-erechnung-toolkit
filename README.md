@@ -103,7 +103,7 @@ foreach ($document->getLines() as $line) {
 Generate PDF/A-3 invoices with embedded XML for automated processing. Requires `dschuppelius/php-pdf-toolkit`:
 
 ```bash
-composer require dschuppelius/php-pdf-toolkit
+composer require daniel-jorg-schuppelius/php-pdf-toolkit
 ```
 
 ```php
