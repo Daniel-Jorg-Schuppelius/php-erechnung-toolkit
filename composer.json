@@ -39,7 +39,7 @@
   },
   "require-dev": {
     "phpunit/phpunit": "^11.3",
-    "daniel-jorg-schuppelius/php-pdf-toolkit": "^0.4"
+    "daniel-jorg-schuppelius/php-pdf-toolkit": "^0.4 || ^0.6"
   },
   "suggest": {
     "daniel-jorg-schuppelius/php-pdf-toolkit": "Required for ZUGFeRD/Factur-X PDF generation with embedded XML invoices"
