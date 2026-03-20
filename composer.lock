@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "268e70edb2aacec06df0ce7b569a847c",
+    "content-hash": "bed4ca9c7a94b6f367a5e4128188282a",
     "packages": [
         {
             "name": "dschuppelius/php-common-toolkit",
-            "version": "v1.5.8.1",
+            "version": "v1.5.8.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/DSchuppelius/php-common-toolkit.git",
-                "reference": "2016865411e91ee407bf6f17fe3d554afa8b8adc"
+                "reference": "ef842f3741fcf3b10769b54ed16f2087208f346e"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/DSchuppelius/php-common-toolkit/zipball/2016865411e91ee407bf6f17fe3d554afa8b8adc",
-                "reference": "2016865411e91ee407bf6f17fe3d554afa8b8adc",
+                "url": "https://api.github.com/repos/DSchuppelius/php-common-toolkit/zipball/ef842f3741fcf3b10769b54ed16f2087208f346e",
+                "reference": "ef842f3741fcf3b10769b54ed16f2087208f346e",
                 "shasum": ""
             },
             "require": {
@@ -26,7 +26,7 @@
                 "ext-dom": "*",
                 "ext-intl": "*",
                 "ext-zip": "*",
-                "php": ">=8.2 <=8.5"
+                "php": ">=8.1 <8.6"
             },
             "require-dev": {
                 "phpunit/phpunit": "^11.3@dev"
@@ -50,9 +50,9 @@
             "description": "Project description.",
             "support": {
                 "issues": "https://github.com/DSchuppelius/php-common-toolkit/issues",
-                "source": "https://github.com/DSchuppelius/php-common-toolkit/tree/v1.5.8.1"
+                "source": "https://github.com/DSchuppelius/php-common-toolkit/tree/v1.5.8.2"
             },
-            "time": "2026-03-20T07:05:28+00:00"
+            "time": "2026-03-20T09:06:21+00:00"
         },
         {
             "name": "dschuppelius/php-config-toolkit",
@@ -100,20 +100,20 @@
         },
         {
             "name": "dschuppelius/php-error-toolkit",
-            "version": "v2.1.3",
+            "version": "v2.1.3.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/DSchuppelius/php-error-toolkit.git",
-                "reference": "107ea388a9b3cd967588f4cff7e340d56d1dfea9"
+                "reference": "5f652cfd4e5c15650d71f2b82b9c4380ecef40df"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/DSchuppelius/php-error-toolkit/zipball/107ea388a9b3cd967588f4cff7e340d56d1dfea9",
-                "reference": "107ea388a9b3cd967588f4cff7e340d56d1dfea9",
+                "url": "https://api.github.com/repos/DSchuppelius/php-error-toolkit/zipball/5f652cfd4e5c15650d71f2b82b9c4380ecef40df",
+                "reference": "5f652cfd4e5c15650d71f2b82b9c4380ecef40df",
                 "shasum": ""
             },
             "require": {
-                "php": ">=8.1 <8.5",
+                "php": ">=8.1 <8.6",
                 "psr/log": "^3.0"
             },
             "require-dev": {
@@ -138,9 +138,9 @@
             "description": "Reused codes for my api php sdks",
             "support": {
                 "issues": "https://github.com/DSchuppelius/php-error-toolkit/issues",
-                "source": "https://github.com/DSchuppelius/php-error-toolkit/tree/v2.1.3"
+                "source": "https://github.com/DSchuppelius/php-error-toolkit/tree/v2.1.3.1"
             },
-            "time": "2026-03-08T10:32:34+00:00"
+            "time": "2026-03-20T09:08:45+00:00"
         },
         {
             "name": "psr/log",
@@ -196,23 +196,23 @@
     "packages-dev": [
         {
             "name": "daniel-jorg-schuppelius/php-pdf-toolkit",
-            "version": "v0.4.12",
+            "version": "v0.8.0.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit.git",
-                "reference": "fa7a82d660da3a586ef6bee34e473755b71c32ae"
+                "reference": "e961a4a8d67828046d8c5db451eb830a32adf0e4"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Daniel-Jorg-Schuppelius/php-pdf-toolkit/zipball/fa7a82d660da3a586ef6bee34e473755b71c32ae",
-                "reference": "fa7a82d660da3a586ef6bee34e473755b71c32ae",
+                "url": "https://api.github.com/repos/Daniel-Jorg-Schuppelius/php-pdf-toolkit/zipball/e961a4a8d67828046d8c5db451eb830a32adf0e4",
+                "reference": "e961a4a8d67828046d8c5db451eb830a32adf0e4",
                 "shasum": ""
             },
             "require": {
                 "dompdf/dompdf": "^3.1",
                 "dschuppelius/php-common-toolkit": "^1.1",
                 "ext-gd": "*",
-                "php": "^8.2 || ^8.3 || ^8.4",
+                "php": ">=8.1 <8.6",
                 "setasign/fpdi": "^2.3",
                 "tecnickcom/tcpdf": "^6.6"
             },
@@ -238,9 +238,9 @@
             "description": "PHP 8.2+ library for PDF text extraction with automatic reader selection. Supports embedded text and scanned documents via OCR.",
             "support": {
                 "issues": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit/issues",
-                "source": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit/tree/v0.4.12"
+                "source": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit/tree/v0.8.0.1"
             },
-            "time": "2026-02-23T18:41:30+00:00"
+            "time": "2026-03-20T09:09:45+00:00"
         },
         {
             "name": "dompdf/dompdf",
@@ -2618,7 +2618,7 @@
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
-        "php": ">=8.2 <=8.5",
+        "php": ">=8.1 <8.6",
         "ext-dom": "*",
         "ext-libxml": "*"
     },
