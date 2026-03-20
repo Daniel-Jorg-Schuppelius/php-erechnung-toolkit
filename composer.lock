@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "268e70edb2aacec06df0ce7b569a847c",
+    "content-hash": "36a5c20ab9e32964a4b3c6f291330f2f",
     "packages": [
         {
             "name": "dschuppelius/php-common-toolkit",
@@ -196,16 +196,16 @@
     "packages-dev": [
         {
             "name": "daniel-jorg-schuppelius/php-pdf-toolkit",
-            "version": "v0.4.12",
+            "version": "v0.8",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit.git",
-                "reference": "fa7a82d660da3a586ef6bee34e473755b71c32ae"
+                "reference": "987ee9dbf3924c394d0d48e34134b8637c8372f0"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Daniel-Jorg-Schuppelius/php-pdf-toolkit/zipball/fa7a82d660da3a586ef6bee34e473755b71c32ae",
-                "reference": "fa7a82d660da3a586ef6bee34e473755b71c32ae",
+                "url": "https://api.github.com/repos/Daniel-Jorg-Schuppelius/php-pdf-toolkit/zipball/987ee9dbf3924c394d0d48e34134b8637c8372f0",
+                "reference": "987ee9dbf3924c394d0d48e34134b8637c8372f0",
                 "shasum": ""
             },
             "require": {
@@ -238,9 +238,9 @@
             "description": "PHP 8.2+ library for PDF text extraction with automatic reader selection. Supports embedded text and scanned documents via OCR.",
             "support": {
                 "issues": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit/issues",
-                "source": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit/tree/v0.4.12"
+                "source": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit/tree/v0.8"
             },
-            "time": "2026-02-23T18:41:30+00:00"
+            "time": "2026-03-15T21:20:35+00:00"
         },
         {
             "name": "dompdf/dompdf",
@@ -2614,7 +2614,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": [],
+    "stability-flags": {},
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
@@ -2622,6 +2622,6 @@
         "ext-dom": "*",
         "ext-libxml": "*"
     },
-    "platform-dev": [],
-    "plugin-api-version": "2.6.0"
+    "platform-dev": {},
+    "plugin-api-version": "2.9.0"
 }
