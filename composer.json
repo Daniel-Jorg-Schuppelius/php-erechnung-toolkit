@@ -22,7 +22,7 @@
     }
   ],
   "require": {
-    "php": ">=8.2 <8.5",
+    "php": ">=8.2 <=8.5",
     "ext-dom": "*",
     "ext-libxml": "*",
     "dschuppelius/php-common-toolkit": "^1.1"

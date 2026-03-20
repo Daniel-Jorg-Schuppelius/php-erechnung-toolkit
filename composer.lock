@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "5d051eceac69846f872e8151ae97569d",
+    "content-hash": "268e70edb2aacec06df0ce7b569a847c",
     "packages": [
         {
             "name": "dschuppelius/php-common-toolkit",
-            "version": "v1.5.8",
+            "version": "v1.5.8.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/DSchuppelius/php-common-toolkit.git",
-                "reference": "e72d82dcf3b1b99a96af21238501278d1688e0ad"
+                "reference": "2016865411e91ee407bf6f17fe3d554afa8b8adc"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/DSchuppelius/php-common-toolkit/zipball/e72d82dcf3b1b99a96af21238501278d1688e0ad",
-                "reference": "e72d82dcf3b1b99a96af21238501278d1688e0ad",
+                "url": "https://api.github.com/repos/DSchuppelius/php-common-toolkit/zipball/2016865411e91ee407bf6f17fe3d554afa8b8adc",
+                "reference": "2016865411e91ee407bf6f17fe3d554afa8b8adc",
                 "shasum": ""
             },
             "require": {
@@ -26,7 +26,7 @@
                 "ext-dom": "*",
                 "ext-intl": "*",
                 "ext-zip": "*",
-                "php": ">=8.2 <8.5"
+                "php": ">=8.2 <=8.5"
             },
             "require-dev": {
                 "phpunit/phpunit": "^11.3@dev"
@@ -50,9 +50,9 @@
             "description": "Project description.",
             "support": {
                 "issues": "https://github.com/DSchuppelius/php-common-toolkit/issues",
-                "source": "https://github.com/DSchuppelius/php-common-toolkit/tree/v1.5.8"
+                "source": "https://github.com/DSchuppelius/php-common-toolkit/tree/v1.5.8.1"
             },
-            "time": "2026-03-19T14:39:06+00:00"
+            "time": "2026-03-20T07:05:28+00:00"
         },
         {
             "name": "dschuppelius/php-config-toolkit",
@@ -2618,7 +2618,7 @@
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
-        "php": ">=8.2 <8.5",
+        "php": ">=8.2 <=8.5",
         "ext-dom": "*",
         "ext-libxml": "*"
     },
