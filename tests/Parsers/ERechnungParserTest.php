@@ -326,6 +326,27 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals(ERechnungProfile::XRECHNUNG, $parsed->getProfile());
     }
 
+    public function testParseLegacyXoevDeXRechnungProfileIsRecognized(): void {
+        // Older XRechnung 2.x files carry the deprecated "xoev-de:kosit"
+        // authority. These must still be recognized as XRechnung when parsing.
+        $xml = '<?xml version="1.0" encoding="UTF-8"?>'
+            . '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"'
+            . ' xmlns:cbc="urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2"'
+            . ' xmlns:cac="urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2">'
+            . '<cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_3.0</cbc:CustomizationID>'
+            . '<cbc:ID>XR-LEGACY-001</cbc:ID>'
+            . '<cbc:IssueDate>2026-01-22</cbc:IssueDate>'
+            . '<cbc:InvoiceTypeCode>380</cbc:InvoiceTypeCode>'
+            . '<cbc:DocumentCurrencyCode>EUR</cbc:DocumentCurrencyCode>'
+            . '<cac:AccountingSupplierParty><cac:Party><cac:PartyName><cbc:Name>Seller</cbc:Name></cac:PartyName></cac:Party></cac:AccountingSupplierParty>'
+            . '<cac:AccountingCustomerParty><cac:Party><cac:PartyName><cbc:Name>Buyer</cbc:Name></cac:PartyName></cac:Party></cac:AccountingCustomerParty>'
+            . '</Invoice>';
+
+        $parsed = $this->parser->parse($xml);
+
+        $this->assertEquals(ERechnungProfile::XRECHNUNG, $parsed->getProfile());
+    }
+
     public function testParseInvalidXmlThrowsException(): void {
         $this->expectException(\Exception::class);
 

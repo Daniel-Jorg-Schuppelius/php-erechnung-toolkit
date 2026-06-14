@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8">
+    <title>Rechnung R-2025-0042</title>
+    <style>@page { 
+    size: A4; 
+    margin: 5mm 20mm 25mm 20mm;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { 
+    font-family: Arial, sans-serif; 
+    font-size: 9pt; 
+    line-height: 150%;
+    color: #333;
+    margin: 0 auto;
+    padding: 5mm 5mm 5mm 20mm;
+}
+
+/* Tabellen-Grundlagen */
+table { border-collapse: collapse; width: 100%; }
+td, th { vertical-align: top; }
+
+/* Kopfbereich - Absender rechtsbündig */
+.header-section { margin-bottom: 20pt; }
+.sender-block { text-align: right; font-size: 9pt; line-height: 160%; }
+.sender-block .company-name { font-size: 14pt; font-weight: bold; margin-bottom: 20pt; }
+
+/* Hauptbereich - Adresse links, Rechnung rechts auf gleicher Höhe */
+.main-section { margin-bottom: 50pt; }
+.main-section td { padding: 0; }
+.main-section .left-col { width: 55%; }
+.main-section .right-col { width: 45%; text-align: right; vertical-align: top; }
+.invoice-title { font-size: 22pt; font-weight: bold; color: #595959; text-transform: uppercase; margin-bottom: 8pt; }
+.invoice-meta { font-size: 10pt; line-height: 180%; }
+
+/* Absenderzeile klein über Empfänger */
+.sender-line { font-size: 7pt; color: #666; border-bottom: 1px solid #999; padding-bottom: 2pt; margin-bottom: 8pt; display: inline-block; }
+
+/* Empfängeradresse */
+.address-block { font-size: 10pt; line-height: 170%; }
+
+/* Kommentar-Box */
+.comment-box { 
+    padding: 12pt 0; 
+    margin-bottom: 20pt;
+    border-top: 1px solid #ddd;
+    border-bottom: 1px solid #ddd;
+}
+.comment-box .section-label { margin-bottom: 8pt; font-weight: bold; font-size: 9pt; color: #666; }
+
+/* Meta-Zeile */
+.meta-section { margin-bottom: 25pt; }
+.meta-section table { width: 100%; }
+.meta-section th { 
+    text-align: left; 
+    font-size: 8pt; 
+    font-weight: normal;
+    color: #666;
+    padding: 0 15pt 3pt 0;
+    border-bottom: 1px solid #ddd;
+}
+.meta-section td { 
+    font-size: 9pt;
+    font-weight: bold;
+    padding: 8pt 15pt 0 0;
+}
+
+/* Positionstabelle */
+.lines-section { margin-bottom: 20pt; }
+.lines-table { width: 100%; }
+.lines-table th { 
+    text-align: left; 
+    font-size: 8pt; 
+    font-weight: bold;
+    color: #666;
+    text-transform: uppercase;
+    padding: 8pt 10pt 8pt 0;
+    border-bottom: 2px solid #333;
+}
+.lines-table th.right { text-align: right; padding-right: 0; }
+.lines-table td { 
+    padding: 6pt 10pt 6pt 0;
+    border-bottom: 1px solid #eee;
+    font-size: 9pt;
+}
+.lines-table td.qty { text-align: left; }
+.lines-table td.amount { text-align: right; padding-right: 0; }
+.lines-table tr:last-child td { border-bottom: 2px solid #333; }
+
+/* Summenbereich - rechtsbündig zur Tabelle */
+.totals-section { margin-bottom: 30pt; }
+.totals-table { width: 100%; }
+.totals-table td { padding: 6pt 0; font-size: 9pt; }
+.totals-table td.spacer { width: 50%; }
+.totals-table td.label { text-align: right; padding-right: 0; }
+.totals-table td.value { text-align: right; width: 16%; }
+.totals-table tr.total td { 
+    font-weight: bold; 
+    font-size: 11pt; 
+    padding-top: 10pt;
+    border-top: 1px solid #333;
+}
+
+/* Zahlungshinweise */
+.payment-section { margin-bottom: 25pt; }
+.payment-section p { font-size: 9pt; line-height: 160%; margin-bottom: 5pt; }
+
+/* Lieferadresse */
+.delivery-section { margin-bottom: 20pt; }
+.section-label { font-weight: bold; font-size: 9pt; color: #666; margin-bottom: 5pt; }
+
+/* E-Rechnungs-Hinweis am Ende */
+.zugferd-note {
+    text-align: center;
+    font-size: 7pt;
+    color: #666;
+    padding-top: 35pt;
+    border-top: 1px solid #ddd;
+}</style>
+  </head>
+  <body>
+    <div style="text-align: right; font-size: 9pt; line-height: 150%;">
+      <div style="font-size: 14pt; font-weight: bold; margin-bottom: 3pt;">Muster GmbH</div>
+      <div>Musterstraße 1</div>
+      <div>12345 Musterstadt</div>
+      <div>Deutschland</div>
+      <div style="height: 10pt;"></div>
+      <div>Tel: +49 123 456789</div>
+      <div>E-Mail: info@muster.de</div>
+    </div>
+    <table style="width: 100%; margin-bottom: 40pt;">
+      <tr>
+        <td style="width: 55%; vertical-align: top;">
+          <div class="sender-line">Muster GmbH · Musterstraße 1 · 12345 Musterstadt</div>
+          <div class="address-block">
+            <strong>Kunde AG</strong>
+            <div>Kundenweg 42</div>
+            <div>54321 Kundenstadt</div>
+            <div>Deutschland</div>
+          </div>
+        </td>
+        <td style="width: 45%; text-align: right; vertical-align: top;">
+          <div style="font-size: 22pt; font-weight: bold; color: #595959; text-transform: uppercase; margin-bottom: 8pt; margin-top: 20pt;">Rechnung</div>
+          <div style="font-size: 10pt; line-height: 180%;">
+            <div>
+              <strong>Nr. R-2025-0042</strong>
+            </div>
+            <div>Datum: 14.06.2026</div>
+            <div>Fällig: 14.07.2026</div>
+          </div>
+        </td>
+      </tr>
+    </table>
+    <div class="meta-section">
+      <table>
+        <tr>
+          <th>Kunden-Nr.</th>
+          <th>Bestell-Nr.</th>
+          <th>Leitweg-ID</th>
+          <th>Ihre USt-IdNr.</th>
+          <th>Zahlungsbedingungen</th>
+        </tr>
+        <tr>
+          <td>04011000-12345-67</td>
+          <td>-</td>
+          <td>04011000-12345-67</td>
+          <td>DE123456789</td>
+          <td>30 Tage netto</td>
+        </tr>
+      </table>
+    </div>
+    <div class="lines-section">
+      <table class="lines-table">
+        <tr>
+          <th style="width: 12%;">Menge</th>
+          <th style="width: 50%;">Beschreibung</th>
+          <th style="width: 19%;" class="right">Einzelpreis</th>
+          <th style="width: 19%;" class="right">Betrag</th>
+        </tr>
+        <tr>
+          <td class="qty">10 h</td>
+          <td>Webentwicklung Dienstleistung</td>
+          <td class="amount">85,00 EUR</td>
+          <td class="amount">850,00 EUR</td>
+        </tr>
+        <tr>
+          <td class="qty">1 Stk.</td>
+          <td>Hosting-Paket Premium (12 Monate)</td>
+          <td class="amount">299,00 EUR</td>
+          <td class="amount">299,00 EUR</td>
+        </tr>
+        <tr>
+          <td class="qty">1 Stk.</td>
+          <td>SSL-Zertifikat Wildcard</td>
+          <td class="amount">149,00 EUR</td>
+          <td class="amount">149,00 EUR</td>
+        </tr>
+        <tr>
+          <td class="qty">3 Stk.</td>
+          <td>Domain-Registrierung (.de)</td>
+          <td class="amount">12,00 EUR</td>
+          <td class="amount">36,00 EUR</td>
+        </tr>
+        <tr>
+          <td class="qty">1 Stk.</td>
+          <td>E-Mail-Postfächer Business (10 Stück)</td>
+          <td class="amount">59,00 EUR</td>
+          <td class="amount">59,00 EUR</td>
+        </tr>
+      </table>
+    </div>
+    <div class="totals-section">
+      <table class="totals-table">
+        <tr>
+          <td class="spacer"></td>
+          <td class="label">Zwischensumme</td>
+          <td class="value">1.393,00 EUR</td>
+        </tr>
+        <tr>
+          <td class="spacer"></td>
+          <td class="label">Mehrwertsteuer (19%)</td>
+          <td class="value">264,67 EUR</td>
+        </tr>
+        <tr class="total">
+          <td class="spacer"></td>
+          <td class="label">Gesamtbetrag</td>
+          <td class="value">1.657,67 EUR</td>
+        </tr>
+      </table>
+    </div>
+    <div class="comment-box">
+      <div class="section-label">Hinweise:</div>
+      <div>Zahlbar innerhalb von 30 Tagen ohne Abzug.</div>
+      <div>Lieferung erfolgte am 14.06.2026.</div>
+    </div>
+    <div class="payment-section">
+      <p>
+        <strong>Zahlung: </strong>
+        <span>Muster GmbH, IBAN: DE89 3704 0044 0532 0130 00, BIC: COBADEFFXXX (Commerzbank)</span>
+      </p>
+    </div>
+    <div class="zugferd-note">
+      <strong>Elektronische Rechnung (ZUGFeRD/Factur-X)</strong>
+      <span> — Diese Rechnung enthält eine maschinenlesbare XML-Datei gemäß EN 16931.</span>
+    </div>
+  </body>
+</html>

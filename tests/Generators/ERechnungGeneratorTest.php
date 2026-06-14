@@ -306,7 +306,150 @@ class ERechnungGeneratorTest extends BaseTestCase {
 
         $this->assertStringContainsString('PaymentMeans', $xml);
         $this->assertStringContainsString('58', $xml); // SEPA credit transfer code
-        $this->assertStringContainsString('DE89 3704 0044 0532 0130 00', $xml); // IBAN
+        // EN 16931 requires the IBAN without spaces in the XML payload.
+        $this->assertStringContainsString('DE89370400440532013000', $xml); // IBAN (normalized)
+        $this->assertStringNotContainsString('DE89 3704 0044 0532 0130 00', $xml); // no display formatting
         $this->assertStringContainsString('COBADEFFXXX', $xml); // BIC
+    }
+
+    public function testXRechnungCustomizationIdUsesCurrentUrn(): void {
+        $xrechnung = ERechnungDocumentBuilder::xrechnung('XR-2026-002', '04011000-12345-67')
+            ->withIssueDate(new DateTimeImmutable('2026-01-22'))
+            ->withSeller('Verkäufer GmbH', 'DE123456789')
+            ->withSellerAddress('Verkäuferstraße 1', '10115', 'Berlin')
+            ->withSellerEndpoint('seller@example.com', 'EM')
+            ->withBuyer('Öffentliche Verwaltung')
+            ->withBuyerAddress('Amtsweg 1', '80333', 'München')
+            ->withBuyerLeitwegId('04011000-12345-67')
+            ->addLine('Dienstleistung', 1, 1000.00)
+            ->build();
+
+        $xml = $this->generator->generateUbl($xrechnung);
+
+        $this->assertStringContainsString(
+            '<cbc:CustomizationID>urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0</cbc:CustomizationID>',
+            $xml
+        );
+        // The deprecated xoev-de authority must no longer be emitted.
+        $this->assertStringNotContainsString('xoev-de:kosit', $xml);
+    }
+
+    public function testUblNationalTaxNumberIsEmittedAsPartyTaxSchemeFc(): void {
+        $document = ERechnungDocumentBuilder::create('INV-2026-003')
+            ->withIssueDate(new DateTimeImmutable('2026-01-22'))
+            ->withSeller('Muster GmbH', 'DE123456789', '151/815/08150')
+            ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
+            ->withBuyer('Kunde AG')
+            ->withBuyerAddress('Kundenweg 2', '54321', 'München')
+            ->addLine('Produkt', 1, 100.00)
+            ->build();
+
+        $xml = $this->generator->generateUbl($document);
+
+        $dom = new DOMDocument();
+        $dom->loadXML($xml);
+        $xpath = new DOMXPath($dom);
+        $xpath->registerNamespace('cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
+        $xpath->registerNamespace('cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2');
+
+        // BT-32 must be a PartyTaxScheme with TaxScheme/ID = FC.
+        $fcNodes = $xpath->query(
+            "//cac:PartyTaxScheme[cac:TaxScheme/cbc:ID='FC']/cbc:CompanyID"
+        );
+        $this->assertNotNull($fcNodes);
+        $this->assertSame(1, $fcNodes->length);
+        $this->assertSame('151/815/08150', $fcNodes->item(0)->textContent);
+
+        // It must NOT live in PartyLegalEntity/CompanyID anymore.
+        $legalCompanyId = $xpath->query('//cac:PartyLegalEntity/cbc:CompanyID');
+        $this->assertSame(0, $legalCompanyId->length);
+
+        // VAT ID (BT-31) stays as PartyTaxScheme with TaxScheme/ID = VAT.
+        $vatNodes = $xpath->query(
+            "//cac:PartyTaxScheme[cac:TaxScheme/cbc:ID='VAT']/cbc:CompanyID"
+        );
+        $this->assertSame('DE123456789', $vatNodes->item(0)->textContent);
+    }
+
+    public function testCiiNationalTaxNumberIsEmittedWithSchemeFc(): void {
+        $document = ERechnungDocumentBuilder::create('INV-2026-004')
+            ->withIssueDate(new DateTimeImmutable('2026-01-22'))
+            ->withSeller('Muster GmbH', 'DE123456789', '151/815/08150')
+            ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
+            ->withBuyer('Kunde AG')
+            ->withBuyerAddress('Kundenweg 2', '54321', 'München')
+            ->addLine('Produkt', 1, 100.00)
+            ->build();
+
+        $xml = $this->generator->generateCii($document);
+
+        $this->assertStringContainsString('schemeID="FC"', $xml);
+        $this->assertStringContainsString('151/815/08150', $xml);
+    }
+
+    public function testTaxExemptionReasonIsEmitted(): void {
+        $document = ERechnungDocumentBuilder::create('INV-2026-005')
+            ->withIssueDate(new DateTimeImmutable('2026-01-22'))
+            ->withSeller('Klein GmbH', 'DE123456789')
+            ->withSellerAddress('Kleinweg 1', '12345', 'Berlin')
+            ->withBuyer('Kunde AG')
+            ->withBuyerAddress('Kundenweg 2', '54321', 'München')
+            ->addLine('Leistung', 1, 100.00, 0.0, null, \ERechnungToolkit\Enums\TaxCategory::EXEMPT)
+            ->withTaxExemptionReason('Kleinunternehmer gemäß § 19 UStG', 'VATEX-EU-O')
+            ->build();
+
+        $ubl = $this->generator->generateUbl($document);
+        $cii = $this->generator->generateCii($document);
+
+        $this->assertSame(
+            'Kleinunternehmer gemäß § 19 UStG',
+            $this->ublText($ubl, '//cac:TaxCategory/cbc:TaxExemptionReason')
+        );
+        $this->assertSame(
+            'VATEX-EU-O',
+            $this->ublText($ubl, '//cac:TaxCategory/cbc:TaxExemptionReasonCode')
+        );
+        $this->assertStringContainsString('Kleinunternehmer gemäß § 19 UStG', $cii);
+        $this->assertStringContainsString('VATEX-EU-O', $cii);
+    }
+
+    /**
+     * Returns the trimmed text content of the first node matching the XPath
+     * in a UBL Invoice document (cbc/cac namespaces pre-registered).
+     */
+    private function ublText(string $xml, string $query): ?string {
+        $dom = new DOMDocument();
+        $dom->loadXML($xml);
+        $xpath = new DOMXPath($dom);
+        $xpath->registerNamespace('cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
+        $xpath->registerNamespace('cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2');
+        $nodes = $xpath->query($query);
+        return ($nodes !== false && $nodes->length > 0) ? $nodes->item(0)->textContent : null;
+    }
+
+    public function testRemittanceInformationAndAccountHolderAreEmitted(): void {
+        $document = ERechnungDocumentBuilder::create('INV-2026-006')
+            ->withIssueDate(new DateTimeImmutable('2026-01-22'))
+            ->withSeller('Muster GmbH', 'DE123456789')
+            ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
+            ->withSellerBankAccount('DE89370400440532013000', 'COBADEFFXXX', 'Commerzbank', 'Muster GmbH Konto')
+            ->withRemittanceInformation('RF18 1234 5678')
+            ->withBuyer('Kunde AG')
+            ->withBuyerAddress('Kundenweg 2', '54321', 'München')
+            ->addLine('Produkt', 1, 100.00)
+            ->build();
+
+        $ubl = $this->generator->generateUbl($document);
+        $cii = $this->generator->generateCii($document);
+
+        // BT-83 remittance information
+        $this->assertSame('RF18 1234 5678', $this->ublText($ubl, '//cac:PaymentMeans/cbc:PaymentID'));
+        $this->assertStringContainsString('RF18 1234 5678', $cii);
+        $this->assertStringContainsString('PaymentReference', $cii);
+
+        // BT-85 account holder name
+        $this->assertSame('Muster GmbH Konto', $this->ublText($ubl, '//cac:PayeeFinancialAccount/cbc:Name'));
+        $this->assertStringContainsString('Muster GmbH Konto', $cii);
+        $this->assertStringContainsString('AccountName', $cii);
     }
 }

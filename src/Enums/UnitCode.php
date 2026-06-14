@@ -28,6 +28,9 @@ enum UnitCode: string {
     /** Unit (Einheit) */
     case UNIT = 'EA';
 
+    /** Unit / Piece (Stück, UN/ECE Rec 20 code H87) */
+    case UNIT_H87 = 'H87';
+
     /** Set (Satz) */
     case SET = 'SET';
 
@@ -132,6 +135,7 @@ enum UnitCode: string {
         return match ($this) {
             self::PIECE => 'Stück',
             self::UNIT => 'Einheit',
+            self::UNIT_H87 => 'Stück',
             self::SET => 'Satz',
             self::PAIR => 'Paar',
             self::DOZEN => 'Dutzend',
@@ -170,7 +174,7 @@ enum UnitCode: string {
      */
     public function abbreviation(): string {
         return match ($this) {
-            self::PIECE, self::UNIT => 'Stk.',
+            self::PIECE, self::UNIT, self::UNIT_H87 => 'Stk.',
             self::SET => 'Satz',
             self::PAIR => 'Paar',
             self::DOZEN => 'Dtz.',

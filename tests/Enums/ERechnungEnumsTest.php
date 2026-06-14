@@ -124,6 +124,19 @@ class ERechnungEnumsTest extends BaseTestCase {
         $this->assertStringContainsString('xrechnung', strtolower(ERechnungProfile::XRECHNUNG->value));
     }
 
+    public function testXRechnungProfileUsesCurrentKositAuthority(): void {
+        $this->assertEquals(
+            'urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0',
+            ERechnungProfile::XRECHNUNG->value
+        );
+        $this->assertEquals(
+            'urn:cen.eu:en16931:2017#conformant#urn:xeinkauf.de:kosit:extension:xrechnung_3.0',
+            ERechnungProfile::XRECHNUNG_EXTENSION->value
+        );
+        $this->assertStringNotContainsString('xoev-de', ERechnungProfile::XRECHNUNG->value);
+        $this->assertStringNotContainsString('xoev-de', ERechnungProfile::XRECHNUNG_EXTENSION->value);
+    }
+
     public function testERechnungProfileIsXRechnung(): void {
         $this->assertTrue(ERechnungProfile::XRECHNUNG->isXRechnung());
         $this->assertFalse(ERechnungProfile::EN16931->isXRechnung());
@@ -176,6 +189,8 @@ class ERechnungEnumsTest extends BaseTestCase {
     // UnitCode Tests
     public function testUnitCodeValues(): void {
         $this->assertEquals('C62', UnitCode::PIECE->value);
+        $this->assertEquals('H87', UnitCode::UNIT_H87->value);
+        $this->assertEquals(UnitCode::UNIT_H87, UnitCode::fromCode('H87'));
         $this->assertEquals('HUR', UnitCode::HOUR->value);
         $this->assertEquals('DAY', UnitCode::DAY->value);
         $this->assertEquals('KGM', UnitCode::KILOGRAM->value);

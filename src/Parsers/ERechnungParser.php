@@ -783,8 +783,10 @@ final class ERechnungParser {
             return ERechnungProfile::MINIMUM;
         }
 
-        // Check for xoev-de in the URN (XRechnung indicator)
-        if (str_contains($profileId, 'xoev-de:kosit')) {
+        // Check for the KOSIT authority in the URN (XRechnung indicator).
+        // Older XRechnung 2.x files carry "xoev-de:kosit", XRechnung 3.0 files
+        // carry "xeinkauf.de:kosit" - both must be recognised when parsing.
+        if (str_contains($profileId, 'xoev-de:kosit') || str_contains($profileId, 'xeinkauf.de:kosit')) {
             return ERechnungProfile::XRECHNUNG;
         }
 

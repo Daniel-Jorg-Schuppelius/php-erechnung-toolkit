@@ -158,9 +158,14 @@ final class ERechnungGenerator {
                 $document->getPaymentMeansCode()?->value ?? '30'
             );
 
+            // PaymentID / Verwendungszweck (BT-83)
+            if ($document->getRemittanceInformation() !== null) {
+                $this->addUblElement($dom, $paymentMeans, 'cbc:PaymentID', $document->getRemittanceInformation());
+            }
+
             if ($document->getSeller()->hasBankingInfo()) {
                 $payeeAccount = $dom->createElementNS(self::CAC_NS, 'cac:PayeeFinancialAccount');
-                $this->addUblElement($dom, $payeeAccount, 'cbc:ID', $document->getSeller()->getIban());
+                $this->addUblElement($dom, $payeeAccount, 'cbc:ID', $this->normalizeIban($document->getSeller()->getIban()));
                 if ($document->getSeller()->getPaymentAccountName() !== null) {
                     $this->addUblElement($dom, $payeeAccount, 'cbc:Name', $document->getSeller()->getPaymentAccountName());
                 }
@@ -221,6 +226,9 @@ final class ERechnungGenerator {
                 $this->addUblElement($dom, $taxCategory, 'cbc:ID', $subtotal->getCategory()->value);
                 $this->addUblElement($dom, $taxCategory, 'cbc:Percent', $this->formatAmount($subtotal->getPercent()));
 
+                if ($subtotal->getExemptionReasonCode() !== null) {
+                    $this->addUblElement($dom, $taxCategory, 'cbc:TaxExemptionReasonCode', $subtotal->getExemptionReasonCode());
+                }
                 if ($subtotal->getExemptionReason() !== null) {
                     $this->addUblElement($dom, $taxCategory, 'cbc:TaxExemptionReason', $subtotal->getExemptionReason());
                 }
@@ -412,6 +420,12 @@ final class ERechnungGenerator {
 
         // ApplicableHeaderTradeSettlement
         $settlement = $dom->createElementNS(self::RAM_NS, 'ram:ApplicableHeaderTradeSettlement');
+
+        // PaymentReference / Verwendungszweck (BT-83)
+        if ($document->getRemittanceInformation() !== null) {
+            $this->addCiiElement($dom, $settlement, 'ram:PaymentReference', $document->getRemittanceInformation());
+        }
+
         $this->addCiiElement($dom, $settlement, 'ram:InvoiceCurrencyCode', $document->getCurrency()->value);
 
         // PaymentMeans
@@ -426,7 +440,10 @@ final class ERechnungGenerator {
 
             if ($document->getSeller()->hasBankingInfo()) {
                 $payeeAccount = $dom->createElementNS(self::RAM_NS, 'ram:PayeePartyCreditorFinancialAccount');
-                $this->addCiiElement($dom, $payeeAccount, 'ram:IBANID', $document->getSeller()->getIban());
+                $this->addCiiElement($dom, $payeeAccount, 'ram:IBANID', $this->normalizeIban($document->getSeller()->getIban()));
+                if ($document->getSeller()->getPaymentAccountName() !== null) {
+                    $this->addCiiElement($dom, $payeeAccount, 'ram:AccountName', $document->getSeller()->getPaymentAccountName());
+                }
                 $paymentMeans->appendChild($payeeAccount);
 
                 if ($document->getSeller()->getBic() !== null) {
@@ -448,6 +465,9 @@ final class ERechnungGenerator {
                     $this->addCiiElement($dom, $tax, 'ram:ExemptionReason', $subtotal->getExemptionReason());
                 }
                 $this->addCiiElement($dom, $tax, 'ram:BasisAmount', $this->formatAmount($subtotal->getTaxableAmount()));
+                if ($subtotal->getExemptionReasonCode() !== null) {
+                    $this->addCiiElement($dom, $tax, 'ram:ExemptionReasonCode', $subtotal->getExemptionReasonCode());
+                }
                 $this->addCiiElement($dom, $tax, 'ram:CategoryCode', $subtotal->getCategory()->value);
                 $this->addCiiElement($dom, $tax, 'ram:RateApplicablePercent', $this->formatAmount($subtotal->getPercent()));
                 $settlement->appendChild($tax);
@@ -573,6 +593,17 @@ final class ERechnungGenerator {
         return $elem;
     }
 
+    /**
+     * Normalizes an IBAN for XML emission per EN 16931: no spaces, uppercase.
+     *
+     * The Party entity stores the IBAN in human-readable 4-character blocks for
+     * display/HTML output; for the UBL/CII payload it must be emitted without
+     * separators.
+     */
+    private function normalizeIban(?string $iban): string {
+        return strtoupper(str_replace(' ', '', (string) $iban));
+    }
+
     private function addUblParty(DOMDocument $dom, DOMElement $parent, Party $party): void {
         $partyElem = $dom->createElementNS(self::CAC_NS, 'cac:Party');
 
@@ -603,7 +634,7 @@ final class ERechnungGenerator {
             $partyElem->appendChild($postalAddr);
         }
 
-        // PartyTaxScheme
+        // PartyTaxScheme - VAT identifier (BT-31) with TaxScheme/ID = VAT
         if ($party->hasVatId()) {
             $partyTaxScheme = $dom->createElementNS(self::CAC_NS, 'cac:PartyTaxScheme');
             $this->addUblElement($dom, $partyTaxScheme, 'cbc:CompanyID', $party->getVatId());
@@ -613,12 +644,20 @@ final class ERechnungGenerator {
             $partyElem->appendChild($partyTaxScheme);
         }
 
+        // PartyTaxScheme - national tax registration / Steuernummer (BT-32)
+        // with TaxScheme/ID = FC (not VAT).
+        if ($party->getTaxRegistrationId() !== null) {
+            $partyTaxSchemeFc = $dom->createElementNS(self::CAC_NS, 'cac:PartyTaxScheme');
+            $this->addUblElement($dom, $partyTaxSchemeFc, 'cbc:CompanyID', $party->getTaxRegistrationId());
+            $taxSchemeFc = $dom->createElementNS(self::CAC_NS, 'cac:TaxScheme');
+            $this->addUblElement($dom, $taxSchemeFc, 'cbc:ID', 'FC');
+            $partyTaxSchemeFc->appendChild($taxSchemeFc);
+            $partyElem->appendChild($partyTaxSchemeFc);
+        }
+
         // PartyLegalEntity
         $partyLegal = $dom->createElementNS(self::CAC_NS, 'cac:PartyLegalEntity');
         $this->addUblElement($dom, $partyLegal, 'cbc:RegistrationName', $party->getName());
-        if ($party->getTaxRegistrationId() !== null) {
-            $this->addUblElement($dom, $partyLegal, 'cbc:CompanyID', $party->getTaxRegistrationId());
-        }
         $partyElem->appendChild($partyLegal);
 
         // Contact
@@ -654,6 +693,14 @@ final class ERechnungGenerator {
             $taxId = $this->addCiiElement($dom, $taxReg, 'ram:ID', $party->getVatId());
             $taxId->setAttribute('schemeID', 'VA');
             $parent->appendChild($taxReg);
+        }
+
+        // National tax registration / Steuernummer (BT-32) with schemeID = FC.
+        if ($party->getTaxRegistrationId() !== null) {
+            $taxRegFc = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTaxRegistration');
+            $taxIdFc = $this->addCiiElement($dom, $taxRegFc, 'ram:ID', $party->getTaxRegistrationId());
+            $taxIdFc->setAttribute('schemeID', 'FC');
+            $parent->appendChild($taxRegFc);
         }
 
         if ($party->getPostalAddress() !== null) {

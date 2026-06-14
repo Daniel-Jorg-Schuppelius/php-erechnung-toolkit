@@ -66,6 +66,7 @@ final class ERechnungDocumentBuilder {
     private ?string $sellerIban = null;
     private ?string $sellerBic = null;
     private ?string $sellerBankName = null;
+    private ?string $sellerAccountHolderName = null;
     private ?string $sellerEndpointId = null;
     private ?string $sellerEndpointScheme = null;
 
@@ -85,6 +86,9 @@ final class ERechnungDocumentBuilder {
     private ?PaymentMeansCode $paymentMeansCode = null;
     private ?PaymentTerms $paymentTerms = null;
     private ?string $precedingInvoiceReference = null;
+    private ?string $remittanceInformation = null;
+    private ?string $taxExemptionReason = null;
+    private ?string $taxExemptionReasonCode = null;
 
     /** @var InvoiceLine[] */
     private array $lines = [];
@@ -229,10 +233,16 @@ final class ERechnungDocumentBuilder {
         return $this;
     }
 
-    public function withSellerBankAccount(string $iban, ?string $bic = null, ?string $bankName = null): self {
+    public function withSellerBankAccount(
+        string $iban,
+        ?string $bic = null,
+        ?string $bankName = null,
+        ?string $accountHolderName = null
+    ): self {
         $this->sellerIban = $iban;
         $this->sellerBic = $bic;
         $this->sellerBankName = $bankName;
+        $this->sellerAccountHolderName = $accountHolderName;
         return $this;
     }
 
@@ -313,6 +323,31 @@ final class ERechnungDocumentBuilder {
 
     public function withSepaCreditTransfer(): self {
         $this->paymentMeansCode = PaymentMeansCode::SEPA_CREDIT_TRANSFER;
+        return $this;
+    }
+
+    /**
+     * Sets the remittance information / Verwendungszweck (BT-83).
+     *
+     * Emitted as cbc:PaymentID in the UBL PaymentMeans and as
+     * ram:PaymentReference in the CII settlement.
+     */
+    public function withRemittanceInformation(string $reference): self {
+        $this->remittanceInformation = $reference;
+        return $this;
+    }
+
+    /**
+     * Sets the VAT exemption reason (BT-120) and optional reason code (BT-121).
+     *
+     * Applied to exempt / reverse-charge / zero-rated tax categories
+     * (e.g. §19 Kleinunternehmer, category E/AE) and emitted as
+     * cbc:TaxExemptionReason (+ cbc:TaxExemptionReasonCode) in UBL and as
+     * ram:ExemptionReason (+ ram:ExemptionReasonCode) in CII.
+     */
+    public function withTaxExemptionReason(string $reason, ?string $code = null): self {
+        $this->taxExemptionReason = $reason;
+        $this->taxExemptionReasonCode = $code;
         return $this;
     }
 
@@ -484,7 +519,8 @@ final class ERechnungDocumentBuilder {
             contactEmail: $this->sellerContactEmail,
             iban: $this->sellerIban,
             bic: $this->sellerBic,
-            bankName: $this->sellerBankName
+            bankName: $this->sellerBankName,
+            paymentAccountName: $this->sellerAccountHolderName
         );
 
         // Build buyer party
@@ -530,6 +566,17 @@ final class ERechnungDocumentBuilder {
         // Add notes
         foreach ($this->notes as $note) {
             $document->addNote($note);
+        }
+
+        // Remittance information (BT-83)
+        if ($this->remittanceInformation !== null) {
+            $document->setRemittanceInformation($this->remittanceInformation);
+        }
+
+        // VAT exemption reason (BT-120/BT-121) - triggers a recalculation so the
+        // reason is propagated to the exempt tax subtotals.
+        if ($this->taxExemptionReason !== null) {
+            $document->setTaxExemption($this->taxExemptionReason, $this->taxExemptionReasonCode);
         }
 
         return $document;

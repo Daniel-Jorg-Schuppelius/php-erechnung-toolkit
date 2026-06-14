@@ -49,6 +49,10 @@ final class Document extends DocumentAbstract {
     private ?TaxTotal $taxTotal = null;
     private ?MonetaryTotal $monetaryTotal = null;
 
+    private ?string $taxExemptionReason = null;
+    private ?string $taxExemptionReasonCode = null;
+    private ?string $remittanceInformation = null;
+
     public function __construct(
         private string $id,
         private DateTimeImmutable $issueDate,
@@ -208,6 +212,49 @@ final class Document extends DocumentAbstract {
     }
 
     /**
+     * Returns the VAT exemption reason text (BT-120) applied to exempt/
+     * reverse-charge/zero-rated tax categories.
+     */
+    public function getTaxExemptionReason(): ?string {
+        return $this->taxExemptionReason;
+    }
+
+    /**
+     * Returns the VAT exemption reason code (BT-121), e.g. a VATEX-* code.
+     */
+    public function getTaxExemptionReasonCode(): ?string {
+        return $this->taxExemptionReasonCode;
+    }
+
+    /**
+     * Sets the VAT exemption reason (BT-120) and optional code (BT-121).
+     *
+     * The reason is propagated to all non-taxable tax subtotals on the next
+     * recalculation of the totals.
+     */
+    public function setTaxExemption(string $reason, ?string $code = null): self {
+        $this->taxExemptionReason = $reason;
+        $this->taxExemptionReasonCode = $code;
+        $this->recalculateTotals();
+        return $this;
+    }
+
+    /**
+     * Returns the remittance information / Verwendungszweck (BT-83).
+     */
+    public function getRemittanceInformation(): ?string {
+        return $this->remittanceInformation;
+    }
+
+    /**
+     * Sets the remittance information / Verwendungszweck (BT-83).
+     */
+    public function setRemittanceInformation(string $reference): self {
+        $this->remittanceInformation = $reference;
+        return $this;
+    }
+
+    /**
      * Adds an invoice line.
      */
     public function addLine(InvoiceLine $line): self {
@@ -299,11 +346,20 @@ final class Document extends DocumentAbstract {
         foreach ($taxGroups as $group) {
             $taxableAmount = round($group['amount'], 2);
             $taxAmount = round($taxableAmount * $group['percent'] / 100, 2);
+
+            // Apply the document-level exemption reason to non-taxable categories
+            // (e.g. E - exempt §19 Kleinunternehmer, AE - reverse charge).
+            $isExempt = !$group['category']->isTaxable() || $group['percent'] === 0.0;
+            $exemptionReason = $isExempt ? $this->taxExemptionReason : null;
+            $exemptionReasonCode = $isExempt ? $this->taxExemptionReasonCode : null;
+
             $subtotals[] = new TaxSubtotal(
                 $taxableAmount,
                 $taxAmount,
                 $group['category'],
-                $group['percent']
+                $group['percent'],
+                $exemptionReason,
+                $exemptionReasonCode
             );
         }
 

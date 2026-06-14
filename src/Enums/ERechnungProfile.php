@@ -35,11 +35,11 @@ enum ERechnungProfile: string {
     /** ZUGFeRD 2.1/2.2 - EXTENDED profile */
     case EXTENDED = 'urn:factur-x.eu:1p0:extended';
 
-    /** XRechnung profile */
-    case XRECHNUNG = 'urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_3.0';
+    /** XRechnung 3.0 profile (CIUS, compliant) */
+    case XRECHNUNG = 'urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0';
 
-    /** XRechnung Extension */
-    case XRECHNUNG_EXTENSION = 'urn:cen.eu:en16931:2017#conformant#urn:xoev-de:kosit:extension:xrechnung_3.0';
+    /** XRechnung 3.0 Extension (conformant) */
+    case XRECHNUNG_EXTENSION = 'urn:cen.eu:en16931:2017#conformant#urn:xeinkauf.de:kosit:extension:xrechnung_3.0';
 
     /**
      * Returns the profile name.
