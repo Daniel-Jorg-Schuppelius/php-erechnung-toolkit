@@ -16,10 +16,8 @@ use CommonToolkit\Enums\CountryCode;
 
 /**
  * Postal Address for E-Rechnung (EN 16931).
- * 
+ *
  * Represents a postal address for seller, buyer, or delivery party.
- * 
- * @package ERechnungToolkit\Entities
  */
 final class PostalAddress {
     public function __construct(
@@ -89,7 +87,7 @@ final class PostalAddress {
 
     /**
      * Returns the address as formatted lines.
-     * 
+     *
      * @return string[]
      */
     public function getLines(): array {

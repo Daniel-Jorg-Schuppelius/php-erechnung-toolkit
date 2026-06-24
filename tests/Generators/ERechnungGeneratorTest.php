@@ -12,17 +12,13 @@ declare(strict_types=1);
 
 namespace Tests\Generators;
 
-use CommonToolkit\Enums\CurrencyCode;
-use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
-use ERechnungToolkit\Entities\Document;
-use ERechnungToolkit\Entities\Party;
-use ERechnungToolkit\Entities\PostalAddress;
-use ERechnungToolkit\Enums\ERechnungProfile;
-use ERechnungToolkit\Enums\InvoiceType;
-use ERechnungToolkit\Generators\ERechnungGenerator;
 use DateTimeImmutable;
 use DOMDocument;
 use DOMXPath;
+use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
+use ERechnungToolkit\Entities\{Document, Party, PostalAddress};
+use ERechnungToolkit\Enums\ERechnungProfile;
+use ERechnungToolkit\Generators\ERechnungGenerator;
 use Tests\Contracts\BaseTestCase;
 
 /**
@@ -35,7 +31,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
     protected function setUp(): void {
         parent::setUp();
 
-        $this->generator = new ERechnungGenerator();
+        $this->generator = new ERechnungGenerator;
 
         $this->testDocument = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
@@ -51,7 +47,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
             ->build();
     }
 
-    public function testGenerateUblXml(): void {
+    public function test_generate_ubl_xml(): void {
         $xml = $this->generator->generateUbl($this->testDocument);
 
         $this->assertNotEmpty($xml);
@@ -60,19 +56,19 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('INV-2026-001', $xml);
     }
 
-    public function testUblXmlIsWellFormed(): void {
+    public function test_ubl_xml_is_well_formed(): void {
         $xml = $this->generator->generateUbl($this->testDocument);
 
-        $dom = new DOMDocument();
+        $dom = new DOMDocument;
         $result = $dom->loadXML($xml);
 
         $this->assertTrue($result, 'UBL XML should be well-formed');
     }
 
-    public function testUblXmlContainsRequiredElements(): void {
+    public function test_ubl_xml_contains_required_elements(): void {
         $xml = $this->generator->generateUbl($this->testDocument);
 
-        $dom = new DOMDocument();
+        $dom = new DOMDocument;
         $dom->loadXML($xml);
         $xpath = new DOMXPath($dom);
         $xpath->registerNamespace('ubl', 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2');
@@ -89,10 +85,10 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertNotEmpty($xpath->query('/ubl:Invoice/cac:InvoiceLine'));
     }
 
-    public function testUblXmlInvoiceNumber(): void {
+    public function test_ubl_xml_invoice_number(): void {
         $xml = $this->generator->generateUbl($this->testDocument);
 
-        $dom = new DOMDocument();
+        $dom = new DOMDocument;
         $dom->loadXML($xml);
         $xpath = new DOMXPath($dom);
         $xpath->registerNamespace('ubl', 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2');
@@ -103,7 +99,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertEquals('INV-2026-001', $idNodes->item(0)->textContent);
     }
 
-    public function testUblXmlSellerParty(): void {
+    public function test_ubl_xml_seller_party(): void {
         $xml = $this->generator->generateUbl($this->testDocument);
 
         $this->assertStringContainsString('Muster GmbH', $xml);
@@ -113,7 +109,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('Berlin', $xml);
     }
 
-    public function testUblXmlBuyerParty(): void {
+    public function test_ubl_xml_buyer_party(): void {
         $xml = $this->generator->generateUbl($this->testDocument);
 
         $this->assertStringContainsString('Kunde AG', $xml);
@@ -122,7 +118,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('München', $xml);
     }
 
-    public function testUblXmlInvoiceLines(): void {
+    public function test_ubl_xml_invoice_lines(): void {
         $xml = $this->generator->generateUbl($this->testDocument);
 
         $this->assertStringContainsString('Beratungsleistung', $xml);
@@ -131,7 +127,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('499.00', $xml);
     }
 
-    public function testUblXmlTaxTotal(): void {
+    public function test_ubl_xml_tax_total(): void {
         $xml = $this->generator->generateUbl($this->testDocument);
 
         // Tax: 1999 * 0.19 = 379.81
@@ -141,7 +137,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('19.00', $xml); // Tax percent
     }
 
-    public function testUblXmlMonetaryTotal(): void {
+    public function test_ubl_xml_monetary_total(): void {
         $xml = $this->generator->generateUbl($this->testDocument);
 
         $this->assertStringContainsString('LegalMonetaryTotal', $xml);
@@ -151,7 +147,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('PayableAmount', $xml);
     }
 
-    public function testGenerateCiiXml(): void {
+    public function test_generate_cii_xml(): void {
         $xml = $this->generator->generateCii($this->testDocument);
 
         $this->assertNotEmpty($xml);
@@ -160,19 +156,19 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('INV-2026-001', $xml);
     }
 
-    public function testCiiXmlIsWellFormed(): void {
+    public function test_cii_xml_is_well_formed(): void {
         $xml = $this->generator->generateCii($this->testDocument);
 
-        $dom = new DOMDocument();
+        $dom = new DOMDocument;
         $result = $dom->loadXML($xml);
 
         $this->assertTrue($result, 'CII XML should be well-formed');
     }
 
-    public function testCiiXmlContainsRequiredElements(): void {
+    public function test_cii_xml_contains_required_elements(): void {
         $xml = $this->generator->generateCii($this->testDocument);
 
-        $dom = new DOMDocument();
+        $dom = new DOMDocument;
         $dom->loadXML($xml);
         $xpath = new DOMXPath($dom);
         $xpath->registerNamespace('rsm', 'urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100');
@@ -184,21 +180,21 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertNotEmpty($xpath->query('/rsm:CrossIndustryInvoice/rsm:SupplyChainTradeTransaction'));
     }
 
-    public function testCiiXmlSellerParty(): void {
+    public function test_cii_xml_seller_party(): void {
         $xml = $this->generator->generateCii($this->testDocument);
 
         $this->assertStringContainsString('SellerTradeParty', $xml);
         $this->assertStringContainsString('Muster GmbH', $xml);
     }
 
-    public function testCiiXmlBuyerParty(): void {
+    public function test_cii_xml_buyer_party(): void {
         $xml = $this->generator->generateCii($this->testDocument);
 
         $this->assertStringContainsString('BuyerTradeParty', $xml);
         $this->assertStringContainsString('Kunde AG', $xml);
     }
 
-    public function testCreditNoteGeneratesUblCreditNote(): void {
+    public function test_credit_note_generates_ubl_credit_note(): void {
         $creditNote = Document::creditNote(
             id: 'CN-2026-001',
             issueDate: new DateTimeImmutable('2026-01-25'),
@@ -220,7 +216,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('381', $xml); // Credit note type code
     }
 
-    public function testXRechnungDocumentToXml(): void {
+    public function test_x_rechnung_document_to_xml(): void {
         $xrechnung = ERechnungDocumentBuilder::xrechnung('XR-2026-001', '04011000-12345-67')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Verkäufer GmbH', 'DE123456789')
@@ -239,7 +235,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('xrechnung', strtolower($xml));
     }
 
-    public function testZugferdDocumentToXml(): void {
+    public function test_zugferd_document_to_xml(): void {
         $zugferd = ERechnungDocumentBuilder::zugferd('ZF-2026-001', ERechnungProfile::EN16931)
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Lieferant GmbH', 'DE123456789')
@@ -255,7 +251,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('CrossIndustryInvoice', $xml);
     }
 
-    public function testDocumentLevelAllowanceInXml(): void {
+    public function test_document_level_allowance_in_xml(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Muster GmbH', 'DE123456789')
@@ -273,7 +269,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('Treuerabatt', $xml);
     }
 
-    public function testDocumentLevelChargeInXml(): void {
+    public function test_document_level_charge_in_xml(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Muster GmbH', 'DE123456789')
@@ -290,7 +286,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('true', $xml); // ChargeIndicator = true for charge
     }
 
-    public function testPaymentMeansInXml(): void {
+    public function test_payment_means_in_xml(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Muster GmbH', 'DE123456789')
@@ -312,7 +308,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('COBADEFFXXX', $xml); // BIC
     }
 
-    public function testXRechnungCustomizationIdUsesCurrentUrn(): void {
+    public function test_x_rechnung_customization_id_uses_current_urn(): void {
         $xrechnung = ERechnungDocumentBuilder::xrechnung('XR-2026-002', '04011000-12345-67')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Verkäufer GmbH', 'DE123456789')
@@ -334,7 +330,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringNotContainsString('xoev-de:kosit', $xml);
     }
 
-    public function testUblNationalTaxNumberIsEmittedAsPartyTaxSchemeFc(): void {
+    public function test_ubl_national_tax_number_is_emitted_as_party_tax_scheme_fc(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-003')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Muster GmbH', 'DE123456789', '151/815/08150')
@@ -346,7 +342,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
 
         $xml = $this->generator->generateUbl($document);
 
-        $dom = new DOMDocument();
+        $dom = new DOMDocument;
         $dom->loadXML($xml);
         $xpath = new DOMXPath($dom);
         $xpath->registerNamespace('cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
@@ -371,7 +367,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertSame('DE123456789', $vatNodes->item(0)->textContent);
     }
 
-    public function testCiiNationalTaxNumberIsEmittedWithSchemeFc(): void {
+    public function test_cii_national_tax_number_is_emitted_with_scheme_fc(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-004')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Muster GmbH', 'DE123456789', '151/815/08150')
@@ -387,7 +383,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('151/815/08150', $xml);
     }
 
-    public function testTaxExemptionReasonIsEmitted(): void {
+    public function test_tax_exemption_reason_is_emitted(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-005')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Klein GmbH', 'DE123456789')
@@ -418,7 +414,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
      * in a UBL Invoice document (cbc/cac namespaces pre-registered).
      */
     private function ublText(string $xml, string $query): ?string {
-        $dom = new DOMDocument();
+        $dom = new DOMDocument;
         $dom->loadXML($xml);
         $xpath = new DOMXPath($dom);
         $xpath->registerNamespace('cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
@@ -427,7 +423,7 @@ class ERechnungGeneratorTest extends BaseTestCase {
         return ($nodes !== false && $nodes->length > 0) ? $nodes->item(0)->textContent : null;
     }
 
-    public function testRemittanceInformationAndAccountHolderAreEmitted(): void {
+    public function test_remittance_information_and_account_holder_are_emitted(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-006')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Muster GmbH', 'DE123456789')

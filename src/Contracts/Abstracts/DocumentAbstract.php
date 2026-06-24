@@ -13,20 +13,17 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Contracts\Abstracts;
 
 use CommonToolkit\Contracts\Abstracts\XML\DomainXmlDocumentAbstract;
-use ERechnungToolkit\Enums\ERechnungProfile;
-use ERechnungToolkit\Enums\InvoiceType;
+use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType};
 
 /**
  * Abstract base class for all E-Rechnung documents.
- * 
+ *
  * Inherits from DomainXmlDocumentAbstract for XmlDocumentInterface implementation.
- * 
+ *
  * Supported formats:
  * - XRechnung (German standard for public sector)
  * - ZUGFeRD 2.x / Factur-X (Hybrid PDF/A-3 with embedded XML)
  * - EN 16931 compliant invoices
- * 
- * @package ERechnungToolkit\Contracts\Abstracts
  */
 abstract class DocumentAbstract extends DomainXmlDocumentAbstract {
     /**
@@ -56,13 +53,13 @@ abstract class DocumentAbstract extends DomainXmlDocumentAbstract {
 
     /**
      * Validates the document according to the profile.
-     * 
+     *
      * @return string[] Array of validation errors, empty if valid.
      */
     abstract public function validate(): array;
 
     /**
-     * @inheritDoc
+     * {@inheritDoc}
      */
     protected function getDefaultXml(): string {
         return $this->toXml();

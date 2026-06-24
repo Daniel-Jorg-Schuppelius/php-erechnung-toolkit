@@ -12,10 +12,10 @@ declare(strict_types=1);
 
 namespace Tests\Generators;
 
+use DateTimeImmutable;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
 use ERechnungToolkit\Generators\InvoiceHtmlGenerator;
 use PHPUnit\Framework\TestCase;
-use DateTimeImmutable;
 
 /**
  * Tests für InvoiceHtmlGenerator.
@@ -24,10 +24,10 @@ class InvoiceHtmlGeneratorTest extends TestCase {
     private InvoiceHtmlGenerator $generator;
 
     protected function setUp(): void {
-        $this->generator = new InvoiceHtmlGenerator();
+        $this->generator = new InvoiceHtmlGenerator;
     }
 
-    public function testGenerateReturnsValidHtml(): void {
+    public function test_generate_returns_valid_html(): void {
         $invoice = $this->createTestInvoice();
         $html = $this->generator->generate($invoice);
 
@@ -36,7 +36,7 @@ class InvoiceHtmlGeneratorTest extends TestCase {
         $this->assertStringContainsString('</html>', $html);
     }
 
-    public function testGenerateContainsInvoiceData(): void {
+    public function test_generate_contains_invoice_data(): void {
         $invoice = $this->createTestInvoice();
         $html = $this->generator->generate($invoice);
 
@@ -53,7 +53,7 @@ class InvoiceHtmlGeneratorTest extends TestCase {
         $this->assertStringContainsString('Rechnung', $html);
     }
 
-    public function testGenerateContainsInvoiceLines(): void {
+    public function test_generate_contains_invoice_lines(): void {
         $invoice = $this->createTestInvoice();
         $html = $this->generator->generate($invoice);
 
@@ -64,7 +64,7 @@ class InvoiceHtmlGeneratorTest extends TestCase {
         $this->assertStringContainsString('10', $html);
     }
 
-    public function testGenerateContainsTotals(): void {
+    public function test_generate_contains_totals(): void {
         $invoice = $this->createTestInvoice();
         $html = $this->generator->generate($invoice);
 
@@ -75,7 +75,7 @@ class InvoiceHtmlGeneratorTest extends TestCase {
         $this->assertMatchesRegularExpression('/\d+,\d{2}/', $html);
     }
 
-    public function testGenerateContainsZugferdNote(): void {
+    public function test_generate_contains_zugferd_note(): void {
         $invoice = $this->createTestInvoice();
         $html = $this->generator->generate($invoice);
 
@@ -84,7 +84,7 @@ class InvoiceHtmlGeneratorTest extends TestCase {
         $this->assertStringContainsString('EN 16931', $html);
     }
 
-    public function testGenerateWithPrettyPrintFalse(): void {
+    public function test_generate_with_pretty_print_false(): void {
         $invoice = $this->createTestInvoice();
         $html = $this->generator->generate($invoice, false);
 
@@ -93,7 +93,7 @@ class InvoiceHtmlGeneratorTest extends TestCase {
         $this->assertStringContainsString('</html>', $html);
     }
 
-    public function testGenerateBodyContentReturnsPartialHtml(): void {
+    public function test_generate_body_content_returns_partial_html(): void {
         $invoice = $this->createTestInvoice();
         $bodyHtml = $this->generator->generateBodyContent($invoice);
 
@@ -106,7 +106,7 @@ class InvoiceHtmlGeneratorTest extends TestCase {
         $this->assertStringContainsString('Test GmbH', $bodyHtml);
     }
 
-    public function testGenerateContainsStyleElement(): void {
+    public function test_generate_contains_style_element(): void {
         $invoice = $this->createTestInvoice();
         $html = $this->generator->generate($invoice);
 
@@ -115,7 +115,7 @@ class InvoiceHtmlGeneratorTest extends TestCase {
         $this->assertStringContainsString('@page', $html);
     }
 
-    public function testGenerateWithNotes(): void {
+    public function test_generate_with_notes(): void {
         $invoice = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-25'))
             ->withSeller('Test GmbH', 'DE123456789')
@@ -132,7 +132,7 @@ class InvoiceHtmlGeneratorTest extends TestCase {
         $this->assertStringContainsString('Dies ist ein Testhinweis', $html);
     }
 
-    public function testGenerateWithBankingInfo(): void {
+    public function test_generate_with_banking_info(): void {
         $invoice = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-25'))
             ->withSeller('Test GmbH', 'DE123456789')

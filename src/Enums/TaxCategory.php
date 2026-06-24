@@ -14,11 +14,10 @@ namespace ERechnungToolkit\Enums;
 
 /**
  * VAT Category Code according to UNCL5305 (EN 16931).
- * 
+ *
  * Defines the VAT category for invoice lines and totals.
- * 
+ *
  * @see https://docs.peppol.eu/poacc/billing/3.0/codelist/UNCL5305/
- * @package ERechnungToolkit\Enums
  */
 enum TaxCategory: string {
     /** Standard rate (Regelsteuersatz) */

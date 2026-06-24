@@ -39,6 +39,8 @@
   },
   "require-dev": {
     "daniel-jorg-schuppelius/php-pdf-toolkit": "^0.8.0",
+    "laravel/pint": "^1.27",
+    "phpstan/phpstan": "^2.1",
     "phpunit/phpunit": "^11.3"
   },
   "suggest": {
@@ -50,6 +52,14 @@
     "optimize-autoloader": true
   },
   "scripts": {
-    "test": "vendor/bin/phpunit"
+    "test": "vendor/bin/phpunit",
+    "format": "vendor/bin/pint --test",
+    "format:fix": "vendor/bin/pint",
+    "lint": "vendor/bin/phpstan analyse --memory-limit=1G",
+    "qa": [
+      "@format",
+      "@lint",
+      "@test"
+    ]
   }
 }

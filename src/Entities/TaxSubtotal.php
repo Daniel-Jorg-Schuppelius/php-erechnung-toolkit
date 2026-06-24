@@ -16,10 +16,8 @@ use ERechnungToolkit\Enums\TaxCategory;
 
 /**
  * Tax Subtotal for VAT breakdown (EN 16931).
- * 
+ *
  * Represents a single VAT category and rate combination in the tax breakdown.
- * 
- * @package ERechnungToolkit\Entities
  */
 final class TaxSubtotal {
     public function __construct(
@@ -29,8 +27,7 @@ final class TaxSubtotal {
         private float $percent,
         private ?string $exemptionReason = null,
         private ?string $exemptionReasonCode = null
-    ) {
-    }
+    ) {}
 
     public function getTaxableAmount(): float {
         return $this->taxableAmount;

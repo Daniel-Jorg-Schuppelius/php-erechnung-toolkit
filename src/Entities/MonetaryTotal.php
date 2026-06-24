@@ -16,10 +16,8 @@ use CommonToolkit\Enums\CurrencyCode;
 
 /**
  * Monetary Total for E-Rechnung (EN 16931).
- * 
+ *
  * Represents the monetary totals of the invoice.
- * 
- * @package ERechnungToolkit\Entities
  */
 final class MonetaryTotal {
     public function __construct(
@@ -34,7 +32,7 @@ final class MonetaryTotal {
         private float $payableRoundingAmount = 0.0
     ) {
         if (is_string($this->currency)) {
-            $this->currency = CurrencyCode::fromSymbol($this->currency) ?? CurrencyCode::from($this->currency);
+            $this->currency = CurrencyCode::tryFrom($this->currency) ?? CurrencyCode::fromSymbol($this->currency);
         }
     }
 
@@ -114,10 +112,9 @@ final class MonetaryTotal {
 
     /**
      * Calculates totals from invoice lines and document level allowances/charges.
-     * 
+     *
      * @param InvoiceLine[] $lines
      * @param AllowanceCharge[] $allowanceCharges
-     * @param TaxTotal $taxTotal
      */
     public static function calculate(
         array $lines,
@@ -129,21 +126,21 @@ final class MonetaryTotal {
         // Sum of line net amounts
         $lineExtensionAmount = array_reduce(
             $lines,
-            fn(float $sum, InvoiceLine $line) => $sum + $line->getNetAmount(),
+            fn (float $sum, InvoiceLine $line) => $sum + $line->getNetAmount(),
             0.0
         );
 
         // Document level allowances
         $allowanceTotalAmount = array_reduce(
-            array_filter($allowanceCharges, fn(AllowanceCharge $ac) => $ac->isAllowance()),
-            fn(float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
+            array_filter($allowanceCharges, fn (AllowanceCharge $ac) => $ac->isAllowance()),
+            fn (float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
             0.0
         );
 
         // Document level charges
         $chargeTotalAmount = array_reduce(
-            array_filter($allowanceCharges, fn(AllowanceCharge $ac) => $ac->isCharge()),
-            fn(float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
+            array_filter($allowanceCharges, fn (AllowanceCharge $ac) => $ac->isCharge()),
+            fn (float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
             0.0
         );
 

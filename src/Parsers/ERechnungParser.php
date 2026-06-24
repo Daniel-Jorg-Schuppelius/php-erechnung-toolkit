@@ -13,38 +13,23 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Parsers;
 
 use CommonToolkit\Enums\CurrencyCode;
-use ERechnungToolkit\Entities\AllowanceCharge;
-use ERechnungToolkit\Entities\Document;
-use ERechnungToolkit\Entities\InvoiceLine;
-use ERechnungToolkit\Entities\MonetaryTotal;
-use ERechnungToolkit\Entities\Party;
-use ERechnungToolkit\Entities\PaymentTerms;
-use ERechnungToolkit\Entities\PostalAddress;
-use ERechnungToolkit\Entities\TaxSubtotal;
-use ERechnungToolkit\Entities\TaxTotal;
-use ERechnungToolkit\Enums\AllowanceChargeReasonCode;
-use ERechnungToolkit\Enums\ERechnungProfile;
-use ERechnungToolkit\Enums\InvoiceType;
-use ERechnungToolkit\Enums\PaymentMeansCode;
-use ERechnungToolkit\Enums\TaxCategory;
-use ERechnungToolkit\Enums\UnitCode;
-use ERRORToolkit\Traits\ErrorLog;
 use DateTimeImmutable;
 use DOMDocument;
 use DOMElement;
 use DOMXPath;
+use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, MonetaryTotal, Party, PaymentTerms, PostalAddress, TaxSubtotal, TaxTotal};
+use ERechnungToolkit\Enums\{AllowanceChargeReasonCode, ERechnungProfile, InvoiceType, PaymentMeansCode, TaxCategory, UnitCode};
+use ERRORToolkit\Traits\ErrorLog;
 use Exception;
 use InvalidArgumentException;
 use RuntimeException;
 
 /**
  * Parser for E-Rechnung XML documents.
- * 
+ *
  * Supports:
  * - UBL 2.1 (Universal Business Language) - XRechnung
  * - UN/CEFACT CII D16B (Cross Industry Invoice) - ZUGFeRD/Factur-X
- * 
- * @package ERechnungToolkit\Parsers
  */
 final class ERechnungParser {
     use ErrorLog;
@@ -67,7 +52,7 @@ final class ERechnungParser {
      * Parses an E-Rechnung document from XML string.
      */
     public function parse(string $xml): Document {
-        $this->dom = new DOMDocument();
+        $this->dom = new DOMDocument;
 
         // Suppress warnings and handle errors properly
         $internalErrors = libxml_use_internal_errors(true);
@@ -223,19 +208,19 @@ final class ERechnungParser {
 
         // Allowances/Charges
         foreach ($this->xpath->query("{$root}/cac:AllowanceCharge") as $acNode) {
-            $ac = $this->parseUblAllowanceCharge($acNode);
-            if ($ac !== null) {
-                $document->addAllowanceCharge($ac);
+            if (!$acNode instanceof DOMElement) {
+                continue;
             }
+            $document->addAllowanceCharge($this->parseUblAllowanceCharge($acNode));
         }
 
         // Lines
         $lineTag = $this->isCreditNote ? 'cac:CreditNoteLine' : 'cac:InvoiceLine';
         foreach ($this->xpath->query("{$root}/{$lineTag}") as $lineNode) {
-            $line = $this->parseUblLine($lineNode);
-            if ($line !== null) {
-                $document->addLine($line);
+            if (!$lineNode instanceof DOMElement) {
+                continue;
             }
+            $document->addLine($this->parseUblLine($lineNode));
         }
 
         // Tax Total
@@ -245,10 +230,7 @@ final class ERechnungParser {
         }
 
         // Monetary Total
-        $monetaryTotal = $this->parseUblMonetaryTotal("{$root}/cac:LegalMonetaryTotal", $currency);
-        if ($monetaryTotal !== null) {
-            $document->setMonetaryTotal($monetaryTotal);
-        }
+        $document->setMonetaryTotal($this->parseUblMonetaryTotal("{$root}/cac:LegalMonetaryTotal", $currency));
 
         return $document;
     }
@@ -314,10 +296,10 @@ final class ERechnungParser {
 
         // Lines
         foreach ($this->xpath->query("{$root}/rsm:SupplyChainTradeTransaction/ram:IncludedSupplyChainTradeLineItem") as $lineNode) {
-            $line = $this->parseCiiLine($lineNode);
-            if ($line !== null) {
-                $document->addLine($line);
+            if (!$lineNode instanceof DOMElement) {
+                continue;
             }
+            $document->addLine($this->parseCiiLine($lineNode));
         }
 
         // Tax Total
@@ -327,10 +309,7 @@ final class ERechnungParser {
         }
 
         // Monetary Total
-        $monetaryTotal = $this->parseCiiMonetaryTotal("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradeSettlementHeaderMonetarySummation", $currency);
-        if ($monetaryTotal !== null) {
-            $document->setMonetaryTotal($monetaryTotal);
-        }
+        $document->setMonetaryTotal($this->parseCiiMonetaryTotal("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradeSettlementHeaderMonetarySummation", $currency));
 
         return $document;
     }
@@ -409,9 +388,9 @@ final class ERechnungParser {
         );
     }
 
-    private function parseUblAllowanceCharge(DOMElement $node): ?AllowanceCharge {
+    private function parseUblAllowanceCharge(DOMElement $node): AllowanceCharge {
         $chargeIndicator = $this->getNodeValue($node, 'cbc:ChargeIndicator') === 'true';
-        $amount = (float)($this->getNodeValue($node, 'cbc:Amount') ?? '0');
+        $amount = (float) ($this->getNodeValue($node, 'cbc:Amount') ?? '0');
 
         $reasonCode = $this->getNodeValue($node, 'cbc:AllowanceChargeReasonCode');
         $reason = $this->getNodeValue($node, 'cbc:AllowanceChargeReason');
@@ -421,8 +400,8 @@ final class ERechnungParser {
         $taxCategoryCode = null;
         $taxPercent = null;
         $taxCatNodes = $this->xpath->query('cac:TaxCategory', $node);
-        if ($taxCatNodes->length > 0) {
-            $taxCatNode = $taxCatNodes->item(0);
+        $taxCatNode = $taxCatNodes !== false ? $taxCatNodes->item(0) : null;
+        if ($taxCatNode instanceof DOMElement) {
             $taxCategoryCode = $this->getNodeValue($taxCatNode, 'cbc:ID');
             $taxPercent = $this->getNodeValue($taxCatNode, 'cbc:Percent');
         }
@@ -432,14 +411,14 @@ final class ERechnungParser {
             amount: $amount,
             reasonCode: $reasonCode ? AllowanceChargeReasonCode::tryFrom($reasonCode) : null,
             reason: $reason,
-            baseAmount: $baseAmount !== null ? (float)$baseAmount : null,
-            percentage: $percentage !== null ? (float)$percentage : null,
+            baseAmount: $baseAmount !== null ? (float) $baseAmount : null,
+            percentage: $percentage !== null ? (float) $percentage : null,
             taxCategory: $taxCategoryCode ? TaxCategory::tryFrom($taxCategoryCode) : null,
-            taxPercent: $taxPercent !== null ? (float)$taxPercent : null
+            taxPercent: $taxPercent !== null ? (float) $taxPercent : null
         );
     }
 
-    private function parseUblLine(DOMElement $node): ?InvoiceLine {
+    private function parseUblLine(DOMElement $node): InvoiceLine {
         $id = $this->getNodeValue($node, 'cbc:ID') ?? '';
 
         $qtyTag = $this->isCreditNote ? 'cbc:CreditedQuantity' : 'cbc:InvoicedQuantity';
@@ -448,22 +427,22 @@ final class ERechnungParser {
         $unitCode = UnitCode::PIECE;
         if ($qtyNodes->length > 0) {
             $qtyNode = $qtyNodes->item(0);
-            $quantity = (float)$qtyNode->textContent;
+            $quantity = (float) $qtyNode->textContent;
             if ($qtyNode instanceof \DOMElement) {
                 $unitCodeStr = $qtyNode->getAttribute('unitCode');
                 $unitCode = UnitCode::tryFrom($unitCodeStr) ?? UnitCode::PIECE;
             }
         }
 
-        $netAmount = (float)($this->getNodeValue($node, 'cbc:LineExtensionAmount') ?? '0');
+        $netAmount = (float) ($this->getNodeValue($node, 'cbc:LineExtensionAmount') ?? '0');
 
         $itemName = $this->getNodeValue($node, 'cac:Item/cbc:Name') ?? '';
         $itemDescription = $this->getNodeValue($node, 'cac:Item/cbc:Description');
 
-        $unitPrice = (float)($this->getNodeValue($node, 'cac:Price/cbc:PriceAmount') ?? '0');
+        $unitPrice = (float) ($this->getNodeValue($node, 'cac:Price/cbc:PriceAmount') ?? '0');
 
         $taxCategoryCode = $this->getNodeValue($node, 'cac:Item/cac:ClassifiedTaxCategory/cbc:ID');
-        $taxPercent = (float)($this->getNodeValue($node, 'cac:Item/cac:ClassifiedTaxCategory/cbc:Percent') ?? '0');
+        $taxPercent = (float) ($this->getNodeValue($node, 'cac:Item/cac:ClassifiedTaxCategory/cbc:Percent') ?? '0');
 
         $sellersItemId = $this->getNodeValue($node, 'cac:Item/cac:SellersItemIdentification/cbc:ID');
         $buyersItemId = $this->getNodeValue($node, 'cac:Item/cac:BuyersItemIdentification/cbc:ID');
@@ -486,14 +465,17 @@ final class ERechnungParser {
     }
 
     private function parseUblTaxTotal(string $xpath, CurrencyCode $currency): ?TaxTotal {
-        $totalAmount = (float)($this->getUblValue("{$xpath}/cbc:TaxAmount") ?? '0');
+        $totalAmount = (float) ($this->getUblValue("{$xpath}/cbc:TaxAmount") ?? '0');
 
         $subtotals = [];
         foreach ($this->xpath->query("{$xpath}/cac:TaxSubtotal") as $subNode) {
-            $taxableAmount = (float)($this->getNodeValue($subNode, 'cbc:TaxableAmount') ?? '0');
-            $taxAmount = (float)($this->getNodeValue($subNode, 'cbc:TaxAmount') ?? '0');
+            if (!$subNode instanceof DOMElement) {
+                continue;
+            }
+            $taxableAmount = (float) ($this->getNodeValue($subNode, 'cbc:TaxableAmount') ?? '0');
+            $taxAmount = (float) ($this->getNodeValue($subNode, 'cbc:TaxAmount') ?? '0');
             $categoryCode = $this->getNodeValue($subNode, 'cac:TaxCategory/cbc:ID');
-            $percent = (float)($this->getNodeValue($subNode, 'cac:TaxCategory/cbc:Percent') ?? '0');
+            $percent = (float) ($this->getNodeValue($subNode, 'cac:TaxCategory/cbc:Percent') ?? '0');
             $exemptionReason = $this->getNodeValue($subNode, 'cac:TaxCategory/cbc:TaxExemptionReason');
 
             $subtotals[] = new TaxSubtotal(
@@ -512,14 +494,14 @@ final class ERechnungParser {
         return new TaxTotal($totalAmount, $currency, $subtotals);
     }
 
-    private function parseUblMonetaryTotal(string $xpath, CurrencyCode $currency): ?MonetaryTotal {
-        $lineExtension = (float)($this->getUblValue("{$xpath}/cbc:LineExtensionAmount") ?? '0');
-        $taxExclusive = (float)($this->getUblValue("{$xpath}/cbc:TaxExclusiveAmount") ?? '0');
-        $taxInclusive = (float)($this->getUblValue("{$xpath}/cbc:TaxInclusiveAmount") ?? '0');
-        $payable = (float)($this->getUblValue("{$xpath}/cbc:PayableAmount") ?? '0');
-        $allowance = (float)($this->getUblValue("{$xpath}/cbc:AllowanceTotalAmount") ?? '0');
-        $charge = (float)($this->getUblValue("{$xpath}/cbc:ChargeTotalAmount") ?? '0');
-        $prepaid = (float)($this->getUblValue("{$xpath}/cbc:PrepaidAmount") ?? '0');
+    private function parseUblMonetaryTotal(string $xpath, CurrencyCode $currency): MonetaryTotal {
+        $lineExtension = (float) ($this->getUblValue("{$xpath}/cbc:LineExtensionAmount") ?? '0');
+        $taxExclusive = (float) ($this->getUblValue("{$xpath}/cbc:TaxExclusiveAmount") ?? '0');
+        $taxInclusive = (float) ($this->getUblValue("{$xpath}/cbc:TaxInclusiveAmount") ?? '0');
+        $payable = (float) ($this->getUblValue("{$xpath}/cbc:PayableAmount") ?? '0');
+        $allowance = (float) ($this->getUblValue("{$xpath}/cbc:AllowanceTotalAmount") ?? '0');
+        $charge = (float) ($this->getUblValue("{$xpath}/cbc:ChargeTotalAmount") ?? '0');
+        $prepaid = (float) ($this->getUblValue("{$xpath}/cbc:PrepaidAmount") ?? '0');
 
         return new MonetaryTotal(
             lineExtensionAmount: $lineExtension,
@@ -610,7 +592,7 @@ final class ERechnungParser {
         );
     }
 
-    private function parseCiiLine(DOMElement $node): ?InvoiceLine {
+    private function parseCiiLine(DOMElement $node): InvoiceLine {
         $id = '';
         $assocDocNodes = $this->xpath->query('ram:AssociatedDocumentLineDocument/ram:LineID', $node);
         if ($assocDocNodes->length > 0) {
@@ -634,7 +616,7 @@ final class ERechnungParser {
         $qtyNodes = $this->xpath->query('ram:SpecifiedLineTradeDelivery/ram:BilledQuantity', $node);
         if ($qtyNodes->length > 0) {
             $qtyNode = $qtyNodes->item(0);
-            $quantity = (float)$qtyNode->textContent;
+            $quantity = (float) $qtyNode->textContent;
             if ($qtyNode instanceof \DOMElement) {
                 $unitCodeStr = $qtyNode->getAttribute('unitCode');
                 $unitCode = UnitCode::tryFrom($unitCodeStr) ?? UnitCode::PIECE;
@@ -644,13 +626,13 @@ final class ERechnungParser {
         $unitPrice = 0.0;
         $priceNodes = $this->xpath->query('ram:SpecifiedLineTradeAgreement/ram:NetPriceProductTradePrice/ram:ChargeAmount', $node);
         if ($priceNodes->length > 0) {
-            $unitPrice = (float)$priceNodes->item(0)->textContent;
+            $unitPrice = (float) $priceNodes->item(0)->textContent;
         }
 
         $netAmount = 0.0;
         $netNodes = $this->xpath->query('ram:SpecifiedLineTradeSettlement/ram:SpecifiedTradeSettlementLineMonetarySummation/ram:LineTotalAmount', $node);
         if ($netNodes->length > 0) {
-            $netAmount = (float)$netNodes->item(0)->textContent;
+            $netAmount = (float) $netNodes->item(0)->textContent;
         }
 
         $taxCategoryCode = 'S';
@@ -664,7 +646,7 @@ final class ERechnungParser {
             }
             $rateNodes = $this->xpath->query('ram:RateApplicablePercent', $taxNode);
             if ($rateNodes->length > 0) {
-                $taxPercent = (float)$rateNodes->item(0)->textContent;
+                $taxPercent = (float) $rateNodes->item(0)->textContent;
             }
         }
 
@@ -692,10 +674,13 @@ final class ERechnungParser {
         $subtotals = [];
 
         foreach ($this->xpath->query("{$xpath}/ram:ApplicableTradeTax") as $taxNode) {
-            $taxAmount = (float)($this->getNodeValue($taxNode, 'ram:CalculatedAmount') ?? '0');
-            $taxableAmount = (float)($this->getNodeValue($taxNode, 'ram:BasisAmount') ?? '0');
+            if (!$taxNode instanceof DOMElement) {
+                continue;
+            }
+            $taxAmount = (float) ($this->getNodeValue($taxNode, 'ram:CalculatedAmount') ?? '0');
+            $taxableAmount = (float) ($this->getNodeValue($taxNode, 'ram:BasisAmount') ?? '0');
             $categoryCode = $this->getNodeValue($taxNode, 'ram:CategoryCode');
-            $percent = (float)($this->getNodeValue($taxNode, 'ram:RateApplicablePercent') ?? '0');
+            $percent = (float) ($this->getNodeValue($taxNode, 'ram:RateApplicablePercent') ?? '0');
             $exemptionReason = $this->getNodeValue($taxNode, 'ram:ExemptionReason');
 
             $subtotals[] = new TaxSubtotal(
@@ -714,14 +699,14 @@ final class ERechnungParser {
         return TaxTotal::fromSubtotals($subtotals, $currency);
     }
 
-    private function parseCiiMonetaryTotal(string $xpath, CurrencyCode $currency): ?MonetaryTotal {
-        $lineTotal = (float)($this->getCiiValue("{$xpath}/ram:LineTotalAmount") ?? '0');
-        $taxBasis = (float)($this->getCiiValue("{$xpath}/ram:TaxBasisTotalAmount") ?? '0');
-        $grandTotal = (float)($this->getCiiValue("{$xpath}/ram:GrandTotalAmount") ?? '0');
-        $duePayable = (float)($this->getCiiValue("{$xpath}/ram:DuePayableAmount") ?? '0');
-        $allowance = (float)($this->getCiiValue("{$xpath}/ram:AllowanceTotalAmount") ?? '0');
-        $charge = (float)($this->getCiiValue("{$xpath}/ram:ChargeTotalAmount") ?? '0');
-        $prepaid = (float)($this->getCiiValue("{$xpath}/ram:TotalPrepaidAmount") ?? '0');
+    private function parseCiiMonetaryTotal(string $xpath, CurrencyCode $currency): MonetaryTotal {
+        $lineTotal = (float) ($this->getCiiValue("{$xpath}/ram:LineTotalAmount") ?? '0');
+        $taxBasis = (float) ($this->getCiiValue("{$xpath}/ram:TaxBasisTotalAmount") ?? '0');
+        $grandTotal = (float) ($this->getCiiValue("{$xpath}/ram:GrandTotalAmount") ?? '0');
+        $duePayable = (float) ($this->getCiiValue("{$xpath}/ram:DuePayableAmount") ?? '0');
+        $allowance = (float) ($this->getCiiValue("{$xpath}/ram:AllowanceTotalAmount") ?? '0');
+        $charge = (float) ($this->getCiiValue("{$xpath}/ram:ChargeTotalAmount") ?? '0');
+        $prepaid = (float) ($this->getCiiValue("{$xpath}/ram:TotalPrepaidAmount") ?? '0');
 
         return new MonetaryTotal(
             lineExtensionAmount: $lineTotal,

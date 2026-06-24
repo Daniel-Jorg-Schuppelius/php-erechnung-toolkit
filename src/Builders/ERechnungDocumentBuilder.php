@@ -12,28 +12,17 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Builders;
 
-use CommonToolkit\Enums\CountryCode;
-use CommonToolkit\Enums\CurrencyCode;
-use ERechnungToolkit\Entities\AllowanceCharge;
-use ERechnungToolkit\Entities\Document;
-use ERechnungToolkit\Entities\InvoiceLine;
-use ERechnungToolkit\Entities\Party;
-use ERechnungToolkit\Entities\PaymentTerms;
-use ERechnungToolkit\Entities\PostalAddress;
-use ERechnungToolkit\Enums\ERechnungProfile;
-use ERechnungToolkit\Enums\InvoiceType;
-use ERechnungToolkit\Enums\NoteSubjectCode;
-use ERechnungToolkit\Enums\PaymentMeansCode;
-use ERechnungToolkit\Enums\TaxCategory;
-use ERechnungToolkit\Enums\UnitCode;
-use ERRORToolkit\Traits\ErrorLog;
+use CommonToolkit\Enums\{CountryCode, CurrencyCode};
 use DateTimeImmutable;
+use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party, PaymentTerms, PostalAddress};
+use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, NoteSubjectCode, PaymentMeansCode, TaxCategory, UnitCode};
+use ERRORToolkit\Traits\ErrorLog;
 
 /**
  * Fluent builder for E-Rechnung documents.
- * 
+ *
  * Provides a convenient API for creating XRechnung/ZUGFeRD invoices.
- * 
+ *
  * Example:
  * ```php
  * $invoice = ERechnungDocumentBuilder::create('INV-2026-001')
@@ -45,8 +34,6 @@ use DateTimeImmutable;
  *     ->addLine('Beratungsleistung', 10, 150.00, 19.0)
  *     ->build();
  * ```
- * 
- * @package ERechnungToolkit\Builders
  */
 final class ERechnungDocumentBuilder {
     use ErrorLog;
@@ -103,7 +90,7 @@ final class ERechnungDocumentBuilder {
 
     private function __construct(string $id) {
         $this->id = $id;
-        $this->issueDate = new DateTimeImmutable();
+        $this->issueDate = new DateTimeImmutable;
     }
 
     /**
@@ -368,7 +355,7 @@ final class ERechnungDocumentBuilder {
     ): self {
         $this->lineCounter++;
         $line = new InvoiceLine(
-            id: (string)$this->lineCounter,
+            id: (string) $this->lineCounter,
             quantity: $quantity,
             unitCode: $unitCode ?? UnitCode::PIECE,
             netAmount: round($quantity * $unitPrice, 2),
@@ -439,7 +426,7 @@ final class ERechnungDocumentBuilder {
         // Calculate base amount from lines
         $baseAmount = array_reduce(
             $this->lines,
-            fn(float $sum, InvoiceLine $line) => $sum + $line->getNetAmount(),
+            fn (float $sum, InvoiceLine $line) => $sum + $line->getNetAmount(),
             0.0
         );
         $this->allowanceCharges[] = AllowanceCharge::percentageDiscount(
@@ -473,7 +460,7 @@ final class ERechnungDocumentBuilder {
 
     /**
      * Adds a note to the invoice.
-     * 
+     *
      * @param string $note The note text
      * @param NoteSubjectCode|null $subjectCode Optional subject code (UNTDID 4451) for categorization
      */
@@ -490,7 +477,7 @@ final class ERechnungDocumentBuilder {
 
     /**
      * Builds the E-Rechnung document.
-     * 
+     *
      * @throws \InvalidArgumentException If required fields are missing.
      */
     public function build(): Document {

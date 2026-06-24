@@ -14,10 +14,8 @@ namespace ERechnungToolkit\Enums;
 
 /**
  * Allowance/Charge Reason Code according to UNTDID 5189/7161 (EN 16931).
- * 
+ *
  * Defines the reason for document level allowances and charges.
- * 
- * @package ERechnungToolkit\Enums
  */
 enum AllowanceChargeReasonCode: string {
     // Allowance codes (UNTDID 5189)
@@ -77,7 +75,7 @@ enum AllowanceChargeReasonCode: string {
 
     /** Yearly turnover (Jahresumsatzrabatt) */
     case YEARLY_TURNOVER = '105';
-    
+
     // Charge codes (UNTDID 7161)
     /** Freight charge (Frachtkosten) */
     case FREIGHT = 'FC';

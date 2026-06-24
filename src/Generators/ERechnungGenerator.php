@@ -12,23 +12,17 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Generators;
 
-use ERechnungToolkit\Entities\AllowanceCharge;
-use ERechnungToolkit\Entities\Document;
-use ERechnungToolkit\Entities\InvoiceLine;
-use ERechnungToolkit\Entities\Party;
-use ERechnungToolkit\Entities\PostalAddress;
-use ERRORToolkit\Traits\ErrorLog;
 use DOMDocument;
 use DOMElement;
+use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party, PostalAddress};
+use ERRORToolkit\Traits\ErrorLog;
 
 /**
  * Generator for E-Rechnung XML output.
- * 
+ *
  * Supports:
  * - UBL 2.1 (Universal Business Language) for XRechnung
  * - UN/CEFACT CII D16B (Cross Industry Invoice) for ZUGFeRD/Factur-X
- * 
- * @package ERechnungToolkit\Generators
  */
 final class ERechnungGenerator {
     use ErrorLog;
@@ -149,13 +143,14 @@ final class ERechnungGenerator {
         }
 
         // PaymentMeans
-        if ($document->getPaymentMeansCode() !== null || $document->getSeller()->hasBankingInfo()) {
+        $paymentMeansCode = $document->getPaymentMeansCode();
+        if ($paymentMeansCode !== null || $document->getSeller()->hasBankingInfo()) {
             $paymentMeans = $dom->createElementNS(self::CAC_NS, 'cac:PaymentMeans');
             $this->addUblElement(
                 $dom,
                 $paymentMeans,
                 'cbc:PaymentMeansCode',
-                $document->getPaymentMeansCode()?->value ?? '30'
+                $paymentMeansCode !== null ? $paymentMeansCode->value : '30'
             );
 
             // PaymentID / Verwendungszweck (BT-83)
@@ -429,13 +424,14 @@ final class ERechnungGenerator {
         $this->addCiiElement($dom, $settlement, 'ram:InvoiceCurrencyCode', $document->getCurrency()->value);
 
         // PaymentMeans
-        if ($document->getPaymentMeansCode() !== null || $document->getSeller()->hasBankingInfo()) {
+        $paymentMeansCode = $document->getPaymentMeansCode();
+        if ($paymentMeansCode !== null || $document->getSeller()->hasBankingInfo()) {
             $paymentMeans = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTradeSettlementPaymentMeans');
             $this->addCiiElement(
                 $dom,
                 $paymentMeans,
                 'ram:TypeCode',
-                $document->getPaymentMeansCode()?->value ?? '30'
+                $paymentMeansCode !== null ? $paymentMeansCode->value : '30'
             );
 
             if ($document->getSeller()->hasBankingInfo()) {

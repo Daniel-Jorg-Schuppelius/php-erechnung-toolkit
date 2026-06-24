@@ -12,14 +12,10 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Entities;
 
-use CommonToolkit\Helper\Data\BankHelper;
-
 /**
  * Party for E-Rechnung (EN 16931).
- * 
+ *
  * Represents seller, buyer, payee, or other parties in the invoice.
- * 
- * @package ERechnungToolkit\Entities
  */
 final class Party {
     public function __construct(
@@ -182,7 +178,8 @@ final class Party {
      */
     public function withBankingInfo(string $iban, ?string $bic = null, ?string $bankName = null): self {
         $clone = clone $this;
-        $clone->iban = BankHelper::formatIBAN($iban);
+        $cleanIban = strtoupper(str_replace(' ', '', $iban));
+        $clone->iban = implode(' ', str_split($cleanIban, 4));
         $clone->bic = $bic !== null ? strtoupper(str_replace(' ', '', $bic)) : null;
         $clone->bankName = $bankName;
         return $clone;

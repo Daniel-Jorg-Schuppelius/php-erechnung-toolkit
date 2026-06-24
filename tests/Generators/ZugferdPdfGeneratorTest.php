@@ -12,9 +12,9 @@ declare(strict_types=1);
 
 namespace Tests\Generators;
 
+use DateTimeImmutable;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
 use ERechnungToolkit\Generators\ZugferdPdfGenerator;
-use DateTimeImmutable;
 use Tests\Contracts\BaseTestCase;
 
 /**
@@ -25,15 +25,15 @@ class ZugferdPdfGeneratorTest extends BaseTestCase {
 
     protected function setUp(): void {
         parent::setUp();
-        $this->generator = new ZugferdPdfGenerator();
+        $this->generator = new ZugferdPdfGenerator;
     }
 
-    public function testIsAvailableReturnsBool(): void {
+    public function test_is_available_returns_bool(): void {
         $result = $this->generator->isAvailable();
         $this->assertIsBool($result);
     }
 
-    public function testGenerateWithPdfToolkit(): void {
+    public function test_generate_with_pdf_toolkit(): void {
         if (!$this->generator->isAvailable()) {
             $this->markTestSkipped('PDF Toolkit is not installed');
         }
@@ -57,7 +57,7 @@ class ZugferdPdfGeneratorTest extends BaseTestCase {
         $this->assertGreaterThan(1000, strlen($pdfBytes));
     }
 
-    public function testGenerateToFile(): void {
+    public function test_generate_to_file(): void {
         if (!$this->generator->isAvailable()) {
             $this->markTestSkipped('PDF Toolkit is not installed');
         }
@@ -90,7 +90,7 @@ class ZugferdPdfGeneratorTest extends BaseTestCase {
         }
     }
 
-    public function testGenerateWithCustomHtml(): void {
+    public function test_generate_with_custom_html(): void {
         if (!$this->generator->isAvailable()) {
             $this->markTestSkipped('PDF Toolkit is not installed');
         }
@@ -122,15 +122,15 @@ HTML;
         $this->assertStringStartsWith('%PDF-', $pdfBytes);
     }
 
-    public function testGenerateReturnsNullWithoutPdfToolkit(): void {
+    public function test_generate_returns_null_without_pdf_toolkit(): void {
         // Dieser Test prüft das Verhalten wenn PDF-Toolkit nicht verfügbar ist
 
-        $generator = new ZugferdPdfGenerator();
+        $generator = new ZugferdPdfGenerator;
 
         // Wenn PDF-Toolkit nicht verfügbar, erwarten wir null-Rückgabe
         if (!$generator->isAvailable()) {
             $invoice = ERechnungDocumentBuilder::create('TEST-001')
-                ->withIssueDate(new DateTimeImmutable())
+                ->withIssueDate(new DateTimeImmutable)
                 ->withSeller('Test', 'DE123')
                 ->withSellerAddress('Test', '12345', 'Berlin')
                 ->withBuyer('Buyer')

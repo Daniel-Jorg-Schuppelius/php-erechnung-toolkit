@@ -14,11 +14,10 @@ namespace ERechnungToolkit\Enums;
 
 /**
  * Payment Means Code according to UNTDID 4461 (EN 16931).
- * 
+ *
  * Defines the payment method for the invoice.
- * 
+ *
  * @see https://docs.peppol.eu/poacc/billing/3.0/codelist/UNCL4461/
- * @package ERechnungToolkit\Enums
  */
 enum PaymentMeansCode: string {
     /** Instrument not defined */

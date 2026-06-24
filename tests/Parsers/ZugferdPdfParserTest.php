@@ -23,15 +23,15 @@ class ZugferdPdfParserTest extends BaseTestCase {
 
     protected function setUp(): void {
         parent::setUp();
-        $this->parser = new ZugferdPdfParser();
+        $this->parser = new ZugferdPdfParser;
     }
 
-    public function testIsAvailableReturnsBool(): void {
+    public function test_is_available_returns_bool(): void {
         $result = $this->parser->isAvailable();
         $this->assertIsBool($result);
     }
 
-    public function testParseFileWithPdfToolkit(): void {
+    public function test_parse_file_with_pdf_toolkit(): void {
         if (!$this->parser->isAvailable()) {
             $this->markTestSkipped('PDF Toolkit is not installed or pdfdetach/pdftk not available');
         }
@@ -48,7 +48,7 @@ class ZugferdPdfParserTest extends BaseTestCase {
         }
     }
 
-    public function testIsZugferdPdfWithNonZugferdPdf(): void {
+    public function test_is_zugferd_pdf_with_non_zugferd_pdf(): void {
         if (!$this->parser->isAvailable()) {
             $this->markTestSkipped('PDF Toolkit is not installed');
         }
@@ -63,7 +63,7 @@ class ZugferdPdfParserTest extends BaseTestCase {
         }
     }
 
-    public function testExtractXmlReturnsNullForNonZugferdPdf(): void {
+    public function test_extract_xml_returns_null_for_non_zugferd_pdf(): void {
         if (!$this->parser->isAvailable()) {
             $this->markTestSkipped('PDF Toolkit is not installed');
         }
@@ -78,7 +78,7 @@ class ZugferdPdfParserTest extends BaseTestCase {
         }
     }
 
-    public function testListAttachmentsReturnsArray(): void {
+    public function test_list_attachments_returns_array(): void {
         if (!$this->parser->isAvailable()) {
             $this->markTestSkipped('PDF Toolkit is not installed');
         }
@@ -94,7 +94,7 @@ class ZugferdPdfParserTest extends BaseTestCase {
         }
     }
 
-    public function testParseXmlWithValidCii(): void {
+    public function test_parse_xml_with_valid_cii(): void {
         // Test mit gültigem CII XML (ohne PDF)
         $ciiXml = $this->getSampleCiiXml();
 
@@ -104,7 +104,7 @@ class ZugferdPdfParserTest extends BaseTestCase {
         $this->assertEquals('ZF-TEST-001', $document->getId());
     }
 
-    public function testParseXmlWithInvalidXml(): void {
+    public function test_parse_xml_with_invalid_xml(): void {
         $document = $this->parser->parseXml('invalid xml content');
         $this->assertNull($document);
     }
@@ -132,7 +132,7 @@ class ZugferdPdfParserTest extends BaseTestCase {
      * Returns a sample CII XML for testing.
      */
     private function getSampleCiiXml(): string {
-        return <<<XML
+        return <<<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <rsm:CrossIndustryInvoice xmlns:rsm="urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100"
     xmlns:ram="urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100"

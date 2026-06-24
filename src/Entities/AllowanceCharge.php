@@ -12,15 +12,12 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Entities;
 
-use ERechnungToolkit\Enums\AllowanceChargeReasonCode;
-use ERechnungToolkit\Enums\TaxCategory;
+use ERechnungToolkit\Enums\{AllowanceChargeReasonCode, TaxCategory};
 
 /**
  * Allowance/Charge for E-Rechnung (EN 16931).
- * 
+ *
  * Represents document or line level allowances (discounts) and charges (surcharges).
- * 
- * @package ERechnungToolkit\Entities
  */
 final class AllowanceCharge {
     public function __construct(
@@ -32,8 +29,7 @@ final class AllowanceCharge {
         private ?float $percentage = null,
         private ?TaxCategory $taxCategory = null,
         private ?float $taxPercent = null
-    ) {
-    }
+    ) {}
 
     /**
      * Returns true if this is a charge (Zuschlag), false if allowance (Rabatt).

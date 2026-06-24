@@ -13,19 +13,16 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Entities;
 
 use CommonToolkit\Enums\CurrencyCode;
-use ERechnungToolkit\Contracts\Abstracts\DocumentAbstract;
-use ERechnungToolkit\Enums\ERechnungProfile;
-use ERechnungToolkit\Enums\InvoiceType;
-use ERechnungToolkit\Enums\NoteSubjectCode;
-use ERechnungToolkit\Enums\PaymentMeansCode;
-use ERechnungToolkit\Generators\ERechnungGenerator;
 use DateTimeImmutable;
+use ERechnungToolkit\Contracts\Abstracts\DocumentAbstract;
+use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, NoteSubjectCode, PaymentMeansCode};
+use ERechnungToolkit\Generators\ERechnungGenerator;
 
 /**
  * E-Rechnung Document (EN 16931 / XRechnung / ZUGFeRD).
- * 
+ *
  * Represents a complete electronic invoice according to European standards.
- * 
+ *
  * Structure:
  * - Invoice metadata (ID, dates, type, profile)
  * - Seller and Buyer parties
@@ -33,8 +30,6 @@ use DateTimeImmutable;
  * - Tax breakdown
  * - Monetary totals
  * - Payment information
- * 
- * @package ERechnungToolkit\Entities
  */
 final class Document extends DocumentAbstract {
     /** @var InvoiceLine[] */
@@ -73,8 +68,7 @@ final class Document extends DocumentAbstract {
         private ?Party $deliveryParty = null,
         private ?DateTimeImmutable $deliveryDate = null,
         private ?string $precedingInvoiceReference = null
-    ) {
-    }
+    ) {}
 
     public function getId(): string {
         return $this->id;
@@ -168,7 +162,7 @@ final class Document extends DocumentAbstract {
 
     /**
      * Returns all notes as formatted strings (with #XXX# prefix if subject code was set).
-     * 
+     *
      * @return string[]
      */
     public function getNotes(): array {
@@ -177,19 +171,19 @@ final class Document extends DocumentAbstract {
 
     /**
      * Returns all notes as structured array with parsed subject codes.
-     * 
+     *
      * @return array<int, array{code: NoteSubjectCode|null, text: string}>
      */
     public function getNotesStructured(): array {
         return array_map(
-            fn(string $note) => NoteSubjectCode::parseNote($note),
+            fn (string $note) => NoteSubjectCode::parseNote($note),
             $this->notes
         );
     }
 
     /**
      * Returns notes filtered by subject code.
-     * 
+     *
      * @return string[] Note texts (without prefix)
      */
     public function getNotesBySubjectCode(NoteSubjectCode $subjectCode): array {
@@ -274,7 +268,7 @@ final class Document extends DocumentAbstract {
 
     /**
      * Adds a note to the invoice.
-     * 
+     *
      * @param string $note The note text
      * @param NoteSubjectCode|null $subjectCode Optional subject code (UNTDID 4451) for categorization
      */
@@ -412,7 +406,7 @@ final class Document extends DocumentAbstract {
 
     /**
      * Validates the document according to the profile.
-     * 
+     *
      * @return string[]
      */
     public function validate(): array {
@@ -463,7 +457,7 @@ final class Document extends DocumentAbstract {
                 $errors[] = 'BT-34: Seller electronic address is mandatory for XRechnung';
             }
 
-            // Buyer must have endpoint for XRechnung  
+            // Buyer must have endpoint for XRechnung
             if (!$this->buyer->hasEndpoint()) {
                 $errors[] = 'BT-49: Buyer electronic address is mandatory for XRechnung';
             }
@@ -493,14 +487,14 @@ final class Document extends DocumentAbstract {
      * Generates UBL XML output.
      */
     public function toUblXml(): string {
-        return (new ERechnungGenerator())->generateUbl($this);
+        return (new ERechnungGenerator)->generateUbl($this);
     }
 
     /**
      * Generates UN/CEFACT CII XML output.
      */
     public function toCiiXml(): string {
-        return (new ERechnungGenerator())->generateCii($this);
+        return (new ERechnungGenerator)->generateCii($this);
     }
 
     /**

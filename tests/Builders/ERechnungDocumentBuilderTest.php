@@ -12,21 +12,17 @@ declare(strict_types=1);
 
 namespace Tests\Builders;
 
-use CommonToolkit\Enums\CountryCode;
-use CommonToolkit\Enums\CurrencyCode;
-use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
-use ERechnungToolkit\Enums\ERechnungProfile;
-use ERechnungToolkit\Enums\InvoiceType;
-use ERechnungToolkit\Enums\PaymentMeansCode;
-use ERechnungToolkit\Enums\UnitCode;
+use CommonToolkit\Enums\{CountryCode, CurrencyCode};
 use DateTimeImmutable;
+use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
+use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, PaymentMeansCode, UnitCode};
 use Tests\Contracts\BaseTestCase;
 
 /**
  * Tests for E-Rechnung Document Builder.
  */
 class ERechnungDocumentBuilderTest extends BaseTestCase {
-    public function testCreateBasicInvoice(): void {
+    public function test_create_basic_invoice(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Muster GmbH', 'DE123456789')
@@ -43,7 +39,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertEquals(1500.00, $document->getNetAmount());
     }
 
-    public function testCreateXRechnungInvoice(): void {
+    public function test_create_x_rechnung_invoice(): void {
         $leitwegId = '04011000-12345-67';
 
         $document = ERechnungDocumentBuilder::xrechnung('XR-2026-001', $leitwegId)
@@ -62,7 +58,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertTrue($document->getBuyer()->hasEndpoint());
     }
 
-    public function testCreateZugferdInvoice(): void {
+    public function test_create_zugferd_invoice(): void {
         $document = ERechnungDocumentBuilder::zugferd('ZF-2026-001', ERechnungProfile::EN16931)
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Lieferant GmbH', 'DE123456789')
@@ -78,7 +74,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertEquals(1000.00, $document->getNetAmount()); // 500 + 500
     }
 
-    public function testCreateCreditNote(): void {
+    public function test_create_credit_note(): void {
         $document = ERechnungDocumentBuilder::creditNote('CN-2026-001', 'INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-25'))
             ->withSeller('Verkäufer GmbH', 'DE123456789')
@@ -92,7 +88,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertEquals('INV-2026-001', $document->getPrecedingInvoiceReference());
     }
 
-    public function testBuilderWithSellerContact(): void {
+    public function test_builder_with_seller_contact(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withSeller('Muster GmbH', 'DE123456789')
             ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
@@ -108,7 +104,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertTrue($document->getSeller()->hasContactInfo());
     }
 
-    public function testBuilderWithBankAccount(): void {
+    public function test_builder_with_bank_account(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withSeller('Muster GmbH', 'DE123456789')
             ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
@@ -124,7 +120,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertTrue($document->getSeller()->hasBankingInfo());
     }
 
-    public function testBuilderWithPaymentTerms(): void {
+    public function test_builder_with_payment_terms(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withSeller('Muster GmbH', 'DE123456789')
             ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
@@ -141,7 +137,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertEquals(PaymentMeansCode::SEPA_CREDIT_TRANSFER, $document->getPaymentMeansCode());
     }
 
-    public function testBuilderWithDiscount(): void {
+    public function test_builder_with_discount(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withSeller('Muster GmbH', 'DE123456789')
             ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
@@ -156,7 +152,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertEquals(900.00, $document->getNetAmount());
     }
 
-    public function testBuilderWithShipping(): void {
+    public function test_builder_with_shipping(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withSeller('Muster GmbH', 'DE123456789')
             ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
@@ -171,7 +167,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertEquals(105.95, $document->getNetAmount());
     }
 
-    public function testBuilderWithServiceLine(): void {
+    public function test_builder_with_service_line(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withSeller('Muster GmbH', 'DE123456789')
             ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
@@ -187,7 +183,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertEquals(1200.00, $lines[0]->getNetAmount());
     }
 
-    public function testBuilderWithLumpSumLine(): void {
+    public function test_builder_with_lump_sum_line(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withSeller('Muster GmbH', 'DE123456789')
             ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
@@ -203,7 +199,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertEquals(5000.00, $lines[0]->getNetAmount());
     }
 
-    public function testBuilderWithNotes(): void {
+    public function test_builder_with_notes(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withSeller('Muster GmbH', 'DE123456789')
             ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
@@ -217,7 +213,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertCount(2, $document->getNotes());
     }
 
-    public function testBuilderWithReferences(): void {
+    public function test_builder_with_references(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withSeller('Muster GmbH', 'DE123456789')
             ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
@@ -234,7 +230,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertEquals('PROJECT-001', $document->getProjectReference());
     }
 
-    public function testBuilderWithDates(): void {
+    public function test_builder_with_dates(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withDueDate(new DateTimeImmutable('2026-02-21'))
@@ -253,7 +249,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertEquals('2026-01-22', $document->getTaxPointDate()->format('Y-m-d'));
     }
 
-    public function testBuilderThrowsExceptionWithoutSeller(): void {
+    public function test_builder_throws_exception_without_seller(): void {
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Seller name is required');
 
@@ -262,7 +258,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
             ->build();
     }
 
-    public function testBuilderThrowsExceptionWithoutBuyer(): void {
+    public function test_builder_throws_exception_without_buyer(): void {
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Buyer name is required');
 
@@ -271,7 +267,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
             ->build();
     }
 
-    public function testCompleteInvoice(): void {
+    public function test_complete_invoice(): void {
         $document = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withDueDate(new DateTimeImmutable('2026-02-21'))

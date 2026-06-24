@@ -18,25 +18,23 @@ use ERRORToolkit\Traits\ErrorLog;
 
 /**
  * Generator für ZUGFeRD/Factur-X PDF-Rechnungen.
- * 
+ *
  * Erstellt PDF/A-3 konforme Dateien mit eingebetteter XML-Rechnung.
- * 
+ *
  * Voraussetzung: dschuppelius/php-pdf-toolkit muss installiert sein.
- * 
+ *
  * Beispiel:
  * ```php
  * $generator = new ZugferdPdfGenerator();
  * $pdfBytes = $generator->generate($invoice, $htmlTemplate);
  * file_put_contents('invoice.pdf', $pdfBytes);
  * ```
- * 
- * @package ERechnungToolkit\Generators
  */
 final class ZugferdPdfGenerator {
     use ErrorLog;
 
     private const ZUGFERD_WRITER_CLASS = 'PDFToolkit\\Writers\\ZugferdWriter';
-    private const PDF_CONTENT_CLASS    = 'PDFToolkit\\Entities\\PDFContent';
+    private const PDF_CONTENT_CLASS = 'PDFToolkit\\Entities\\PDFContent';
 
     private ?object $writer = null;
 
@@ -49,15 +47,15 @@ final class ZugferdPdfGenerator {
     }
 
     /** ZUGFeRD Conformance Levels */
-    public const LEVEL_MINIMUM  = 'MINIMUM';
+    public const LEVEL_MINIMUM = 'MINIMUM';
     public const LEVEL_BASIC_WL = 'BASIC WL';
-    public const LEVEL_BASIC    = 'BASIC';
-    public const LEVEL_EN16931  = 'EN 16931';
+    public const LEVEL_BASIC = 'BASIC';
+    public const LEVEL_EN16931 = 'EN 16931';
     public const LEVEL_EXTENDED = 'EXTENDED';
 
     /**
      * Generiert ein ZUGFeRD/Factur-X PDF aus einer E-Rechnung.
-     * 
+     *
      * @param Document $invoice Das E-Rechnung Document
      * @param string|null $visualHtml Optionales HTML für visuelle Darstellung (sonst wird Standard-Template verwendet)
      * @param array $options Zusätzliche Optionen für die PDF-Generierung
@@ -75,14 +73,14 @@ final class ZugferdPdfGenerator {
         }
 
         // XML aus dem Document generieren (CII für ZUGFeRD/Factur-X)
-        $generator = new ERechnungGenerator();
+        $generator = new ERechnungGenerator;
         $invoiceXml = $generator->generateCii($invoice);
 
         // PDFContent mit eingebetteter XML erstellen
         $contentClass = self::PDF_CONTENT_CLASS;
         $content = $contentClass::fromHtml($visualHtml, [
             'invoice_xml' => $invoiceXml,
-            'title' => 'Rechnung ' . ($invoice->getId() ?? ''),
+            'title' => 'Rechnung ' . $invoice->getId(),
             'subject' => 'ZUGFeRD/Factur-X E-Rechnung',
         ]);
 
@@ -108,13 +106,12 @@ final class ZugferdPdfGenerator {
             ERechnungProfile::EN16931 => self::LEVEL_EN16931,
             ERechnungProfile::EXTENDED => self::LEVEL_EXTENDED,
             ERechnungProfile::XRECHNUNG, ERechnungProfile::XRECHNUNG_EXTENSION => self::LEVEL_EN16931,
-            default => self::LEVEL_EN16931,
         };
     }
 
     /**
      * Generiert ein ZUGFeRD/Factur-X PDF und speichert es als Datei.
-     * 
+     *
      * @param Document $invoice Das E-Rechnung Document
      * @param string $outputPath Dateipfad für das PDF
      * @param string|null $visualHtml Optionales HTML für visuelle Darstellung
@@ -142,7 +139,7 @@ final class ZugferdPdfGenerator {
     private function getWriter(): object {
         if ($this->writer === null) {
             $writerClass = self::ZUGFERD_WRITER_CLASS;
-            $this->writer = new $writerClass();
+            $this->writer = new $writerClass;
         }
         return $this->writer;
     }
@@ -151,7 +148,7 @@ final class ZugferdPdfGenerator {
      * Generiert ein Standard-HTML-Template für die visuelle Darstellung.
      */
     private function generateDefaultHtml(Document $invoice): string {
-        $htmlGenerator = new InvoiceHtmlGenerator();
+        $htmlGenerator = new InvoiceHtmlGenerator;
         return $htmlGenerator->generate($invoice);
     }
 }

@@ -12,26 +12,20 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Generators;
 
-use CommonToolkit\Entities\HTML\Document as HtmlDocument;
-use CommonToolkit\Entities\HTML\Element;
-use ERechnungToolkit\Entities\Document;
-use ERechnungToolkit\Entities\InvoiceLine;
-use ERechnungToolkit\Entities\PostalAddress;
-use ERechnungToolkit\Entities\TaxSubtotal;
+use CommonToolkit\Entities\HTML\{Document as HtmlDocument, Element};
+use ERechnungToolkit\Entities\{Document, InvoiceLine, PostalAddress, TaxSubtotal};
 use ERechnungToolkit\Enums\NoteSubjectCode;
 
 /**
  * Generator für HTML-Darstellung von E-Rechnungen.
- * 
+ *
  * Nutzt das CommonToolkit HTML Document für strukturierte HTML-Erzeugung.
- * 
+ *
  * Beispiel:
  * ```php
  * $generator = new InvoiceHtmlGenerator();
  * $html = $generator->generate($invoice);
  * ```
- * 
- * @package ERechnungToolkit\Generators
  */
 final class InvoiceHtmlGenerator {
     /**
@@ -197,7 +191,7 @@ CSS;
 
     /**
      * Erstellt alle Body-Elemente für die Rechnung.
-     * 
+     *
      * @return Element[]
      */
     private function createBodyElements(Document $invoice): array {
@@ -313,7 +307,7 @@ CSS;
         $metaBlock = Element::withAttributes('div', ['style' => 'font-size: 10pt; line-height: 180%;']);
         $metaBlock = $metaBlock->withChild(
             Element::withChildren('div', [
-                Element::create('strong', "Nr. {$invoice->getId()}")
+                Element::create('strong', "Nr. {$invoice->getId()}"),
             ])
         );
         $metaBlock = $metaBlock->withChild(Element::create('div', "Datum: {$issueDate}"));
@@ -575,7 +569,7 @@ CSS;
 
     /**
      * Formatiert Adresszeilen als Array.
-     * 
+     *
      * @return string[]
      */
     private function formatAddressLines(?PostalAddress $address): array {

@@ -14,11 +14,10 @@ namespace ERechnungToolkit\Enums;
 
 /**
  * Unit of Measure Code according to UN/ECE Recommendation 20 (EN 16931).
- * 
+ *
  * Common unit codes used in e-invoicing.
- * 
+ *
  * @see https://docs.peppol.eu/poacc/billing/3.0/codelist/UNECERec20/
- * @package ERechnungToolkit\Enums
  */
 enum UnitCode: string {
     // Count units

@@ -16,10 +16,8 @@ use DateTimeImmutable;
 
 /**
  * Payment Terms for E-Rechnung (EN 16931).
- * 
+ *
  * Represents payment conditions and due date information.
- * 
- * @package ERechnungToolkit\Entities
  */
 final class PaymentTerms {
     public function __construct(
@@ -29,8 +27,7 @@ final class PaymentTerms {
         private ?int $netPaymentDays = null,
         private ?float $discountPercent = null,
         private ?int $discountDays = null
-    ) {
-    }
+    ) {}
 
     public function getNote(): ?string {
         return $this->note;

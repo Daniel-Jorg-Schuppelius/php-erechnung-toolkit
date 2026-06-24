@@ -12,24 +12,10 @@ declare(strict_types=1);
 
 namespace Tests\Entities;
 
-use CommonToolkit\Enums\CountryCode;
 use CommonToolkit\Enums\CurrencyCode;
-use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
-use ERechnungToolkit\Entities\AllowanceCharge;
-use ERechnungToolkit\Entities\Document;
-use ERechnungToolkit\Entities\InvoiceLine;
-use ERechnungToolkit\Entities\Party;
-use ERechnungToolkit\Entities\PaymentTerms;
-use ERechnungToolkit\Entities\PostalAddress;
-use ERechnungToolkit\Entities\TaxSubtotal;
-use ERechnungToolkit\Entities\TaxTotal;
-use ERechnungToolkit\Enums\ERechnungProfile;
-use ERechnungToolkit\Enums\InvoiceType;
-use ERechnungToolkit\Enums\NoteSubjectCode;
-use ERechnungToolkit\Enums\PaymentMeansCode;
-use ERechnungToolkit\Enums\TaxCategory;
-use ERechnungToolkit\Enums\UnitCode;
 use DateTimeImmutable;
+use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party, PaymentTerms, PostalAddress, TaxSubtotal};
+use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, NoteSubjectCode, TaxCategory, UnitCode};
 use Tests\Contracts\BaseTestCase;
 
 /**
@@ -65,7 +51,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         );
     }
 
-    public function testCreateBasicInvoice(): void {
+    public function test_create_basic_invoice(): void {
         $document = Document::create(
             id: 'INV-2026-001',
             issueDate: new DateTimeImmutable('2026-01-22'),
@@ -80,7 +66,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertEquals(ERechnungProfile::EN16931, $document->getProfile());
     }
 
-    public function testCreateXRechnungInvoice(): void {
+    public function test_create_x_rechnung_invoice(): void {
         $leitwegId = '04011000-12345-67';
 
         $document = Document::xrechnung(
@@ -96,7 +82,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertTrue($document->getBuyer()->hasEndpoint());
     }
 
-    public function testCreateCreditNote(): void {
+    public function test_create_credit_note(): void {
         $document = Document::creditNote(
             id: 'CN-2026-001',
             issueDate: new DateTimeImmutable('2026-01-22'),
@@ -110,7 +96,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertEquals('INV-2026-001', $document->getPrecedingInvoiceReference());
     }
 
-    public function testAddInvoiceLines(): void {
+    public function test_add_invoice_lines(): void {
         $document = Document::create(
             id: 'INV-2026-001',
             issueDate: new DateTimeImmutable('2026-01-22'),
@@ -128,7 +114,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertEquals(1999.00, $document->getNetAmount()); // 1500 + 499
     }
 
-    public function testTaxCalculation(): void {
+    public function test_tax_calculation(): void {
         $document = Document::create(
             id: 'INV-2026-001',
             issueDate: new DateTimeImmutable('2026-01-22'),
@@ -144,7 +130,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertEquals(119.00, $document->getGrossAmount());
     }
 
-    public function testMixedTaxRates(): void {
+    public function test_mixed_tax_rates(): void {
         $document = Document::create(
             id: 'INV-2026-001',
             issueDate: new DateTimeImmutable('2026-01-22'),
@@ -171,7 +157,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertCount(2, $taxTotal->getSubtotals());
     }
 
-    public function testDocumentLevelAllowances(): void {
+    public function test_document_level_allowances(): void {
         $document = Document::create(
             id: 'INV-2026-001',
             issueDate: new DateTimeImmutable('2026-01-22'),
@@ -191,7 +177,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertEquals(900.00, $document->getNetAmount()); // 1000 - 100
     }
 
-    public function testDocumentLevelCharges(): void {
+    public function test_document_level_charges(): void {
         $document = Document::create(
             id: 'INV-2026-001',
             issueDate: new DateTimeImmutable('2026-01-22'),
@@ -211,7 +197,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertEquals(105.95, $document->getNetAmount()); // 100 + 5.95
     }
 
-    public function testValidation(): void {
+    public function test_validation(): void {
         $document = Document::create(
             id: 'INV-2026-001',
             issueDate: new DateTimeImmutable('2026-01-22'),
@@ -233,7 +219,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertTrue($document->isValid());
     }
 
-    public function testXRechnungValidation(): void {
+    public function test_x_rechnung_validation(): void {
         $document = new Document(
             id: 'XR-2026-001',
             issueDate: new DateTimeImmutable('2026-01-22'),
@@ -256,7 +242,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertNotEmpty($errors);
     }
 
-    public function testNotes(): void {
+    public function test_notes(): void {
         $document = Document::create(
             id: 'INV-2026-001',
             issueDate: new DateTimeImmutable('2026-01-22'),
@@ -273,7 +259,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertEquals('Zweite Bemerkung', $notes[1]);
     }
 
-    public function testNotesWithSubjectCode(): void {
+    public function test_notes_with_subject_code(): void {
         $document = Document::create(
             id: 'INV-2026-001',
             issueDate: new DateTimeImmutable('2026-01-22'),
@@ -313,7 +299,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertEquals('Rechtlicher Hinweis', $regNotes[0]);
     }
 
-    public function testPaymentTerms(): void {
+    public function test_payment_terms(): void {
         $terms = PaymentTerms::withSkonto(10, 2.0, 30);
 
         $this->assertEquals(10, $terms->getDiscountDays());
@@ -332,7 +318,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertEquals(980.00, $discountedAmount);
     }
 
-    public function testInvoiceLineFactoryMethods(): void {
+    public function test_invoice_line_factory_methods(): void {
         $line1 = InvoiceLine::service('1', 'Consulting', 8, 125.00);
         $this->assertEquals(8.0, $line1->getQuantity());
         $this->assertEquals(UnitCode::HOUR, $line1->getUnitCode());
@@ -344,7 +330,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertEquals(5000.00, $line2->getNetAmount());
     }
 
-    public function testTaxSubtotalFactoryMethods(): void {
+    public function test_tax_subtotal_factory_methods(): void {
         $standard = TaxSubtotal::standard(1000.00);
         $this->assertEquals(TaxCategory::STANDARD, $standard->getCategory());
         $this->assertEquals(19.0, $standard->getPercent());

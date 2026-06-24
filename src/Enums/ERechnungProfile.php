@@ -14,10 +14,8 @@ namespace ERechnungToolkit\Enums;
 
 /**
  * E-Rechnung Profile (ZUGFeRD/Factur-X/XRechnung).
- * 
+ *
  * Defines the conformance profile of the e-invoice.
- * 
- * @package ERechnungToolkit\Enums
  */
 enum ERechnungProfile: string {
     /** ZUGFeRD 2.1/2.2 - MINIMUM profile */

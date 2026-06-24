@@ -18,20 +18,18 @@ use Throwable;
 
 /**
  * Parser für ZUGFeRD/Factur-X PDF-Rechnungen.
- * 
+ *
  * Extrahiert die eingebettete XML-Rechnung aus PDF/A-3 Dokumenten
  * und parst sie zu einem E-Rechnung Document.
- * 
+ *
  * Voraussetzung: daniel-jorg-schuppelius/php-pdf-toolkit muss installiert sein.
- * 
+ *
  * Beispiel:
  * ```php
  * $parser = new ZugferdPdfParser();
  * $document = $parser->parseFile('/path/to/invoice.pdf');
  * echo $document->getId(); // Rechnungsnummer
  * ```
- * 
- * @package ERechnungToolkit\Parsers
  */
 final class ZugferdPdfParser {
     use ErrorLog;
@@ -58,7 +56,7 @@ final class ZugferdPdfParser {
 
     /**
      * Prüft ob die PDF-Datei eine ZUGFeRD/Factur-X Rechnung enthält.
-     * 
+     *
      * @param string $pdfPath Pfad zur PDF-Datei
      * @return bool True wenn eine eingebettete Rechnung gefunden wurde
      */
@@ -73,7 +71,7 @@ final class ZugferdPdfParser {
 
     /**
      * Parst eine ZUGFeRD/Factur-X PDF und gibt ein Document zurück.
-     * 
+     *
      * @param string $pdfPath Pfad zur PDF-Datei
      * @return Document|null Das geparste Document oder null bei Fehler
      */
@@ -89,7 +87,7 @@ final class ZugferdPdfParser {
 
     /**
      * Extrahiert die XML-Rechnung aus der PDF (ohne zu parsen).
-     * 
+     *
      * @param string $pdfPath Pfad zur PDF-Datei
      * @return string|null XML-Inhalt oder null bei Fehler
      */
@@ -107,7 +105,7 @@ final class ZugferdPdfParser {
 
         $this->logDebug('Extracted ZUGFeRD XML from PDF', [
             'path' => $pdfPath,
-            'xmlSize' => strlen($xml)
+            'xmlSize' => strlen($xml),
         ]);
 
         return $xml;
@@ -115,26 +113,26 @@ final class ZugferdPdfParser {
 
     /**
      * Parst die extrahierte XML zu einem Document.
-     * 
+     *
      * @param string $xml XML-Inhalt
      * @return Document|null Das geparste Document oder null bei Fehler
      */
     public function parseXml(string $xml): ?Document {
-        $parser = new ERechnungParser();
+        $parser = new ERechnungParser;
 
         try {
             return $parser->parse($xml);
         } catch (Throwable $e) {
             return $this->logErrorAndReturn(null, 'Failed to parse ZUGFeRD XML', [
                 'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
+                'trace' => $e->getTraceAsString(),
             ]);
         }
     }
 
     /**
      * Listet alle eingebetteten Dateien in der PDF auf.
-     * 
+     *
      * @param string $pdfPath Pfad zur PDF-Datei
      * @return string[] Liste der Dateinamen
      */
@@ -153,7 +151,7 @@ final class ZugferdPdfParser {
     private function getReader(): object {
         if ($this->reader === null) {
             $readerClass = self::ZUGFERD_READER_CLASS;
-            $this->reader = new $readerClass();
+            $this->reader = new $readerClass;
         }
         return $this->reader;
     }

@@ -14,11 +14,10 @@ namespace ERechnungToolkit\Enums;
 
 /**
  * Invoice Type Code according to UNTDID 1001 (EN 16931).
- * 
+ *
  * Defines the type of the invoice document (Rechnung, Gutschrift, etc.).
- * 
+ *
  * @see https://docs.peppol.eu/poacc/billing/3.0/codelist/UNCL1001-inv/
- * @package ERechnungToolkit\Enums
  */
 enum InvoiceType: string {
     /** Commercial invoice (Handelsrechnung) */

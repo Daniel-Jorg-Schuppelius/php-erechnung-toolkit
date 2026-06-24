@@ -2,9 +2,9 @@
 
 /**
  * Demo-Rechnung Generator
- * 
+ *
  * Erstellt eine Test-PDF-Rechnung zur Überprüfung des Layouts.
- * 
+ *
  * Usage: php tools/generate_demo_invoice.php [output.pdf]
  */
 
@@ -12,19 +12,10 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
-use ERechnungToolkit\Entities\Document;
-use ERechnungToolkit\Entities\InvoiceLine;
-use ERechnungToolkit\Entities\Party;
-use ERechnungToolkit\Entities\PostalAddress;
-use ERechnungToolkit\Entities\MonetaryTotal;
-use ERechnungToolkit\Entities\TaxTotal;
-use ERechnungToolkit\Entities\TaxSubtotal;
-use ERechnungToolkit\Enums\InvoiceType;
-use ERechnungToolkit\Enums\UnitCode;
-use ERechnungToolkit\Enums\TaxCategory;
-use ERechnungToolkit\Enums\ERechnungProfile;
-use ERechnungToolkit\Generators\ZugferdPdfGenerator;
 use CommonToolkit\Enums\CurrencyCode;
+use ERechnungToolkit\Entities\{Document, InvoiceLine, MonetaryTotal, Party, PostalAddress, TaxSubtotal, TaxTotal};
+use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, TaxCategory, UnitCode};
+use ERechnungToolkit\Generators\ZugferdPdfGenerator;
 
 // Output-Datei aus Argument oder Standard
 $outputFile = $argv[1] ?? __DIR__ . '/../test_rechnung.pdf';
@@ -68,7 +59,7 @@ echo "✓ Käufer: {$buyer->getName()}\n";
 // Dokument erstellen
 $doc = new Document(
     id: "R-2025-0042",
-    issueDate: new DateTimeImmutable(),
+    issueDate: new DateTimeImmutable,
     invoiceType: InvoiceType::INVOICE,
     seller: $seller,
     buyer: $buyer,
@@ -113,7 +104,7 @@ $doc->setTaxTotal(new TaxTotal(
 
 // Hinweise/Notizen hinzufügen
 $doc->addNote("Zahlbar innerhalb von 30 Tagen ohne Abzug.");
-$doc->addNote("Lieferung erfolgte am " . (new DateTimeImmutable())->format('d.m.Y') . ".");
+$doc->addNote("Lieferung erfolgte am " . (new DateTimeImmutable)->format('d.m.Y') . ".");
 
 echo "✓ Summen: Netto {$net} EUR, MwSt {$tax} EUR, Brutto {$gross} EUR\n";
 echo "✓ Hinweise: " . count($doc->getNotes()) . " Notizen hinzugefügt\n";
@@ -121,7 +112,7 @@ echo "✓ Profil: " . $doc->getProfile()->name . "\n\n";
 
 // HTML-Vorschau generieren
 $htmlFile = str_replace('.pdf', '.html', $outputFile);
-$htmlGenerator = new ERechnungToolkit\Generators\InvoiceHtmlGenerator();
+$htmlGenerator = new ERechnungToolkit\Generators\InvoiceHtmlGenerator;
 $html = $htmlGenerator->generate($doc);
 file_put_contents($htmlFile, $html);
 echo "✓ HTML-Vorschau: {$htmlFile}\n\n";
@@ -129,7 +120,7 @@ echo "✓ HTML-Vorschau: {$htmlFile}\n\n";
 // PDF generieren
 echo "Generiere PDF...\n";
 
-$generator = new ZugferdPdfGenerator();
+$generator = new ZugferdPdfGenerator;
 $pdf = $generator->generate($doc);
 
 // Speichern

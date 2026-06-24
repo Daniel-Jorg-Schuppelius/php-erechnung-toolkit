@@ -12,15 +12,12 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Entities;
 
-use ERechnungToolkit\Enums\TaxCategory;
-use ERechnungToolkit\Enums\UnitCode;
+use ERechnungToolkit\Enums\{TaxCategory, UnitCode};
 
 /**
  * Invoice Line for E-Rechnung (EN 16931).
- * 
+ *
  * Represents a single line item in the invoice.
- * 
- * @package ERechnungToolkit\Entities
  */
 final class InvoiceLine {
     /** @var AllowanceCharge[] */
@@ -146,8 +143,8 @@ final class InvoiceLine {
      */
     public function getTotalAllowances(): float {
         return array_reduce(
-            array_filter($this->allowanceCharges, fn(AllowanceCharge $ac) => !$ac->isCharge()),
-            fn(float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
+            array_filter($this->allowanceCharges, fn (AllowanceCharge $ac) => !$ac->isCharge()),
+            fn (float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
             0.0
         );
     }
@@ -157,8 +154,8 @@ final class InvoiceLine {
      */
     public function getTotalCharges(): float {
         return array_reduce(
-            array_filter($this->allowanceCharges, fn(AllowanceCharge $ac) => $ac->isCharge()),
-            fn(float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
+            array_filter($this->allowanceCharges, fn (AllowanceCharge $ac) => $ac->isCharge()),
+            fn (float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
             0.0
         );
     }

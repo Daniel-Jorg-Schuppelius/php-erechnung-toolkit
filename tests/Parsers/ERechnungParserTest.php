@@ -13,12 +13,11 @@ declare(strict_types=1);
 namespace Tests\Parsers;
 
 use CommonToolkit\Enums\CurrencyCode;
+use DateTimeImmutable;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
-use ERechnungToolkit\Enums\ERechnungProfile;
-use ERechnungToolkit\Enums\InvoiceType;
+use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType};
 use ERechnungToolkit\Generators\ERechnungGenerator;
 use ERechnungToolkit\Parsers\ERechnungParser;
-use DateTimeImmutable;
 use Tests\Contracts\BaseTestCase;
 
 /**
@@ -31,11 +30,11 @@ class ERechnungParserTest extends BaseTestCase {
     protected function setUp(): void {
         parent::setUp();
 
-        $this->parser = new ERechnungParser();
-        $this->generator = new ERechnungGenerator();
+        $this->parser = new ERechnungParser;
+        $this->generator = new ERechnungGenerator;
     }
 
-    public function testParseUblInvoice(): void {
+    public function test_parse_ubl_invoice(): void {
         $original = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Muster GmbH', 'DE123456789')
@@ -54,7 +53,7 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals(CurrencyCode::Euro, $parsed->getCurrency());
     }
 
-    public function testParseUblSellerParty(): void {
+    public function test_parse_ubl_seller_party(): void {
         $original = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Muster GmbH', 'DE123456789')
@@ -77,7 +76,7 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals('Berlin', $seller->getPostalAddress()->getCity());
     }
 
-    public function testParseUblBuyerParty(): void {
+    public function test_parse_ubl_buyer_party(): void {
         $original = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Muster GmbH', 'DE123456789')
@@ -98,7 +97,7 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals('München', $buyer->getPostalAddress()->getCity());
     }
 
-    public function testParseUblInvoiceLines(): void {
+    public function test_parse_ubl_invoice_lines(): void {
         $original = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Muster GmbH', 'DE123456789')
@@ -126,7 +125,7 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals(499.00, $lines[1]->getNetAmount());
     }
 
-    public function testParseUblTaxTotal(): void {
+    public function test_parse_ubl_tax_total(): void {
         $original = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Muster GmbH', 'DE123456789')
@@ -149,7 +148,7 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals(19.0, $subtotals[0]->getPercent());
     }
 
-    public function testParseUblMonetaryTotal(): void {
+    public function test_parse_ubl_monetary_total(): void {
         $original = ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Muster GmbH', 'DE123456789')
@@ -170,7 +169,7 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals(119.00, $total->getPayableAmount());
     }
 
-    public function testParseCiiInvoice(): void {
+    public function test_parse_cii_invoice(): void {
         $original = ERechnungDocumentBuilder::zugferd('ZF-2026-001', ERechnungProfile::EN16931)
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Lieferant GmbH', 'DE123456789')
@@ -188,7 +187,7 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals(InvoiceType::INVOICE, $parsed->getInvoiceType());
     }
 
-    public function testParseCiiSellerParty(): void {
+    public function test_parse_cii_seller_party(): void {
         $original = ERechnungDocumentBuilder::zugferd('ZF-2026-001', ERechnungProfile::EN16931)
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Lieferant GmbH', 'DE123456789')
@@ -206,7 +205,7 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals('DE123456789', $seller->getVatId());
     }
 
-    public function testParseCiiInvoiceLines(): void {
+    public function test_parse_cii_invoice_lines(): void {
         $original = ERechnungDocumentBuilder::zugferd('ZF-2026-001', ERechnungProfile::EN16931)
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('Lieferant GmbH', 'DE123456789')
@@ -229,7 +228,7 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals(500.00, $lines[0]->getNetAmount());
     }
 
-    public function testRoundtripUbl(): void {
+    public function test_roundtrip_ubl(): void {
         $original = ERechnungDocumentBuilder::create('RT-UBL-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withDueDate(new DateTimeImmutable('2026-02-21'))
@@ -283,7 +282,7 @@ class ERechnungParserTest extends BaseTestCase {
         );
     }
 
-    public function testRoundtripCii(): void {
+    public function test_roundtrip_cii(): void {
         $original = ERechnungDocumentBuilder::zugferd('RT-CII-001', ERechnungProfile::EN16931)
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('CII Seller GmbH', 'DE333333333')
@@ -308,7 +307,7 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals($original->countLines(), $parsed->countLines());
     }
 
-    public function testParseXRechnungProfile(): void {
+    public function test_parse_x_rechnung_profile(): void {
         $original = ERechnungDocumentBuilder::xrechnung('XR-PARSE-001', '04011000-12345-67')
             ->withIssueDate(new DateTimeImmutable('2026-01-22'))
             ->withSeller('XRechnung Seller', 'DE444444444')
@@ -326,7 +325,7 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals(ERechnungProfile::XRECHNUNG, $parsed->getProfile());
     }
 
-    public function testParseLegacyXoevDeXRechnungProfileIsRecognized(): void {
+    public function test_parse_legacy_xoev_de_x_rechnung_profile_is_recognized(): void {
         // Older XRechnung 2.x files carry the deprecated "xoev-de:kosit"
         // authority. These must still be recognized as XRechnung when parsing.
         $xml = '<?xml version="1.0" encoding="UTF-8"?>'
@@ -347,13 +346,13 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals(ERechnungProfile::XRECHNUNG, $parsed->getProfile());
     }
 
-    public function testParseInvalidXmlThrowsException(): void {
+    public function test_parse_invalid_xml_throws_exception(): void {
         $this->expectException(\Exception::class);
 
         $this->parser->parse('This is not valid XML');
     }
 
-    public function testParseUnknownFormatThrowsException(): void {
+    public function test_parse_unknown_format_throws_exception(): void {
         $this->expectException(\RuntimeException::class);
         $this->expectExceptionMessage('Unknown E-Rechnung format');
 
@@ -364,7 +363,7 @@ class ERechnungParserTest extends BaseTestCase {
     /**
      * Test parsing real XRechnung sample file.
      */
-    public function testParseRealXRechnungSample(): void {
+    public function test_parse_real_x_rechnung_sample(): void {
         $samplePath = __DIR__ . '/../../../.samples/E-Rechnung/01.01a-INVOICE_ubl.xml';
 
         if (!file_exists($samplePath)) {

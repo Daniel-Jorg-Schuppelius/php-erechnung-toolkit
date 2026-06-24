@@ -17,10 +17,8 @@ use ERechnungToolkit\Enums\TaxCategory;
 
 /**
  * Tax Total and Tax Subtotal for E-Rechnung (EN 16931).
- * 
+ *
  * Represents VAT breakdown information for the invoice.
- * 
- * @package ERechnungToolkit\Entities
  */
 final class TaxTotal {
     /** @var TaxSubtotal[] */
@@ -32,7 +30,7 @@ final class TaxTotal {
         array $subtotals = []
     ) {
         if (is_string($this->currency)) {
-            $this->currency = CurrencyCode::fromSymbol($this->currency) ?? CurrencyCode::from($this->currency);
+            $this->currency = CurrencyCode::tryFrom($this->currency) ?? CurrencyCode::fromSymbol($this->currency);
         }
         $this->subtotals = $subtotals;
     }
@@ -63,20 +61,20 @@ final class TaxTotal {
     private function recalculateTaxAmount(): void {
         $this->taxAmount = array_reduce(
             $this->subtotals,
-            fn(float $sum, TaxSubtotal $sub) => $sum + $sub->getTaxAmount(),
+            fn (float $sum, TaxSubtotal $sub) => $sum + $sub->getTaxAmount(),
             0.0
         );
     }
 
     /**
      * Creates from subtotals.
-     * 
+     *
      * @param TaxSubtotal[] $subtotals
      */
     public static function fromSubtotals(array $subtotals, CurrencyCode $currency): self {
         $taxAmount = array_reduce(
             $subtotals,
-            fn(float $sum, TaxSubtotal $sub) => $sum + $sub->getTaxAmount(),
+            fn (float $sum, TaxSubtotal $sub) => $sum + $sub->getTaxAmount(),
             0.0
         );
 

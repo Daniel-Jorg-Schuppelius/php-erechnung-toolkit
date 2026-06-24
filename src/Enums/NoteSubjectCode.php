@@ -14,10 +14,8 @@ namespace ERechnungToolkit\Enums;
 
 /**
  * Note Subject Code according to UNTDID 4451.
- * 
+ *
  * Used for categorizing invoice notes (BT-21/BT-22) in EN 16931.
- * 
- * @package ERechnungToolkit\Enums
  */
 enum NoteSubjectCode: string {
     // General
@@ -47,7 +45,7 @@ enum NoteSubjectCode: string {
     case AAY = 'AAY'; // Certification statements
     case AAZ = 'AAZ'; // Clean on board statements
 
-        // Business specific
+    // Business specific
     case ABL = 'ABL'; // Legal information
     case ABN = 'ABN'; // Contract information
     case ABO = 'ABO'; // Parties to transaction
@@ -59,7 +57,7 @@ enum NoteSubjectCode: string {
     case ABU = 'ABU'; // Transaction reference number description
     case ABV = 'ABV'; // Transport contract references
 
-        // Common codes for E-Invoicing
+    // Common codes for E-Invoicing
     case ACB = 'ACB'; // Additional information
     case ACC = 'ACC'; // Clause on copyright
     case ACD = 'ACD'; // Container remarks
@@ -148,7 +146,7 @@ enum NoteSubjectCode: string {
 
     /**
      * Creates a NoteSubjectCode from a prefix string.
-     * 
+     *
      * @param string $prefix The prefix (e.g., "#ADU#" or "ADU")
      * @return self|null The matching code or null if not found
      */
@@ -167,7 +165,7 @@ enum NoteSubjectCode: string {
 
     /**
      * Extracts subject code and text from a note string.
-     * 
+     *
      * @param string $note The note text (e.g., "#ADU#This is a note")
      * @return array{code: self|null, text: string}
      */
@@ -189,7 +187,7 @@ enum NoteSubjectCode: string {
 
     /**
      * Formats a note with subject code prefix.
-     * 
+     *
      * @param string $text The note text
      * @param self|null $code The subject code (optional)
      * @return string The formatted note
