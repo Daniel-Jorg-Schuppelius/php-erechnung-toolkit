@@ -1,0 +1,19 @@
+{
+    "javaExecutables": {
+        "kosit-validator": {
+            "path": "tools/kosit/validator.jar",
+            "required": false,
+            "description": "KoSIT Validator (XRechnung/EN16931) - eigenes Jar via 'path' überschreibbar",
+            "url": "https://github.com/itplr-kosit/validator/releases",
+            "arguments": [
+                "-r",
+                "[REPOSITORY]",
+                "-s",
+                "[SCENARIOS]",
+                "-o",
+                "[OUTPUT_DIR]",
+                "[INPUT]"
+            ]
+        }
+    }
+}

@@ -140,6 +140,49 @@ The generated PDF:
 - Can be processed automatically by accounting software
 - Is visually readable as a normal PDF invoice
 
+## Validation (EN16931 / XRechnung)
+
+Validate UBL/CII invoices against XML Schema, the EN16931 Schematron rules and
+the XRechnung CIUS using the official [KoSIT validator](https://github.com/itplr-kosit/validator).
+Both the validator jar (`tools/kosit/validator.jar`) and its configuration
+(scenarios + schemas, `data/kosit/`) ship with this package, so validation works
+out of the box.
+
+Because the Schematron rules are distributed as XSLT 2.0 (not executable by PHP's
+XSLT 1.0 engine), the validator runs as an external Java process.
+
+### Validation Requirements
+
+- A Java runtime (`java` on `PATH`) — availability is checked through the
+  Common-Toolkit executable configuration; the call runs via `Java::execute()`
+- The KoSIT validator jar — configured as a `javaExecutables` entry in
+  `config/erechnung_executables.json` (default `tools/kosit/validator.jar`).
+  Point `path` at your own jar there, or override per call with an explicit
+  path or the `KOSIT_VALIDATOR_JAR` env var
+
+```php
+use ERechnungToolkit\Validators\KositValidator;
+
+$validator = new KositValidator(); // uses the bundled jar + Java from PATH
+
+if ($validator->isAvailable()) {
+    $result = $validator->validate($ublXml);          // or ->validateFile('/path/to/invoice.xml')
+
+    if ($result->isValid()) {
+        echo 'Konform: ' . $result->getScenarioName();
+    } else {
+        foreach ($result->getErrors() as $error) {
+            echo $error->getCode() . ': ' . $error->getText() . PHP_EOL;
+        }
+    }
+}
+```
+
+`ValidationResult` exposes the conformance verdict (`isValid()`), the
+accept/reject recommendation (`isAccepted()`), all rule messages by severity
+(`getErrors()`, `getWarnings()`, `getMessages()`) and the raw KoSIT report
+(`getRawReport()`).
+
 ## License
 
 AGPL-3.0-or-later

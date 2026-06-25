@@ -364,7 +364,7 @@ class ERechnungParserTest extends BaseTestCase {
      * Test parsing real XRechnung sample file.
      */
     public function test_parse_real_x_rechnung_sample(): void {
-        $samplePath = __DIR__ . '/../../../.samples/E-Rechnung/01.01a-INVOICE_ubl.xml';
+        $samplePath = __DIR__ . '/../../.samples/E-Rechnung/01.01a-INVOICE_ubl.xml';
 
         if (!file_exists($samplePath)) {
             $this->markTestSkipped('XRechnung sample file not found');
