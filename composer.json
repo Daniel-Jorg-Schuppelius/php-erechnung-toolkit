@@ -13,7 +13,11 @@
     "cii",
     "einvoicing",
     "invoice",
-    "peppol"
+    "peppol",
+    "xbestellung",
+    "order",
+    "peppol-bis-order",
+    "order-x"
   ],
   "authors": [
     {

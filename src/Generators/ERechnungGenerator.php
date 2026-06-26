@@ -14,7 +14,7 @@ namespace ERechnungToolkit\Generators;
 
 use DOMDocument;
 use DOMElement;
-use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party, PostalAddress};
+use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party};
 use ERRORToolkit\Traits\ErrorLog;
 
 /**
@@ -35,6 +35,15 @@ final class ERechnungGenerator {
     private const RAM_NS = 'urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100';
     private const QDT_NS = 'urn:un:unece:uncefact:data:standard:QualifiedDataType:100';
     private const UDT_NS = 'urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100';
+
+    private ?UblSerializer $ublSerializer = null;
+
+    /**
+     * Shared UBL building blocks (party, address, allowance, element/amount).
+     */
+    private function ubl(): UblSerializer {
+        return $this->ublSerializer ??= new UblSerializer;
+    }
 
     /**
      * Generates UBL XML for XRechnung.
@@ -565,15 +574,7 @@ final class ERechnungGenerator {
     // === Helper Methods ===
 
     private function addUblElement(DOMDocument $dom, DOMElement $parent, string $name, string $value): DOMElement {
-        [$prefix, $localName] = explode(':', $name);
-        $ns = match ($prefix) {
-            'cbc' => self::CBC_NS,
-            'cac' => self::CAC_NS,
-            default => self::UBL_NS,
-        };
-        $elem = $dom->createElementNS($ns, $name, htmlspecialchars($value, ENT_XML1, 'UTF-8'));
-        $parent->appendChild($elem);
-        return $elem;
+        return $this->ubl()->element($dom, $parent, $name, $value);
     }
 
     private function addCiiElement(DOMDocument $dom, DOMElement $parent, string $name, string $value): DOMElement {
@@ -597,81 +598,11 @@ final class ERechnungGenerator {
      * separators.
      */
     private function normalizeIban(?string $iban): string {
-        return strtoupper(str_replace(' ', '', (string) $iban));
+        return $this->ubl()->normalizeIban($iban);
     }
 
     private function addUblParty(DOMDocument $dom, DOMElement $parent, Party $party): void {
-        $partyElem = $dom->createElementNS(self::CAC_NS, 'cac:Party');
-
-        // EndpointID
-        if ($party->hasEndpoint()) {
-            $endpoint = $this->addUblElement($dom, $partyElem, 'cbc:EndpointID', $party->getEndpointId());
-            $endpoint->setAttribute('schemeID', $party->getEndpointScheme());
-        }
-
-        // PartyIdentification
-        if ($party->getLegalEntityId() !== null) {
-            $partyIdent = $dom->createElementNS(self::CAC_NS, 'cac:PartyIdentification');
-            $idElem = $this->addUblElement($dom, $partyIdent, 'cbc:ID', $party->getLegalEntityId());
-            if ($party->getLegalEntityScheme() !== null) {
-                $idElem->setAttribute('schemeID', $party->getLegalEntityScheme());
-            }
-            $partyElem->appendChild($partyIdent);
-        }
-
-        // PartyName
-        $partyName = $dom->createElementNS(self::CAC_NS, 'cac:PartyName');
-        $this->addUblElement($dom, $partyName, 'cbc:Name', $party->getName());
-        $partyElem->appendChild($partyName);
-
-        // PostalAddress
-        if ($party->getPostalAddress() !== null) {
-            $postalAddr = $this->createUblPostalAddress($dom, $party->getPostalAddress());
-            $partyElem->appendChild($postalAddr);
-        }
-
-        // PartyTaxScheme - VAT identifier (BT-31) with TaxScheme/ID = VAT
-        if ($party->hasVatId()) {
-            $partyTaxScheme = $dom->createElementNS(self::CAC_NS, 'cac:PartyTaxScheme');
-            $this->addUblElement($dom, $partyTaxScheme, 'cbc:CompanyID', $party->getVatId());
-            $taxScheme = $dom->createElementNS(self::CAC_NS, 'cac:TaxScheme');
-            $this->addUblElement($dom, $taxScheme, 'cbc:ID', 'VAT');
-            $partyTaxScheme->appendChild($taxScheme);
-            $partyElem->appendChild($partyTaxScheme);
-        }
-
-        // PartyTaxScheme - national tax registration / Steuernummer (BT-32)
-        // with TaxScheme/ID = FC (not VAT).
-        if ($party->getTaxRegistrationId() !== null) {
-            $partyTaxSchemeFc = $dom->createElementNS(self::CAC_NS, 'cac:PartyTaxScheme');
-            $this->addUblElement($dom, $partyTaxSchemeFc, 'cbc:CompanyID', $party->getTaxRegistrationId());
-            $taxSchemeFc = $dom->createElementNS(self::CAC_NS, 'cac:TaxScheme');
-            $this->addUblElement($dom, $taxSchemeFc, 'cbc:ID', 'FC');
-            $partyTaxSchemeFc->appendChild($taxSchemeFc);
-            $partyElem->appendChild($partyTaxSchemeFc);
-        }
-
-        // PartyLegalEntity
-        $partyLegal = $dom->createElementNS(self::CAC_NS, 'cac:PartyLegalEntity');
-        $this->addUblElement($dom, $partyLegal, 'cbc:RegistrationName', $party->getName());
-        $partyElem->appendChild($partyLegal);
-
-        // Contact
-        if ($party->hasContactInfo()) {
-            $contact = $dom->createElementNS(self::CAC_NS, 'cac:Contact');
-            if ($party->getContactName() !== null) {
-                $this->addUblElement($dom, $contact, 'cbc:Name', $party->getContactName());
-            }
-            if ($party->getContactPhone() !== null) {
-                $this->addUblElement($dom, $contact, 'cbc:Telephone', $party->getContactPhone());
-            }
-            if ($party->getContactEmail() !== null) {
-                $this->addUblElement($dom, $contact, 'cbc:ElectronicMail', $party->getContactEmail());
-            }
-            $partyElem->appendChild($contact);
-        }
-
-        $parent->appendChild($partyElem);
+        $parent->appendChild($this->ubl()->party($dom, $party));
     }
 
     private function addCiiParty(DOMDocument $dom, DOMElement $parent, Party $party): void {
@@ -746,70 +677,8 @@ final class ERechnungGenerator {
         }
     }
 
-    private function createUblPostalAddress(DOMDocument $dom, PostalAddress $address): DOMElement {
-        $postalAddr = $dom->createElementNS(self::CAC_NS, 'cac:PostalAddress');
-
-        if ($address->getStreetName() !== null) {
-            $this->addUblElement($dom, $postalAddr, 'cbc:StreetName', $address->getStreetName());
-        }
-        if ($address->getAdditionalStreetName() !== null) {
-            $this->addUblElement($dom, $postalAddr, 'cbc:AdditionalStreetName', $address->getAdditionalStreetName());
-        }
-        if ($address->getCity() !== null) {
-            $this->addUblElement($dom, $postalAddr, 'cbc:CityName', $address->getCity());
-        }
-        if ($address->getPostalCode() !== null) {
-            $this->addUblElement($dom, $postalAddr, 'cbc:PostalZone', $address->getPostalCode());
-        }
-        if ($address->getCountrySubdivision() !== null) {
-            $this->addUblElement($dom, $postalAddr, 'cbc:CountrySubentity', $address->getCountrySubdivision());
-        }
-        if ($address->getCountryCode() !== null) {
-            $country = $dom->createElementNS(self::CAC_NS, 'cac:Country');
-            $this->addUblElement($dom, $country, 'cbc:IdentificationCode', $address->getCountryCode());
-            $postalAddr->appendChild($country);
-        }
-
-        return $postalAddr;
-    }
-
     private function createUblAllowanceCharge(DOMDocument $dom, AllowanceCharge $ac, string $currency): DOMElement {
-        $elem = $dom->createElementNS(self::CAC_NS, 'cac:AllowanceCharge');
-
-        $this->addUblElement($dom, $elem, 'cbc:ChargeIndicator', $ac->isCharge() ? 'true' : 'false');
-
-        if ($ac->getReasonCode() !== null) {
-            $this->addUblElement($dom, $elem, 'cbc:AllowanceChargeReasonCode', $ac->getReasonCode()->value);
-        }
-        if ($ac->getReason() !== null) {
-            $this->addUblElement($dom, $elem, 'cbc:AllowanceChargeReason', $ac->getReason());
-        }
-
-        if ($ac->getPercentage() !== null) {
-            $this->addUblElement($dom, $elem, 'cbc:MultiplierFactorNumeric', $this->formatAmount($ac->getPercentage()));
-        }
-
-        $amount = $this->addUblElement($dom, $elem, 'cbc:Amount', $this->formatAmount($ac->getAmount()));
-        $amount->setAttribute('currencyID', $currency);
-
-        if ($ac->getBaseAmount() !== null) {
-            $base = $this->addUblElement($dom, $elem, 'cbc:BaseAmount', $this->formatAmount($ac->getBaseAmount()));
-            $base->setAttribute('currencyID', $currency);
-        }
-
-        if ($ac->getTaxCategory() !== null) {
-            $taxCategory = $dom->createElementNS(self::CAC_NS, 'cac:TaxCategory');
-            $this->addUblElement($dom, $taxCategory, 'cbc:ID', $ac->getTaxCategory()->value);
-            if ($ac->getTaxPercent() !== null) {
-                $this->addUblElement($dom, $taxCategory, 'cbc:Percent', $this->formatAmount($ac->getTaxPercent()));
-            }
-            $taxScheme = $dom->createElementNS(self::CAC_NS, 'cac:TaxScheme');
-            $this->addUblElement($dom, $taxScheme, 'cbc:ID', 'VAT');
-            $taxCategory->appendChild($taxScheme);
-            $elem->appendChild($taxCategory);
-        }
-
-        return $elem;
+        return $this->ubl()->allowanceCharge($dom, $ac, $currency);
     }
 
     private function createUblInvoiceLine(DOMDocument $dom, InvoiceLine $line, string $currency, string $lineTag): DOMElement {

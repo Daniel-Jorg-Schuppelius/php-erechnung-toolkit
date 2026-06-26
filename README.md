@@ -7,6 +7,9 @@ PHP library for creating, parsing and validating electronic invoices (XRechnung,
 - **XRechnung**: German e-invoicing standard for public sector
 - **ZUGFeRD 2.x / Factur-X**: Hybrid PDF/A-3 with embedded XML
 - **EN 16931**: European e-invoicing standard
+- **XBestellung / Peppol BIS Order**: UBL purchase orders ([docs](docs/XBestellung/README.md))
+- **Order-X**: CII purchase orders + hybrid PDF/A-3 (order-side Factur-X)
+- **Despatch Advice**: UBL delivery notes (Peppol BIS Despatch Advice)
 - **UBL 2.1**: Universal Business Language
 - **UN/CEFACT CII D16B**: Cross Industry Invoice
 
@@ -97,6 +100,40 @@ foreach ($document->getLines() as $line) {
 | EXTENDED | ZUGFeRD 2.x EXTENDED |
 | XRECHNUNG | XRechnung 3.0 |
 | XRECHNUNG_EXTENSION | XRechnung 3.0 Extension |
+
+### Order Profiles (XBestellung / Peppol BIS Order)
+
+| Profile | Description |
+| ------- | ----------- |
+| PEPPOL_ORDER_ONLY | Peppol BIS Order only 3 (international) |
+| XBESTELLUNG | XBestellung v1.0 (German CIUS) |
+
+## Creating an Order (XBestellung)
+
+```php
+use ERechnungToolkit\Builders\OrderBuilder;
+use ERechnungToolkit\Enums\UnitCode;
+
+$order = OrderBuilder::xbestellung('ORD-2026-001')
+    ->withBuyer('Stadt Musterstadt')                       // ordering party (sender)
+    ->withBuyerAddress('Rathausplatz 1', '12345', 'Musterstadt')
+    ->withBuyerEndpoint('04011000-12345-67', '0204')       // Leitweg-ID
+    ->withSeller('Lieferant GmbH', 'DE123456789')          // supplier (recipient)
+    ->withSellerAddress('Lieferweg 2', '54321', 'Lieferstadt')
+    ->withSellerEndpoint('DE123456789', '9930')
+    ->addLine('Bürostuhl', 5, 120.00, UnitCode::PIECE, 'ART-4711')
+    ->build();
+
+$xml = $order->toUblXml();
+
+// Parsing back
+use ERechnungToolkit\Parsers\OrderParser;
+$parsed = (new OrderParser)->parse($xml);
+```
+
+> The bundled KoSIT validator is scenario-driven and can validate orders once the
+> official XBestellung validation artifacts are added to `data/kosit/scenarios.xml`.
+> See [docs/XBestellung](docs/XBestellung/README.md) for details.
 
 ## ZUGFeRD/Factur-X PDF Generation
 
