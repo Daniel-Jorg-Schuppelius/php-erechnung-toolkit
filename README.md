@@ -177,10 +177,22 @@ The generated PDF:
 - Can be processed automatically by accounting software
 - Is visually readable as a normal PDF invoice
 
-## Validation (EN16931 / XRechnung)
+## Validation
 
-Validate UBL/CII invoices against XML Schema, the EN16931 Schematron rules and
-the XRechnung CIUS using the official [KoSIT validator](https://github.com/itplr-kosit/validator).
+Two layers:
+
+**XSD schema (pure PHP, no Java)** — `UblSchemaValidator` validates UBL documents
+(Invoice, CreditNote, Order, DespatchAdvice) against the bundled official OASIS
+UBL 2.1 schemas via libxml. Catches structure / data type / element-order errors.
+
+```php
+use ERechnungToolkit\Validators\UblSchemaValidator;
+
+$errors = (new UblSchemaValidator)->validate($document->toUblXml()); // [] = valid
+```
+
+**Business rules (EN16931 / XRechnung)** — validate UBL/CII against XML Schema, the
+EN16931 Schematron rules and the XRechnung CIUS using the official [KoSIT validator](https://github.com/itplr-kosit/validator).
 Both the validator jar (`tools/kosit/validator.jar`) and its configuration
 (scenarios + schemas, `data/kosit/`) ship with this package, so validation works
 out of the box.

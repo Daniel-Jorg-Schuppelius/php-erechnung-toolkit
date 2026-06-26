@@ -72,13 +72,24 @@ Anders als in der Rechnung ist der **Käufer** der Dokumentersteller/Absender:
 
 ## Validierung
 
-`KositValidator` ist szenariengetrieben und format-agnostisch — er validiert die
-übergebene XML-Datei gegen die Szenarien in `data/kosit/`. Für XBestellung sind
-die offiziellen XBestellung-Prüfartefakte (Schema + Schematron) als zusätzliches
-Szenario in `data/kosit/scenarios.xml` einzuhängen; danach prüft derselbe
-Validator-Aufruf auch Bestellungen. Solange die Szenarien fehlen, meldet der
-Validator „kein Szenario gefunden" — die Erzeugung/das Parsing funktioniert
-unabhängig davon.
+Zwei Ebenen:
+
+1. **XSD-Schema (Struktur/Datentypen/Elementreihenfolge)** — `UblSchemaValidator`
+   prüft in reinem PHP (libxml, **kein Java**) gegen die gebündelten offiziellen
+   OASIS-UBL-2.1-Schemas (`data/kosit/resources/ubl/2.1/xsd/maindoc`). Deckt
+   Invoice, CreditNote, **Order** und **DespatchAdvice** ab. Die Tests stellen
+   sicher, dass die Generatoren schemavalides UBL erzeugen.
+
+   ```php
+   $errors = (new UblSchemaValidator)->validate($order->toUblXml()); // [] = valide
+   ```
+
+2. **Geschäftsregeln (EN 16931 / Peppol-BIS / XRechnung-CIUS)** — `KositValidator`
+   ist szenariengetrieben und format-agnostisch (benötigt Java). Für die volle
+   XBestellung-Schematron-Prüfung sind die offiziellen XBestellung-Prüfartefakte
+   als zusätzliches Szenario in `data/kosit/scenarios.xml` einzuhängen; bis dahin
+   meldet der KoSIT-Validator „kein Szenario gefunden". Order-X (CII) ist nicht
+   XSD-abgedeckt (D20B-Schema nicht gebündelt).
 
 ## Order-X (CII-Order, PDF/A-3)
 
@@ -128,7 +139,8 @@ Grundlage für den **Wareneingang-Abgleich** (Bestellzeile ↔ gelieferte Menge)
 - [x] Order-X: `OrderXProfile`, `OrderXGenerator`, `OrderXParser`, `OrderXPdfGenerator`
 - [x] Lieferschein: `DespatchAdviceProfile`, `DespatchAdvice`/`DespatchLine`, Generator/Builder/Parser
 - [x] Tests (Erzeugung, Builder, Parsing, Roundtrip, echtes Order-X-Sample, Hybrid-PDF)
-- [ ] XBestellung-KoSIT-Szenarien bündeln (Prüfartefakte ausstehend)
+- [x] XSD-Schema-Validierung (`UblSchemaValidator`, UBL 2.1, reines PHP)
+- [ ] XBestellung-KoSIT-Schematron-Szenarien bündeln (Geschäftsregeln, Java)
 - [ ] Order-X-Validierung (FeRD/FNFE-Schematron) bündeln
 - [ ] Order-X PDF/A-3: spezifische XMP-Extension-Metadaten (Writer-Erweiterung)
 - [ ] Order Response / Order Change — out of scope
