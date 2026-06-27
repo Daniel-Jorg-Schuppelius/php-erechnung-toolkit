@@ -16,7 +16,7 @@ use CommonToolkit\Contracts\Abstracts\XML\DomainXmlDocumentAbstract;
 use CommonToolkit\Enums\CurrencyCode;
 use DateTimeImmutable;
 use ERechnungToolkit\Enums\{OrderProfile, OrderXProfile};
-use ERechnungToolkit\Generators\{OrderGenerator, OrderXGenerator};
+use ERechnungToolkit\Generators\{OpenTransOrderGenerator, OrderGenerator, OrderXGenerator};
 
 /**
  * Order document (UBL Order — Peppol BIS Order only / XBestellung).
@@ -246,6 +246,13 @@ final class Order extends DomainXmlDocumentAbstract {
      */
     public function toOrderXXml(OrderXProfile $profile = OrderXProfile::COMFORT): string {
         return (new OrderXGenerator)->generateCii($this, $profile);
+    }
+
+    /**
+     * Generates openTRANS 2.1 ORDER XML output.
+     */
+    public function toOpenTransXml(): string {
+        return (new OpenTransOrderGenerator)->generateOrder($this);
     }
 
     /**
