@@ -92,18 +92,27 @@ class UglGeneratorTest extends BaseTestCase {
         $this->assertSame('ST', $this->field($poa, 184, 186));   // Mengeneinheit
     }
 
-    public function test_umlauts_keep_fixed_byte_length(): void {
+    public function test_umlauts_keep_fixed_byte_length_and_field_alignment(): void {
         $order = OrderBuilder::xbestellung('ORD-Ü')
             ->withIssueDate(new DateTimeImmutable('2026-06-25'))
             ->withBuyer('Müller & Söhne')
             ->withBuyerAddress('Straße 1', '12345', 'Köln')
             ->withSeller('Großhandel', 'DE1')
             ->withSellerAddress('Weg 2', '54321', 'Ort')
-            ->addLine('Übergangsstück', 1, 9.90)
+            ->addLine('Übergangsstück', 1, 9.90, UnitCode::PIECE, 'ART-Ä')
             ->build();
 
-        foreach ($this->records($this->generator->generateOrder($order)) as $record) {
+        $records = $this->records($this->generator->generateOrder($order));
+
+        foreach ($records as $record) {
             $this->assertSame(350, strlen($record), 'Umlauts must not break the 350-byte width');
         }
+
+        // Felder NACH dem Umlaut-Artikelnamen (50-89) müssen byte-genau ausgerichtet bleiben.
+        $poa = $records[1];
+        $this->assertSame('Übergangsstück', $this->field($poa, 50, 89));
+        $this->assertSame('00000000990', substr($poa, 129, 11)); // Brutto je PE 9,90
+        $this->assertSame('00000000990', substr($poa, 141, 11)); // Netto-Positionswert 9,90
+        $this->assertSame('ST', $this->field($poa, 184, 186));    // Mengeneinheit
     }
 }

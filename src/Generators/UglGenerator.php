@@ -88,7 +88,7 @@ final class UglGenerator {
 
         $out = '';
         foreach ($records as $record) {
-            $out .= $this->encode($record) . self::EOL;
+            $out .= $record . self::EOL;
         }
 
         return $out;
@@ -153,11 +153,16 @@ final class UglGenerator {
         return str_repeat(' ', self::RECORD_LENGTH);
     }
 
-    /** Writes a left-aligned, space-padded alphanumeric field (1-based positions, inclusive). */
+    /**
+     * Writes a left-aligned, space-padded alphanumeric field (1-based positions,
+     * inclusive). The value is converted to the single-byte UGL codepage *first*
+     * so that field placement stays byte-aligned even with multi-byte input
+     * (e.g. UTF-8 umlauts), keeping every record exactly {@see RECORD_LENGTH}.
+     */
     private function putAlpha(string $record, int $from, int $to, string $value): string {
         $length = $to - $from + 1;
-        $value = mb_substr($value, 0, $length);
-        $value .= str_repeat(' ', $length - mb_strlen($value));
+        $value = substr($this->encode($value), 0, $length);
+        $value = str_pad($value, $length); // right-pad to byte length
 
         return $this->place($record, $from, $value, $length);
     }
@@ -179,10 +184,10 @@ final class UglGenerator {
         return substr_replace($record, $value, $from - 1, $length);
     }
 
-    /** Converts a 350-char (UTF-8) record to the single-byte UGL codepage. */
-    private function encode(string $record): string {
-        $encoded = @iconv('UTF-8', self::ENCODING . '//TRANSLIT', $record);
+    /** Converts a UTF-8 field value to the single-byte UGL codepage (1 byte/char). */
+    private function encode(string $value): string {
+        $encoded = @iconv('UTF-8', self::ENCODING . '//TRANSLIT', $value);
 
-        return $encoded !== false ? $encoded : $record;
+        return $encoded !== false ? $encoded : $value;
     }
 }
