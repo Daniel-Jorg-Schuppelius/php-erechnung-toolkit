@@ -92,6 +92,43 @@ class UglGeneratorTest extends BaseTestCase {
         $this->assertSame('ST', $this->field($poa, 184, 186));   // Mengeneinheit
     }
 
+    public function test_emits_adr_record_for_deviating_delivery_address(): void {
+        $order = OrderBuilder::xbestellung('ORD-ADR-1')
+            ->withIssueDate(new DateTimeImmutable('2026-06-25'))
+            ->withBuyer('Installateur Mueller')
+            ->withBuyerAddress('Rohrweg 1', '12345', 'Musterstadt')
+            ->withSeller('GC Grosshandel', 'DE123456789')
+            ->withSellerAddress('Lagerstr 2', '54321', 'Lieferstadt')
+            ->withDeliveryAddress('Baustelle 7', '20095', 'Hamburg', 'DE', 'Bauvorhaben Hafencity', null, 'Anlieferung Tor 3')
+            ->addLine('Heizungspumpe', 1, 120.00, UnitCode::PIECE, 'ART-4711')
+            ->build();
+
+        $records = $this->records($this->generator->generateOrder($order));
+
+        // Reihenfolge: KOP, ADR, POA, END
+        $this->assertSame('KOP', substr($records[0], 0, 3));
+        $this->assertSame('ADR', substr($records[1], 0, 3));
+        $this->assertSame('POA', substr($records[2], 0, 3));
+        $this->assertSame('END', substr($records[3], 0, 3));
+
+        $adr = $records[1];
+        $this->assertSame(350, strlen($adr));
+        $this->assertSame('Bauvorhaben Hafencity', $this->field($adr, 4, 33));   // Name 1
+        $this->assertSame('Baustelle 7', $this->field($adr, 94, 123));           // Straße
+        $this->assertSame('20095', $this->field($adr, 127, 132));               // PLZ
+        $this->assertSame('Hamburg', $this->field($adr, 133, 162));             // Ort
+        $this->assertSame('Anlieferung Tor 3', $this->field($adr, 295, 344));    // Lieferhinweis
+        $this->assertSame('', $this->field($adr, 124, 126));                    // Land leer = DE
+    }
+
+    public function test_no_adr_record_without_delivery_address(): void {
+        $records = $this->records($this->generator->generateOrder($this->order));
+
+        foreach ($records as $record) {
+            $this->assertNotSame('ADR', substr($record, 0, 3));
+        }
+    }
+
     public function test_umlauts_keep_fixed_byte_length_and_field_alignment(): void {
         $order = OrderBuilder::xbestellung('ORD-Ü')
             ->withIssueDate(new DateTimeImmutable('2026-06-25'))

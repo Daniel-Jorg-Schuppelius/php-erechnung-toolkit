@@ -78,6 +78,10 @@ final class UglGenerator {
         $records = [];
         $records[] = $this->kop($order, $anfrageart, $buyerCustomerNo, $supplierNo);
 
+        if ($order->getDeliveryAddress() !== null) {
+            $records[] = $this->adr($order);
+        }
+
         $position = 0;
         foreach ($order->getLines() as $line) {
             $position++;
@@ -113,6 +117,34 @@ final class UglGenerator {
         $rec = $this->putAlpha($rec, 122, 161, (string) ($buyer->getContactName() ?? ''));
         $rec = $this->putAlpha($rec, 162, 169, $order->getIssueDate()->format('Ymd'));
         $rec = $this->putAlpha($rec, 170, 209, (string) ($buyer->getContactName() ?? $buyer->getName()));
+
+        return $rec;
+    }
+
+    private function adr(Order $order): string {
+        /** @var \ERechnungToolkit\Entities\PostalAddress $address */
+        $address = $order->getDeliveryAddress();
+        $street = (string) ($address->getStreetName() ?? '');
+        if ($address->getBuildingNumber() !== null) {
+            $street .= ' ' . $address->getBuildingNumber();
+        }
+        $country = $address->getCountryCode();
+
+        $rec = $this->blank();
+        $rec = $this->putAlpha($rec, 1, 3, 'ADR');
+        $rec = $this->putAlpha($rec, 4, 33, (string) ($order->getDeliveryName() ?? ''));
+        $rec = $this->putAlpha($rec, 94, 123, $street);
+        if ($country !== null && $country !== 'DE') {
+            $rec = $this->putAlpha($rec, 124, 126, $country); // leer = Deutschland
+        }
+        $rec = $this->putAlpha($rec, 127, 132, (string) ($address->getPostalCode() ?? ''));
+        $rec = $this->putAlpha($rec, 133, 162, (string) ($address->getCity() ?? ''));
+        if ($order->getDeliveryContact() !== null) {
+            $rec = $this->putAlpha($rec, 245, 294, $order->getDeliveryContact());
+        }
+        if ($order->getDeliveryNote() !== null) {
+            $rec = $this->putAlpha($rec, 295, 344, $order->getDeliveryNote());
+        }
 
         return $rec;
     }

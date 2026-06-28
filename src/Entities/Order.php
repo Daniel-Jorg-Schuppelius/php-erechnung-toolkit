@@ -38,6 +38,12 @@ final class Order extends DomainXmlDocumentAbstract {
     /** @var string[] */
     private array $notes = [];
 
+    /** Abweichende Lieferadresse (UGL ADR / UBL Delivery), optional. */
+    private ?PostalAddress $deliveryAddress = null;
+    private ?string $deliveryName = null;
+    private ?string $deliveryContact = null;
+    private ?string $deliveryNote = null;
+
     public function __construct(
         private string $id,
         private DateTimeImmutable $issueDate,
@@ -146,6 +152,38 @@ final class Order extends DomainXmlDocumentAbstract {
         $this->requestedDeliveryStartDate = $start;
         $this->requestedDeliveryEndDate = $end;
         return $this;
+    }
+
+    /**
+     * Sets a deviating delivery (ship-to) address — UGL ADR, UBL cac:Delivery.
+     */
+    public function setDeliveryAddress(
+        PostalAddress $address,
+        ?string $name = null,
+        ?string $contact = null,
+        ?string $note = null
+    ): self {
+        $this->deliveryAddress = $address;
+        $this->deliveryName = $name;
+        $this->deliveryContact = $contact;
+        $this->deliveryNote = $note;
+        return $this;
+    }
+
+    public function getDeliveryAddress(): ?PostalAddress {
+        return $this->deliveryAddress;
+    }
+
+    public function getDeliveryName(): ?string {
+        return $this->deliveryName;
+    }
+
+    public function getDeliveryContact(): ?string {
+        return $this->deliveryContact;
+    }
+
+    public function getDeliveryNote(): ?string {
+        return $this->deliveryNote;
     }
 
     /**

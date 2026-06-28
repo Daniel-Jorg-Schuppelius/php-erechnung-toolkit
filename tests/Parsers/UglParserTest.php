@@ -80,6 +80,28 @@ class UglParserTest extends BaseTestCase {
         $this->assertSame('Übergangsstück', $parsed->getLines()[0]->getItemName());
     }
 
+    public function test_roundtrip_delivery_address(): void {
+        $order = OrderBuilder::xbestellung('ORD-ADR-2')
+            ->withIssueDate(new DateTimeImmutable('2026-06-25'))
+            ->withBuyer('Installateur Müller')
+            ->withBuyerAddress('Rohrweg 1', '12345', 'Musterstadt')
+            ->withSeller('GC Grosshandel', 'DE123456789')
+            ->withSellerAddress('Lagerstr 2', '54321', 'Lieferstadt')
+            ->withDeliveryAddress('Baustelle 7', '20095', 'Hamburg', 'DE', 'Bauvorhaben Hafencity', null, 'Anlieferung Tor 3')
+            ->addLine('Heizungspumpe', 1, 120.00, UnitCode::PIECE, 'ART-4711')
+            ->build();
+
+        $parsed = $this->parser->parse($order->toUgl());
+
+        $this->assertSame('Bauvorhaben Hafencity', $parsed->getDeliveryName());
+        $this->assertSame('Anlieferung Tor 3', $parsed->getDeliveryNote());
+        $address = $parsed->getDeliveryAddress();
+        $this->assertNotNull($address);
+        $this->assertSame('Baustelle 7', $address->getStreetName());
+        $this->assertSame('20095', $address->getPostalCode());
+        $this->assertSame('Hamburg', $address->getCity());
+    }
+
     public function test_rejects_non_ugl_content(): void {
         $this->expectException(RuntimeException::class);
         $this->parser->parse("<?xml version=\"1.0\"?>\n<Order/>\n");

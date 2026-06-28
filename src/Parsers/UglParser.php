@@ -14,7 +14,7 @@ namespace ERechnungToolkit\Parsers;
 
 use CommonToolkit\Enums\CurrencyCode;
 use DateTimeImmutable;
-use ERechnungToolkit\Entities\{Order, OrderLine, Party};
+use ERechnungToolkit\Entities\{Order, OrderLine, Party, PostalAddress};
 use ERechnungToolkit\Enums\UnitCode;
 use ERRORToolkit\Traits\ErrorLog;
 use InvalidArgumentException;
@@ -57,6 +57,7 @@ final class UglParser {
         $records = preg_split('/\r\n|\r|\n/', $content) ?: [];
 
         $kop = null;
+        $adr = null;
         $lines = [];
         foreach ($records as $record) {
             if (strlen($record) < 3) {
@@ -65,6 +66,8 @@ final class UglParser {
             $type = substr($record, 0, 3);
             if ($type === 'KOP') {
                 $kop = $record;
+            } elseif ($type === 'ADR') {
+                $adr = $record;
             } elseif ($type === 'POA') {
                 $lines[] = $record;
             } elseif ($type === 'END') {
@@ -76,7 +79,7 @@ final class UglParser {
             $this->logErrorAndThrow(RuntimeException::class, 'Unknown format. Expected a UGL document with a KOP record.');
         }
 
-        return $this->buildOrder($kop, $lines);
+        return $this->buildOrder($kop, $adr, $lines);
     }
 
     /**
@@ -97,7 +100,7 @@ final class UglParser {
     /**
      * @param  list<string>  $poaRecords
      */
-    private function buildOrder(string $kop, array $poaRecords): Order {
+    private function buildOrder(string $kop, ?string $adr, array $poaRecords): Order {
         $id = $this->alpha($kop, 26, 40);
         $currency = CurrencyCode::tryFrom($this->alpha($kop, 114, 116) ?: 'EUR') ?? CurrencyCode::Euro;
         $issueDate = $this->date($this->alpha($kop, 162, 169)) ?? new DateTimeImmutable('now');
@@ -123,6 +126,20 @@ final class UglParser {
             salesOrderId: $salesOrderId,
             requestedDeliveryStartDate: $deliveryDate
         );
+
+        if ($adr !== null) {
+            $order->setDeliveryAddress(
+                new PostalAddress(
+                    streetName: $this->alpha($adr, 94, 123) ?: null,
+                    postalCode: $this->alpha($adr, 127, 132) ?: null,
+                    city: $this->alpha($adr, 133, 162) ?: null,
+                    country: $this->alpha($adr, 124, 126) ?: null
+                ),
+                $this->alpha($adr, 4, 33) ?: null,
+                $this->alpha($adr, 245, 294) ?: null,
+                $this->alpha($adr, 295, 344) ?: null
+            );
+        }
 
         foreach ($poaRecords as $poa) {
             $order->addLine($this->parseLine($poa));

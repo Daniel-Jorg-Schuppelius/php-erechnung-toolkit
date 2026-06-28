@@ -66,6 +66,11 @@ final class OrderBuilder {
     private ?DateTimeImmutable $requestedDeliveryStartDate = null;
     private ?DateTimeImmutable $requestedDeliveryEndDate = null;
 
+    private ?PostalAddress $deliveryAddress = null;
+    private ?string $deliveryName = null;
+    private ?string $deliveryContact = null;
+    private ?string $deliveryNote = null;
+
     /** @var OrderLine[] */
     private array $lines = [];
 
@@ -208,6 +213,29 @@ final class OrderBuilder {
         return $this;
     }
 
+    // === Delivery (ship-to) address — abweichende Lieferadresse ===
+
+    public function withDeliveryAddress(
+        string $street,
+        string $postalCode,
+        string $city,
+        CountryCode|string|null $country = null,
+        ?string $name = null,
+        ?string $contact = null,
+        ?string $note = null
+    ): self {
+        $this->deliveryAddress = new PostalAddress(
+            streetName: $street,
+            postalCode: $postalCode,
+            city: $city,
+            country: $country ?? CountryCode::Germany
+        );
+        $this->deliveryName = $name;
+        $this->deliveryContact = $contact;
+        $this->deliveryNote = $note;
+        return $this;
+    }
+
     // === Lines ===
 
     /**
@@ -315,6 +343,10 @@ final class OrderBuilder {
             requestedDeliveryStartDate: $this->requestedDeliveryStartDate,
             requestedDeliveryEndDate: $this->requestedDeliveryEndDate
         );
+
+        if ($this->deliveryAddress !== null) {
+            $order->setDeliveryAddress($this->deliveryAddress, $this->deliveryName, $this->deliveryContact, $this->deliveryNote);
+        }
 
         foreach ($this->lines as $line) {
             $order->addLine($line);
