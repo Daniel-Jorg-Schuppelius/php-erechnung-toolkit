@@ -14,7 +14,7 @@ namespace Tests\Generators;
 
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\OrderBuilder;
-use ERechnungToolkit\Entities\Order;
+use ERechnungToolkit\Entities\{AllowanceCharge, Order, OrderLine};
 use ERechnungToolkit\Enums\UnitCode;
 use ERechnungToolkit\Generators\UglGenerator;
 use Tests\Contracts\BaseTestCase;
@@ -119,6 +119,47 @@ class UglGeneratorTest extends BaseTestCase {
         $this->assertSame('Hamburg', $this->field($adr, 133, 162));             // Ort
         $this->assertSame('Anlieferung Tor 3', $this->field($adr, 295, 344));    // Lieferhinweis
         $this->assertSame('', $this->field($adr, 124, 126));                    // Land leer = DE
+    }
+
+    public function test_emits_pot_text_and_poz_surcharge_records(): void {
+        $order = OrderBuilder::xbestellung('ORD-PZT')
+            ->withIssueDate(new DateTimeImmutable('2026-06-25'))
+            ->withBuyer('Installateur Mueller')
+            ->withBuyerAddress('Rohrweg 1', '12345', 'Musterstadt')
+            ->withSeller('GC Grosshandel', 'DE123456789')
+            ->withSellerAddress('Lagerstr 2', '54321', 'Lieferstadt')
+            ->addOrderLine(new OrderLine(
+                id: '1', quantity: 2, unitCode: UnitCode::PIECE, netAmount: 240.00,
+                itemName: 'Pumpe', unitPrice: 120.00, sellersItemId: 'ART-1',
+                note: 'Bitte vormontiert liefern'
+            ))
+            ->build();
+        $order->addAllowanceCharge(AllowanceCharge::shipping(20.00));                  // FREIGHT → Typ 07
+        $order->addAllowanceCharge(AllowanceCharge::surcharge(5.00, 'Mindermengenzuschlag')); // → Typ 99
+
+        $records = $this->records($this->generator->generateOrder($order));
+
+        // KOP, POA, POT, POZ(07), POZ(99), END
+        $this->assertSame('POA', substr($records[1], 0, 3));
+        $this->assertSame('POT', substr($records[2], 0, 3));
+        $this->assertSame('POZ', substr($records[3], 0, 3));
+        $this->assertSame('POZ', substr($records[4], 0, 3));
+        $this->assertSame('END', substr($records[5], 0, 3));
+
+        // POT: Positionsbezug + Infotext + Textanfang-Kennzeichen.
+        $pot = $records[2];
+        $this->assertSame('0000000001', substr($pot, 3, 10));
+        $this->assertSame('Bitte vormontiert liefern', $this->field($pot, 24, 63));
+        $this->assertSame('T', $this->field($pot, 162, 162));
+
+        // POZ Fracht: Typ 07, Wert 20,00.
+        $this->assertSame('07', $this->field($records[3], 24, 25));
+        $this->assertSame('00000002000', substr($records[3], 116, 11));
+
+        // POZ custom: Typ 99 + Bezeichnung, Wert 5,00.
+        $this->assertSame('99', $this->field($records[4], 24, 25));
+        $this->assertSame('Mindermengenzuschlag', $this->field($records[4], 26, 105));
+        $this->assertSame('00000000500', substr($records[4], 116, 11));
     }
 
     public function test_no_adr_record_without_delivery_address(): void {

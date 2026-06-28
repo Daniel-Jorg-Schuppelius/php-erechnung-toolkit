@@ -14,8 +14,8 @@ namespace ERechnungToolkit\Parsers;
 
 use CommonToolkit\Enums\CurrencyCode;
 use DateTimeImmutable;
-use ERechnungToolkit\Entities\{Order, OrderLine, Party, PostalAddress};
-use ERechnungToolkit\Enums\UnitCode;
+use ERechnungToolkit\Entities\{AllowanceCharge, Order, OrderLine, Party, PostalAddress};
+use ERechnungToolkit\Enums\{AllowanceChargeReasonCode, UnitCode};
 use ERRORToolkit\Traits\ErrorLog;
 use InvalidArgumentException;
 use RuntimeException;
@@ -53,12 +53,15 @@ final class UglParser {
      * Parses a UGL order from a string.
      */
     public function parse(string $content): Order {
-        $content = $this->decode($content);
+        // Sätze bleiben Single-Byte (ISO-8859-1); Felder werden einzeln dekodiert,
+        // damit Byte-Positionen auch bei Mehrbyte-Inhalten stimmen.
         $records = preg_split('/\r\n|\r|\n/', $content) ?: [];
 
         $kop = null;
         $adr = null;
-        $lines = [];
+        $pozRecords = [];
+        /** @var list<array{poa: string, texts: list<string>}> $lineGroups */
+        $lineGroups = [];
         foreach ($records as $record) {
             if (strlen($record) < 3) {
                 continue;
@@ -69,7 +72,11 @@ final class UglParser {
             } elseif ($type === 'ADR') {
                 $adr = $record;
             } elseif ($type === 'POA') {
-                $lines[] = $record;
+                $lineGroups[] = ['poa' => $record, 'texts' => []];
+            } elseif ($type === 'POT' && $lineGroups !== []) {
+                $lineGroups[array_key_last($lineGroups)]['texts'][] = $record; // gehört zur vorigen POA
+            } elseif ($type === 'POZ') {
+                $pozRecords[] = $record;
             } elseif ($type === 'END') {
                 break;
             }
@@ -79,7 +86,7 @@ final class UglParser {
             $this->logErrorAndThrow(RuntimeException::class, 'Unknown format. Expected a UGL document with a KOP record.');
         }
 
-        return $this->buildOrder($kop, $adr, $lines);
+        return $this->buildOrder($kop, $adr, $lineGroups, $pozRecords);
     }
 
     /**
@@ -98,9 +105,10 @@ final class UglParser {
     }
 
     /**
-     * @param  list<string>  $poaRecords
+     * @param  list<array{poa: string, texts: list<string>}>  $lineGroups
+     * @param  list<string>  $pozRecords
      */
-    private function buildOrder(string $kop, ?string $adr, array $poaRecords): Order {
+    private function buildOrder(string $kop, ?string $adr, array $lineGroups, array $pozRecords): Order {
         $id = $this->alpha($kop, 26, 40);
         $currency = CurrencyCode::tryFrom($this->alpha($kop, 114, 116) ?: 'EUR') ?? CurrencyCode::Euro;
         $issueDate = $this->date($this->alpha($kop, 162, 169)) ?? new DateTimeImmutable('now');
@@ -141,14 +149,31 @@ final class UglParser {
             );
         }
 
-        foreach ($poaRecords as $poa) {
-            $order->addLine($this->parseLine($poa));
+        foreach ($lineGroups as $group) {
+            $order->addLine($this->parseLine($group['poa'], $group['texts']));
+        }
+
+        foreach ($pozRecords as $poz) {
+            $typeCode = $this->alpha($poz, 24, 25);
+            $reasonCode = match ($typeCode) {
+                '07' => AllowanceChargeReasonCode::FREIGHT,
+                '01' => AllowanceChargeReasonCode::PACKING,
+                default => null,
+            };
+            $label = $this->alpha($poz, 26, 105);
+            $reason = $label !== '' ? $label : ($reasonCode?->label() ?? 'Zuschlag');
+            $order->addAllowanceCharge(
+                AllowanceCharge::surcharge($this->num($poz, 117, 127, 2), $reason, $reasonCode, null, null)
+            );
         }
 
         return $order;
     }
 
-    private function parseLine(string $record): OrderLine {
+    /**
+     * @param  list<string>  $texts  POT records belonging to this position
+     */
+    private function parseLine(string $record, array $texts = []): OrderLine {
         $position = $this->num($record, 4, 13, 0);
         $unitRaw = $this->alpha($record, 184, 186);
 
@@ -161,13 +186,39 @@ final class UglParser {
             unitPrice: $this->num($record, 130, 140, 2),
             itemDescription: $this->alpha($record, 90, 129) ?: null,
             sellersItemId: $this->alpha($record, 24, 38) ?: null,
-            taxPercent: ($tax = $this->num($record, 189, 193, 2)) > 0 ? $tax : null
+            taxPercent: ($tax = $this->num($record, 189, 193, 2)) > 0 ? $tax : null,
+            note: $this->joinTexts($texts)
         );
     }
 
-    /** Reads a trimmed alphanumeric field (1-based inclusive positions). */
+    /**
+     * Joins the Infotext fields (24-63, 64-103, 104-143) of all POT records of a
+     * position into a single note. Decoding is per field, so byte positions stay
+     * correct even with multi-byte content in earlier records.
+     *
+     * @param  list<string>  $texts
+     */
+    private function joinTexts(array $texts): ?string {
+        if ($texts === []) {
+            return null;
+        }
+        $note = '';
+        foreach ($texts as $pot) {
+            $note .= $this->raw($pot, 24, 63) . $this->raw($pot, 64, 103) . $this->raw($pot, 104, 143);
+        }
+        $note = rtrim($note);
+
+        return $note !== '' ? $note : null;
+    }
+
+    /** Reads a trimmed alphanumeric field, decoded from the single-byte UGL codepage. */
     private function alpha(string $record, int $from, int $to): string {
-        return rtrim(substr($record, $from - 1, $to - $from + 1));
+        return rtrim($this->raw($record, $from, $to));
+    }
+
+    /** Reads a field's raw bytes and decodes them to UTF-8 (no trimming). */
+    private function raw(string $record, int $from, int $to): string {
+        return $this->decode(substr($record, $from - 1, $to - $from + 1));
     }
 
     /** Reads a numeric field with implicit decimals. */
@@ -190,9 +241,10 @@ final class UglParser {
         return $date !== false ? $date : null;
     }
 
-    private function decode(string $content): string {
-        $decoded = @iconv(self::ENCODING, 'UTF-8', $content);
+    /** Decodes a single-byte UGL field value to UTF-8. */
+    private function decode(string $value): string {
+        $decoded = @iconv(self::ENCODING, 'UTF-8', $value);
 
-        return $decoded !== false ? $decoded : $content;
+        return $decoded !== false ? $decoded : $value;
     }
 }

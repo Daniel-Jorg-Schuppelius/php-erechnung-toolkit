@@ -14,7 +14,8 @@ namespace Tests\Parsers;
 
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\OrderBuilder;
-use ERechnungToolkit\Enums\UnitCode;
+use ERechnungToolkit\Entities\OrderLine;
+use ERechnungToolkit\Enums\{AllowanceChargeReasonCode, UnitCode};
 use ERechnungToolkit\Parsers\UglParser;
 use RuntimeException;
 use Tests\Contracts\BaseTestCase;
@@ -100,6 +101,39 @@ class UglParserTest extends BaseTestCase {
         $this->assertSame('Baustelle 7', $address->getStreetName());
         $this->assertSame('20095', $address->getPostalCode());
         $this->assertSame('Hamburg', $address->getCity());
+    }
+
+    public function test_roundtrip_position_text_and_surcharges(): void {
+        $order = OrderBuilder::xbestellung('ORD-PZT')
+            ->withIssueDate(new DateTimeImmutable('2026-06-25'))
+            ->withBuyer('Installateur Mueller')
+            ->withBuyerAddress('Rohrweg 1', '12345', 'Musterstadt')
+            ->withSeller('GC Grosshandel', 'DE123456789')
+            ->withSellerAddress('Lagerstr 2', '54321', 'Lieferstadt')
+            ->addOrderLine(new OrderLine(
+                id: '1', quantity: 2, unitCode: UnitCode::PIECE, netAmount: 240.00,
+                itemName: 'Pumpe', unitPrice: 120.00, sellersItemId: 'ART-1',
+                note: 'Bitte vormontiert liefern'
+            ))
+            ->addCharge(5.00, 'Mindermengenzuschlag')
+            ->build();
+        $order->addAllowanceCharge(\ERechnungToolkit\Entities\AllowanceCharge::shipping(20.00));
+
+        $parsed = $this->parser->parse($order->toUgl());
+
+        // Positionstext (POT) landet als Note an der Position.
+        $this->assertSame('Bitte vormontiert liefern', $parsed->getLines()[0]->getNote());
+
+        // Zuschläge (POZ) als AllowanceCharges, Fracht mit erkanntem ReasonCode.
+        $charges = $parsed->getAllowanceCharges();
+        $this->assertCount(2, $charges);
+        $byAmount = [];
+        foreach ($charges as $c) {
+            $byAmount[(string) $c->getAmount()] = $c;
+        }
+        $this->assertSame('Mindermengenzuschlag', $byAmount['5']->getReason());
+        $this->assertSame(AllowanceChargeReasonCode::FREIGHT, $byAmount['20']->getReasonCode());
+        $this->assertTrue($byAmount['20']->isCharge());
     }
 
     public function test_rejects_non_ugl_content(): void {

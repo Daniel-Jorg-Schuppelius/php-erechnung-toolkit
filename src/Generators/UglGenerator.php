@@ -12,8 +12,8 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Generators;
 
-use ERechnungToolkit\Entities\{Order, OrderLine};
-use ERechnungToolkit\Enums\UnitCode;
+use ERechnungToolkit\Entities\{AllowanceCharge, Order, OrderLine};
+use ERechnungToolkit\Enums\{AllowanceChargeReasonCode, UnitCode};
 use ERRORToolkit\Traits\ErrorLog;
 
 /**
@@ -86,6 +86,16 @@ final class UglGenerator {
         foreach ($order->getLines() as $line) {
             $position++;
             $records[] = $this->poa($line, $position);
+            if ($line->getNote() !== null && trim($line->getNote()) !== '') {
+                $records[] = $this->pot($line, $position); // Positionstext direkt nach der Position
+            }
+        }
+
+        // Dokumentweite Zuschläge (Fracht, Verpackung …) als eigenständige POZ-Sätze.
+        foreach ($order->getAllowanceCharges() as $charge) {
+            if ($charge->isCharge()) {
+                $records[] = $this->poz($charge);
+            }
         }
 
         $records[] = $this->end();
@@ -171,6 +181,52 @@ final class UglGenerator {
         $rec = $this->putNum($rec, 189, 193, $line->getTaxPercent() ?? 0.0, 2);
 
         return $rec;
+    }
+
+    private function pot(OrderLine $line, int $position): string {
+        $note = (string) $line->getNote();
+
+        $rec = $this->blank();
+        $rec = $this->putAlpha($rec, 1, 3, 'POT');
+        $rec = $this->putNum($rec, 4, 13, (float) $position, 0);
+        $rec = $this->putNum($rec, 14, 23, 0.0, 0);
+        $rec = $this->putAlpha($rec, 24, 63, mb_substr($note, 0, 40));    // Infotext 1
+        $rec = $this->putAlpha($rec, 64, 103, mb_substr($note, 40, 40));  // Infotext 2
+        $rec = $this->putAlpha($rec, 104, 143, mb_substr($note, 80, 40)); // Infotext 3
+        $rec = $this->putAlpha($rec, 162, 162, 'T');                      // Kennzeichen Textanfang
+
+        return $rec;
+    }
+
+    private function poz(AllowanceCharge $charge): string {
+        [$type, $label] = $this->surchargeType($charge);
+
+        $rec = $this->blank();
+        $rec = $this->putAlpha($rec, 1, 3, 'POZ');
+        $rec = $this->putNum($rec, 4, 13, 0.0, 0);  // Positionsnummer HW (eigenständig)
+        $rec = $this->putNum($rec, 14, 23, 0.0, 0); // Positionsnummer GH
+        $rec = $this->putAlpha($rec, 24, 25, $type);
+        $rec = $this->putAlpha($rec, 26, 105, $label);
+        $rec = $this->putNum($rec, 106, 116, 0.0, 2);                  // Tagespreis (keine DEL-Notierung)
+        $rec = $this->putNum($rec, 117, 127, $charge->getAmount(), 2); // Netto-Positionswert (Zuschlagsgesamtwert)
+
+        return $rec;
+    }
+
+    /**
+     * Mappt einen Zuschlag auf UGL-Zuschlagstyp + Bezeichnung. Bekannte
+     * Datanorm-Typen ohne Pflicht-Bezeichnung; sonst Typ 99 mit Bezeichnung.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function surchargeType(AllowanceCharge $charge): array {
+        $type = match ($charge->getReasonCode()) {
+            AllowanceChargeReasonCode::FREIGHT => '07', // Fracht
+            AllowanceChargeReasonCode::PACKING => '01', // Verpackung
+            default => '99',                            // nicht definiert → Bezeichnung Pflicht
+        };
+
+        return [$type, (string) ($charge->getReason() ?? '')];
     }
 
     private function end(): string {
