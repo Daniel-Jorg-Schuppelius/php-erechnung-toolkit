@@ -1,0 +1,87 @@
+<?php
+/*
+ * Created on   : Sat Jun 27 2026
+ * Author       : Daniel Jörg Schuppelius
+ * Author Uri   : https://schuppelius.org
+ * Filename     : UglParserTest.php
+ * License      : AGPL-3.0-or-later
+ * License Uri  : https://www.gnu.org/licenses/agpl-3.0.html
+ */
+
+declare(strict_types=1);
+
+namespace Tests\Parsers;
+
+use DateTimeImmutable;
+use ERechnungToolkit\Builders\OrderBuilder;
+use ERechnungToolkit\Enums\UnitCode;
+use ERechnungToolkit\Parsers\UglParser;
+use RuntimeException;
+use Tests\Contracts\BaseTestCase;
+
+/**
+ * Tests for the UGL 5.0 order parser (round-trip against the generator).
+ */
+class UglParserTest extends BaseTestCase {
+    private UglParser $parser;
+
+    protected function setUp(): void {
+        parent::setUp();
+        $this->parser = new UglParser;
+    }
+
+    public function test_roundtrip_ugl_order(): void {
+        $order = OrderBuilder::xbestellung('ORD-2026-001')
+            ->withIssueDate(new DateTimeImmutable('2026-06-25'))
+            ->withBuyer('Installateur Müller')
+            ->withBuyerAddress('Rohrweg 1', '12345', 'Musterstadt')
+            ->withSeller('GC Grosshandel', 'DE123456789')
+            ->withSellerAddress('Lagerstr 2', '54321', 'Lieferstadt')
+            ->withRequestedDeliveryPeriod(new DateTimeImmutable('2026-07-01'))
+            ->addLine('Heizungspumpe', 5, 120.00, UnitCode::PIECE, 'ART-4711')
+            ->addLine('Kugelhahn', 2, 12.50, UnitCode::PIECE, 'ART-4712')
+            ->build();
+
+        $parsed = $this->parser->parse($order->toUgl());
+
+        $this->assertSame('ORD-2026-001', $parsed->getId());
+        $this->assertSame('2026-06-25', $parsed->getIssueDate()->format('Y-m-d'));
+        $this->assertSame('2026-07-01', $parsed->getRequestedDeliveryStartDate()?->format('Y-m-d'));
+        $this->assertSame('EUR', $parsed->getCurrency()->value);
+
+        $this->assertCount(2, $parsed->getLines());
+        $line = $parsed->getLines()[0];
+        $this->assertSame('Heizungspumpe', $line->getItemName());
+        $this->assertSame('ART-4711', $line->getSellersItemId());
+        $this->assertSame(5.0, $line->getQuantity());
+        // UGL kennt nur „ST" → C62/H87 normalisieren auf H87 (Stück).
+        $this->assertSame(UnitCode::UNIT_H87, $line->getUnitCode());
+        $this->assertSame(120.00, $line->getUnitPrice());
+        $this->assertSame(600.00, $line->getNetAmount());
+
+        $second = $parsed->getLines()[1];
+        $this->assertSame('Kugelhahn', $second->getItemName());
+        $this->assertSame(25.00, $second->getNetAmount()); // 2 * 12.50
+    }
+
+    public function test_roundtrip_preserves_umlauts(): void {
+        $order = OrderBuilder::xbestellung('ORD-2026-009')
+            ->withIssueDate(new DateTimeImmutable('2026-06-25'))
+            ->withBuyer('Müller & Söhne GmbH')
+            ->withBuyerAddress('Straße 1', '12345', 'Köln')
+            ->withSeller('Großhandel', 'DE1')
+            ->withSellerAddress('Weg 2', '54321', 'Ort')
+            ->addLine('Übergangsstück', 1, 9.90)
+            ->build();
+
+        $parsed = $this->parser->parse($order->toUgl());
+
+        $this->assertSame('Müller & Söhne GmbH', $parsed->getBuyer()->getName());
+        $this->assertSame('Übergangsstück', $parsed->getLines()[0]->getItemName());
+    }
+
+    public function test_rejects_non_ugl_content(): void {
+        $this->expectException(RuntimeException::class);
+        $this->parser->parse("<?xml version=\"1.0\"?>\n<Order/>\n");
+    }
+}

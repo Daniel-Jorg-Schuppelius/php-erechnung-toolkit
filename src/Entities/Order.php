@@ -16,7 +16,7 @@ use CommonToolkit\Contracts\Abstracts\XML\DomainXmlDocumentAbstract;
 use CommonToolkit\Enums\CurrencyCode;
 use DateTimeImmutable;
 use ERechnungToolkit\Enums\{OrderProfile, OrderXProfile};
-use ERechnungToolkit\Generators\{OpenTransOrderGenerator, OrderGenerator, OrderXGenerator};
+use ERechnungToolkit\Generators\{OpenTransOrderGenerator, OrderGenerator, OrderXGenerator, UglGenerator};
 
 /**
  * Order document (UBL Order — Peppol BIS Order only / XBestellung).
@@ -253,6 +253,13 @@ final class Order extends DomainXmlDocumentAbstract {
      */
     public function toOpenTransXml(): string {
         return (new OpenTransOrderGenerator)->generateOrder($this);
+    }
+
+    /**
+     * Generates a UGL 5.0 order (GC-Gruppe / SHK trade, fixed-width ASCII).
+     */
+    public function toUgl(string $anfrageart = UglGenerator::TYPE_ORDER): string {
+        return (new UglGenerator)->generateOrder($this, $anfrageart);
     }
 
     /**
