@@ -5,6 +5,7 @@
             "required": false,
             "description": "KoSIT Validator (XRechnung/EN16931) - eigenes Jar via 'path' überschreibbar",
             "url": "https://github.com/itplr-kosit/validator/releases",
+            "assetPattern": "*-standalone.jar",
             "arguments": [
                 "-r",
                 "[REPOSITORY]",
