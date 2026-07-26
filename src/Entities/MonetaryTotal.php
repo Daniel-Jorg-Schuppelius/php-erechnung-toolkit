@@ -20,20 +20,22 @@ use CommonToolkit\Enums\CurrencyCode;
  * Represents the monetary totals of the invoice.
  */
 final class MonetaryTotal {
+    private CurrencyCode $currency;
+
     public function __construct(
         private float $lineExtensionAmount,
         private float $taxExclusiveAmount,
         private float $taxInclusiveAmount,
         private float $payableAmount,
-        private CurrencyCode|string $currency,
+        CurrencyCode|string $currency,
         private float $allowanceTotalAmount = 0.0,
         private float $chargeTotalAmount = 0.0,
         private float $prepaidAmount = 0.0,
         private float $payableRoundingAmount = 0.0
     ) {
-        if (is_string($this->currency)) {
-            $this->currency = CurrencyCode::tryFrom($this->currency) ?? CurrencyCode::fromSymbol($this->currency);
-        }
+        $this->currency = is_string($currency)
+            ? (CurrencyCode::tryFrom($currency) ?? CurrencyCode::fromSymbol($currency))
+            : $currency;
     }
 
     /**

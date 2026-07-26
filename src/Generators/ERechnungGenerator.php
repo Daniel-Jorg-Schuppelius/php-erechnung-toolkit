@@ -16,6 +16,7 @@ use DOMDocument;
 use DOMElement;
 use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party};
 use ERRORToolkit\Traits\ErrorLog;
+use RuntimeException;
 
 /**
  * Generator for E-Rechnung XML output.
@@ -324,7 +325,12 @@ final class ERechnungGenerator {
             $root->appendChild($lineElem);
         }
 
-        return $dom->saveXML();
+        $xml = $dom->saveXML();
+        if ($xml === false) {
+            self::logErrorAndThrow(RuntimeException::class, 'XML-Dokument konnte nicht serialisiert werden.');
+        }
+
+        return $xml;
     }
 
     /**
@@ -568,7 +574,12 @@ final class ERechnungGenerator {
         $transaction->appendChild($settlement);
         $root->appendChild($transaction);
 
-        return $dom->saveXML();
+        $xml = $dom->saveXML();
+        if ($xml === false) {
+            self::logErrorAndThrow(RuntimeException::class, 'XML-Dokument konnte nicht serialisiert werden.');
+        }
+
+        return $xml;
     }
 
     // === Helper Methods ===
@@ -617,7 +628,7 @@ final class ERechnungGenerator {
 
         if ($party->hasVatId()) {
             $taxReg = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTaxRegistration');
-            $taxId = $this->addCiiElement($dom, $taxReg, 'ram:ID', $party->getVatId());
+            $taxId = $this->addCiiElement($dom, $taxReg, 'ram:ID', $party->getVatId() ?? '');
             $taxId->setAttribute('schemeID', 'VA');
             $parent->appendChild($taxReg);
         }
@@ -653,8 +664,8 @@ final class ERechnungGenerator {
 
         if ($party->hasEndpoint()) {
             $uriComm = $dom->createElementNS(self::RAM_NS, 'ram:URIUniversalCommunication');
-            $uriId = $this->addCiiElement($dom, $uriComm, 'ram:URIID', $party->getEndpointId());
-            $uriId->setAttribute('schemeID', $party->getEndpointScheme());
+            $uriId = $this->addCiiElement($dom, $uriComm, 'ram:URIID', $party->getEndpointId() ?? '');
+            $uriId->setAttribute('schemeID', $party->getEndpointScheme() ?? '');
             $parent->appendChild($uriComm);
         }
 

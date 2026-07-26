@@ -30,7 +30,7 @@ class OrderXPdfGeneratorTest extends BaseTestCase {
     }
 
     public function test_is_available_returns_bool(): void {
-        $this->assertIsBool($this->generator->isAvailable());
+        $this->assertContains($this->generator->isAvailable(), [true, false]);
     }
 
     public function test_generates_hybrid_pdf(): void {

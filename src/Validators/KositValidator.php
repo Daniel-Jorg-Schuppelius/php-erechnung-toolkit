@@ -16,6 +16,7 @@ use CommonToolkit\Helper\FileSystem\{File, Folder};
 use CommonToolkit\Helper\Java;
 use DOMDocument;
 use DOMElement;
+use DOMNode;
 use DOMXPath;
 use ERechnungToolkit\Contracts\ValidatorInterface;
 use ERechnungToolkit\Enums\ValidationSeverity;
@@ -231,21 +232,24 @@ final class KositValidator implements ValidatorInterface {
 
         $xpath = new DOMXPath($dom);
 
-        $reportNode = $xpath->query('/*[local-name()="report"]')->item(0);
+        $reportNodes = $xpath->query('/*[local-name()="report"]');
+        $reportNode = $reportNodes !== false ? $reportNodes->item(0) : null;
         $valid = $reportNode instanceof DOMElement && $reportNode->getAttribute('valid') === 'true';
 
-        $accepted = $xpath->query('//*[local-name()="assessment"]/*[local-name()="accept"]')->length > 0;
+        $acceptNodes = $xpath->query('//*[local-name()="assessment"]/*[local-name()="accept"]');
+        $accepted = $acceptNodes !== false && $acceptNodes->length > 0;
 
-        $scenarioNode = $xpath->query(
+        $scenarioNodes = $xpath->query(
             '//*[local-name()="scenarioMatched"]//*[local-name()="scenario"]/*[local-name()="name"]'
-        )->item(0);
-        $scenarioName = $scenarioNode?->textContent !== null ? trim($scenarioNode->textContent) : null;
+        );
+        $scenarioNode = $scenarioNodes !== false ? $scenarioNodes->item(0) : null;
+        $scenarioName = $scenarioNode instanceof DOMNode ? trim($scenarioNode->textContent) : null;
         if ($scenarioName === '') {
             $scenarioName = null;
         }
 
         $messages = [];
-        foreach ($xpath->query('//*[local-name()="message"]') as $messageNode) {
+        foreach ($xpath->query('//*[local-name()="message"]') ?: [] as $messageNode) {
             if (!$messageNode instanceof DOMElement) {
                 continue;
             }

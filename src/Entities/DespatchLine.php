@@ -22,10 +22,12 @@ use ERechnungToolkit\Enums\UnitCode;
  * back to the originating order (cac:OrderLineReference/cbc:LineID).
  */
 final class DespatchLine {
+    private UnitCode $unitCode;
+
     public function __construct(
         private string $id,
         private float $deliveredQuantity,
-        private UnitCode|string $unitCode,
+        UnitCode|string $unitCode,
         private string $itemName,
         private ?string $orderLineId = null,
         private ?string $itemDescription = null,
@@ -37,9 +39,9 @@ final class DespatchLine {
         private ?string $backorderReason = null,
         private ?string $note = null
     ) {
-        if (is_string($this->unitCode)) {
-            $this->unitCode = UnitCode::tryFrom($this->unitCode) ?? UnitCode::PIECE;
-        }
+        $this->unitCode = is_string($unitCode)
+            ? (UnitCode::tryFrom($unitCode) ?? UnitCode::PIECE)
+            : $unitCode;
     }
 
     public function getId(): string {

@@ -28,7 +28,7 @@ class ZugferdPdfParserTest extends BaseTestCase {
 
     public function test_is_available_returns_bool(): void {
         $result = $this->parser->isAvailable();
-        $this->assertIsBool($result);
+        $this->assertContains($result, [true, false]);
     }
 
     public function test_parse_file_with_pdf_toolkit(): void {
@@ -87,7 +87,6 @@ class ZugferdPdfParserTest extends BaseTestCase {
 
         try {
             $attachments = $this->parser->listAttachments($tempPdf);
-            $this->assertIsArray($attachments);
             $this->assertEmpty($attachments, 'Regular PDF should have no attachments');
         } finally {
             unlink($tempPdf);

@@ -16,6 +16,7 @@ use CommonToolkit\Enums\CurrencyCode;
 use DateTimeImmutable;
 use DOMDocument;
 use DOMElement;
+use DOMNode;
 use DOMXPath;
 use ERechnungToolkit\Entities\{Order, OrderLine, Party, PostalAddress};
 use ERechnungToolkit\Enums\UnitCode;
@@ -107,7 +108,7 @@ final class OpenTransOrderParser {
             salesOrderId: $this->getValue("{$info}/ot:ORDER_SUPPLIER_ORDER_ID")
         );
 
-        foreach ($this->xpath->query('/ot:ORDER/ot:ORDER_ITEM_LIST/ot:ORDER_ITEM') as $itemNode) {
+        foreach ($this->xpath->query('/ot:ORDER/ot:ORDER_ITEM_LIST/ot:ORDER_ITEM') ?: [] as $itemNode) {
             if (!$itemNode instanceof DOMElement) {
                 continue;
             }
@@ -168,20 +169,22 @@ final class OpenTransOrderParser {
 
     private function getValue(string $xpath): ?string {
         $nodes = $this->xpath->query($xpath);
-        if ($nodes === false || $nodes->length === 0) {
+        if ($nodes === false) {
             return null;
         }
+        $found = $nodes->item(0);
 
-        return trim($nodes->item(0)->textContent);
+        return $found instanceof DOMNode ? trim($found->textContent) : null;
     }
 
     private function getNodeValue(DOMElement $node, string $xpath): ?string {
         $nodes = $this->xpath->query($xpath, $node);
-        if ($nodes === false || $nodes->length === 0) {
+        if ($nodes === false) {
             return null;
         }
+        $found = $nodes->item(0);
 
-        return trim($nodes->item(0)->textContent);
+        return $found instanceof DOMNode ? trim($found->textContent) : null;
     }
 
     private function getDate(string $xpath): ?DateTimeImmutable {

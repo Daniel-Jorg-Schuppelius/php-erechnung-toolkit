@@ -14,6 +14,7 @@ namespace Tests\Generators;
 
 use DateTimeImmutable;
 use DOMDocument;
+use DOMElement;
 use DOMXPath;
 use ERechnungToolkit\Builders\DespatchAdviceBuilder;
 use ERechnungToolkit\Enums\UnitCode;
@@ -56,8 +57,10 @@ class DespatchAdviceGeneratorTest extends BaseTestCase {
         $xml = $this->buildXml();
         $dom = new DOMDocument;
         $this->assertTrue($dom->loadXML($xml), 'Despatch Advice XML should be well-formed');
-        $this->assertSame('DespatchAdvice', $dom->documentElement->localName);
-        $this->assertSame(self::DA_NS, $dom->documentElement->namespaceURI);
+        $root = $dom->documentElement;
+        $this->assertNotNull($root);
+        $this->assertSame('DespatchAdvice', $root->localName);
+        $this->assertSame(self::DA_NS, $root->namespaceURI);
     }
 
     public function test_emits_identifiers_and_order_reference(): void {
@@ -65,14 +68,14 @@ class DespatchAdviceGeneratorTest extends BaseTestCase {
 
         $this->assertSame(
             'urn:fdc:peppol.eu:poacc:trns:despatch_advice:3',
-            $xpath->query('/ubl:DespatchAdvice/cbc:CustomizationID')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:DespatchAdvice/cbc:CustomizationID')
         );
         $this->assertSame(
             'urn:fdc:peppol.eu:poacc:bis:despatch_advice:3',
-            $xpath->query('/ubl:DespatchAdvice/cbc:ProfileID')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:DespatchAdvice/cbc:ProfileID')
         );
-        $this->assertSame('351', $xpath->query('/ubl:DespatchAdvice/cbc:DespatchAdviceTypeCode')->item(0)->textContent);
-        $this->assertSame('ORD-2026-001', $xpath->query('/ubl:DespatchAdvice/cac:OrderReference/cbc:ID')->item(0)->textContent);
+        $this->assertSame('351', $this->xpathText($xpath, '/ubl:DespatchAdvice/cbc:DespatchAdviceTypeCode'));
+        $this->assertSame('ORD-2026-001', $this->xpathText($xpath, '/ubl:DespatchAdvice/cac:OrderReference/cbc:ID'));
     }
 
     public function test_emits_supplier_and_customer_parties(): void {
@@ -80,41 +83,41 @@ class DespatchAdviceGeneratorTest extends BaseTestCase {
 
         $this->assertSame(
             'Lieferant GmbH',
-            $xpath->query('/ubl:DespatchAdvice/cac:DespatchSupplierParty/cac:Party/cac:PartyName/cbc:Name')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:DespatchAdvice/cac:DespatchSupplierParty/cac:Party/cac:PartyName/cbc:Name')
         );
         $this->assertSame(
             'Besteller AG',
-            $xpath->query('/ubl:DespatchAdvice/cac:DeliveryCustomerParty/cac:Party/cac:PartyName/cbc:Name')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:DespatchAdvice/cac:DeliveryCustomerParty/cac:Party/cac:PartyName/cbc:Name')
         );
     }
 
     public function test_emits_shipment_and_delivery_date(): void {
         $xpath = $this->xpath($this->buildXml());
 
-        $this->assertSame('1', $xpath->query('/ubl:DespatchAdvice/cac:Shipment/cbc:ID')->item(0)->textContent);
+        $this->assertSame('1', $this->xpathText($xpath, '/ubl:DespatchAdvice/cac:Shipment/cbc:ID'));
         $this->assertSame(
             '2026-06-30',
-            $xpath->query('/ubl:DespatchAdvice/cac:Shipment/cac:Delivery/cbc:ActualDeliveryDate')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:DespatchAdvice/cac:Shipment/cac:Delivery/cbc:ActualDeliveryDate')
         );
     }
 
     public function test_emits_despatch_lines_with_order_line_reference(): void {
         $xpath = $this->xpath($this->buildXml());
 
-        $lines = $xpath->query('/ubl:DespatchAdvice/cac:DespatchLine');
-        $this->assertSame(2, $lines->length);
+        $this->assertSame(2, $this->xpathCount($xpath, '/ubl:DespatchAdvice/cac:DespatchLine'));
 
-        $qty = $xpath->query('/ubl:DespatchAdvice/cac:DespatchLine[1]/cbc:DeliveredQuantity')->item(0);
+        $qty = $this->xpathNode($xpath, '/ubl:DespatchAdvice/cac:DespatchLine[1]/cbc:DeliveredQuantity');
+        $this->assertInstanceOf(DOMElement::class, $qty);
         $this->assertSame('5.00', $qty->textContent);
         $this->assertSame('C62', $qty->getAttribute('unitCode'));
 
         $this->assertSame(
             '1',
-            $xpath->query('/ubl:DespatchAdvice/cac:DespatchLine[1]/cac:OrderLineReference/cbc:LineID')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:DespatchAdvice/cac:DespatchLine[1]/cac:OrderLineReference/cbc:LineID')
         );
         $this->assertSame(
             'Bürostuhl',
-            $xpath->query('/ubl:DespatchAdvice/cac:DespatchLine[1]/cac:Item/cbc:Name')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:DespatchAdvice/cac:DespatchLine[1]/cac:Item/cbc:Name')
         );
     }
 }

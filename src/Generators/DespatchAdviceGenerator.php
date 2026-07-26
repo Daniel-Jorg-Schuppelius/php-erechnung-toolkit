@@ -16,6 +16,7 @@ use DOMDocument;
 use DOMElement;
 use ERechnungToolkit\Entities\{DespatchAdvice, DespatchLine, PostalAddress};
 use ERRORToolkit\Traits\ErrorLog;
+use RuntimeException;
 
 /**
  * Generator for UBL Despatch Advice XML (Peppol BIS Despatch Advice).
@@ -93,7 +94,12 @@ final class DespatchAdviceGenerator {
             $root->appendChild($this->createDespatchLine($dom, $line));
         }
 
-        return $dom->saveXML();
+        $xml = $dom->saveXML();
+        if ($xml === false) {
+            self::logErrorAndThrow(RuntimeException::class, 'XML-Dokument konnte nicht serialisiert werden.');
+        }
+
+        return $xml;
     }
 
     private function createShipment(DOMDocument $dom, DespatchAdvice $advice): DOMElement {
