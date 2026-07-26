@@ -173,8 +173,10 @@ class ERechnungDocumentTest extends BaseTestCase {
         $discount = AllowanceCharge::discount(Money::of('100.00', CurrencyCode::Euro), '10% Rabatt');
         $document->addAllowanceCharge($discount);
 
-        $this->assertSame('1000.00', $document->getMonetaryTotal()->getLineExtensionAmount()->getAmount());
-        $this->assertSame('100.00', $document->getMonetaryTotal()->getAllowanceTotalAmount()->getAmount());
+        $monetaryTotal = $document->getMonetaryTotal();
+        $this->assertNotNull($monetaryTotal);
+        $this->assertSame('1000.00', $monetaryTotal->getLineExtensionAmount()->getAmount());
+        $this->assertSame('100.00', $monetaryTotal->getAllowanceTotalAmount()->getAmount());
         $this->assertSame('900.00', $document->getNetAmount()->getAmount()); // 1000 - 100
     }
 
@@ -193,8 +195,10 @@ class ERechnungDocumentTest extends BaseTestCase {
         $shipping = AllowanceCharge::shipping(Money::of('5.95', CurrencyCode::Euro));
         $document->addAllowanceCharge($shipping);
 
-        $this->assertSame('100.00', $document->getMonetaryTotal()->getLineExtensionAmount()->getAmount());
-        $this->assertSame('5.95', $document->getMonetaryTotal()->getChargeTotalAmount()->getAmount());
+        $monetaryTotal = $document->getMonetaryTotal();
+        $this->assertNotNull($monetaryTotal);
+        $this->assertSame('100.00', $monetaryTotal->getLineExtensionAmount()->getAmount());
+        $this->assertSame('5.95', $monetaryTotal->getChargeTotalAmount()->getAmount());
         $this->assertSame('105.95', $document->getNetAmount()->getAmount()); // 100 + 5.95
     }
 

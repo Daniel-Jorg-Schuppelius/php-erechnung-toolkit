@@ -99,7 +99,7 @@ final class PaymentTerms {
             $discountedAmount = $this->calculateDiscountedAmount($amount);
             $parts[] = sprintf(
                 "Bei Zahlung bis zum %s: %.2f%% Skonto (%s %s)",
-                $discountDeadline?->format('d.m.Y') ?? '',
+                $discountDeadline->format('d.m.Y'),
                 $this->discountPercent,
                 $discountedAmount->getAmount(),
                 $discountedAmount->getCurrency()->value

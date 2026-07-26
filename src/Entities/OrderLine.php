@@ -29,7 +29,7 @@ final class OrderLine {
     public function __construct(
         private string $id,
         private float $quantity,
-        private UnitCode|string $unitCode,
+        UnitCode|string $unitCode,
         private Money $netAmount,
         private string $itemName,
         private Money $unitPrice,

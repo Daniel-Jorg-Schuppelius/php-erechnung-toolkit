@@ -21,14 +21,10 @@ use ERechnungToolkit\Enums\TaxCategory;
  *
  * Represents VAT breakdown information for the invoice. Die Währung ergibt sich
  * aus dem Steuerbetrag ({@see Money}) — kein getrenntes Währungsfeld mehr.
- *
- * @param TaxSubtotal[] $subtotals
  */
 final class TaxTotal {
     /** @var TaxSubtotal[] */
     private array $subtotals = [];
-
-    private CurrencyCode $currency;
 
     /**
      * @param TaxSubtotal[] $subtotals
@@ -65,7 +61,7 @@ final class TaxTotal {
      */
     private function recalculateTaxAmount(): void {
         $this->taxAmount = Money::sum(
-            array_map(fn(TaxSubtotal $sub): Money => $sub->getTaxAmount(), $this->subtotals),
+            array_map(fn (TaxSubtotal $sub): Money => $sub->getTaxAmount(), $this->subtotals),
             $this->taxAmount->getCurrency()
         );
     }
@@ -77,7 +73,7 @@ final class TaxTotal {
      */
     public static function fromSubtotals(array $subtotals, CurrencyCode $currency): self {
         $taxAmount = Money::sum(
-            array_map(fn(TaxSubtotal $sub): Money => $sub->getTaxAmount(), $subtotals),
+            array_map(fn (TaxSubtotal $sub): Money => $sub->getTaxAmount(), $subtotals),
             $currency
         );
 

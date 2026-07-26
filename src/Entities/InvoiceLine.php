@@ -31,7 +31,7 @@ final class InvoiceLine {
     public function __construct(
         private string $id,
         private float $quantity,
-        private UnitCode|string $unitCode,
+        UnitCode|string $unitCode,
         private Money $netAmount,
         private string $itemName,
         private Money $unitPrice,
@@ -153,8 +153,8 @@ final class InvoiceLine {
     public function getTotalAllowances(): Money {
         return Money::sum(
             array_map(
-                fn(AllowanceCharge $ac): Money => $ac->getAmount(),
-                array_filter($this->allowanceCharges, fn(AllowanceCharge $ac): bool => $ac->isAllowance())
+                fn (AllowanceCharge $ac): Money => $ac->getAmount(),
+                array_filter($this->allowanceCharges, fn (AllowanceCharge $ac): bool => $ac->isAllowance())
             ),
             $this->netAmount->getCurrency()
         );
@@ -166,8 +166,8 @@ final class InvoiceLine {
     public function getTotalCharges(): Money {
         return Money::sum(
             array_map(
-                fn(AllowanceCharge $ac): Money => $ac->getAmount(),
-                array_filter($this->allowanceCharges, fn(AllowanceCharge $ac): bool => $ac->isCharge())
+                fn (AllowanceCharge $ac): Money => $ac->getAmount(),
+                array_filter($this->allowanceCharges, fn (AllowanceCharge $ac): bool => $ac->isCharge())
             ),
             $this->netAmount->getCurrency()
         );

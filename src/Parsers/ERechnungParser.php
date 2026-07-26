@@ -622,23 +622,9 @@ final class ERechnungParser {
     }
 
     private function parseCiiLine(DOMElement $node, CurrencyCode $currency): InvoiceLine {
-        $id = '';
-        $assocDocNodes = $this->xpath->query('ram:AssociatedDocumentLineDocument/ram:LineID', $node);
-        if ($assocDocNodes->length > 0) {
-            $id = $assocDocNodes->item(0)->textContent;
-        }
-
-        $itemName = '';
-        $nameNodes = $this->xpath->query('ram:SpecifiedTradeProduct/ram:Name', $node);
-        if ($nameNodes->length > 0) {
-            $itemName = $nameNodes->item(0)->textContent;
-        }
-
-        $itemDescription = null;
-        $descNodes = $this->xpath->query('ram:SpecifiedTradeProduct/ram:Description', $node);
-        if ($descNodes->length > 0) {
-            $itemDescription = $descNodes->item(0)->textContent;
-        }
+        $id = $this->firstText('ram:AssociatedDocumentLineDocument/ram:LineID', $node) ?? '';
+        $itemName = $this->firstText('ram:SpecifiedTradeProduct/ram:Name', $node) ?? '';
+        $itemDescription = $this->firstText('ram:SpecifiedTradeProduct/ram:Description', $node);
 
         $quantity = 0.0;
         $unitCode = UnitCode::PIECE;
@@ -650,17 +636,15 @@ final class ERechnungParser {
             }
         }
 
-        $unitPrice = Money::zero($currency);
-        $priceNodes = $this->xpath->query('ram:SpecifiedLineTradeAgreement/ram:NetPriceProductTradePrice/ram:ChargeAmount', $node);
-        if ($priceNodes->length > 0) {
-            $unitPrice = $this->money($priceNodes->item(0)?->textContent, $currency);
-        }
+        $unitPrice = $this->money(
+            $this->firstText('ram:SpecifiedLineTradeAgreement/ram:NetPriceProductTradePrice/ram:ChargeAmount', $node),
+            $currency
+        );
 
-        $netAmount = Money::zero($currency);
-        $netNodes = $this->xpath->query('ram:SpecifiedLineTradeSettlement/ram:SpecifiedTradeSettlementLineMonetarySummation/ram:LineTotalAmount', $node);
-        if ($netNodes->length > 0) {
-            $netAmount = $this->money($netNodes->item(0)?->textContent, $currency);
-        }
+        $netAmount = $this->money(
+            $this->firstText('ram:SpecifiedLineTradeSettlement/ram:SpecifiedTradeSettlementLineMonetarySummation/ram:LineTotalAmount', $node),
+            $currency
+        );
 
         $taxCategoryCode = 'S';
         $taxPercent = 0.0;
