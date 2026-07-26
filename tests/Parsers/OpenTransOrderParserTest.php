@@ -77,9 +77,11 @@ class OpenTransOrderParserTest extends BaseTestCase {
         $parsed = $this->parser->parse($order->toOpenTransXml());
 
         $this->assertSame('SUP-77', $parsed->getSalesOrderId());
-        $this->assertSame('Kaufstr. 3', $parsed->getBuyer()->getPostalAddress()?->getStreetName());
-        $this->assertSame('10115', $parsed->getBuyer()->getPostalAddress()?->getPostalCode());
-        $this->assertSame('Berlin', $parsed->getBuyer()->getPostalAddress()?->getCity());
+        $address = $parsed->getBuyer()->getPostalAddress();
+        $this->assertNotNull($address);
+        $this->assertSame('Kaufstr. 3', $address->getStreetName());
+        $this->assertSame('10115', $address->getPostalCode());
+        $this->assertSame('Berlin', $address->getCity());
     }
 
     public function test_rejects_non_opentrans_document(): void {

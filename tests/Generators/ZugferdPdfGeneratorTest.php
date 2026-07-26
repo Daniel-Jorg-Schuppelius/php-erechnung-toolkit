@@ -30,7 +30,7 @@ class ZugferdPdfGeneratorTest extends BaseTestCase {
 
     public function test_is_available_returns_bool(): void {
         $result = $this->generator->isAvailable();
-        $this->assertIsBool($result);
+        $this->assertContains($result, [true, false]);
     }
 
     public function test_generate_with_pdf_toolkit(): void {
@@ -82,6 +82,7 @@ class ZugferdPdfGeneratorTest extends BaseTestCase {
 
             // PDF-Header prüfen
             $content = file_get_contents($tempFile);
+            $this->assertNotFalse($content);
             $this->assertStringStartsWith('%PDF-', $content);
         } finally {
             if (file_exists($tempFile)) {
@@ -141,8 +142,8 @@ HTML;
             $result = $generator->generate($invoice);
             $this->assertNull($result);
         } else {
-            // PDF-Toolkit ist verfügbar, Test als bestanden markieren
-            $this->assertTrue(true);
+            // PDF-Toolkit ist verfügbar, der Null-Rückgabe-Pfad ist hier nicht testbar.
+            $this->addToAssertionCount(1);
         }
     }
 }

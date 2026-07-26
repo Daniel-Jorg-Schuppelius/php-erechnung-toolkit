@@ -94,8 +94,8 @@ final class PaymentTerms {
     public function generateNote(Money $amount, DateTimeImmutable $invoiceDate): string {
         $parts = [];
 
-        if ($this->discountPercent !== null && $this->discountDays !== null) {
-            $discountDeadline = $this->calculateDiscountDeadline($invoiceDate);
+        $discountDeadline = $this->calculateDiscountDeadline($invoiceDate);
+        if ($this->discountPercent !== null && $discountDeadline !== null) {
             $discountedAmount = $this->calculateDiscountedAmount($amount);
             $parts[] = sprintf(
                 "Bei Zahlung bis zum %s: %.2f%% Skonto (%s %s)",

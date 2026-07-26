@@ -59,8 +59,8 @@ final class UblSerializer {
 
         // EndpointID
         if ($party->hasEndpoint()) {
-            $endpoint = $this->element($dom, $partyElem, 'cbc:EndpointID', $party->getEndpointId());
-            $endpoint->setAttribute('schemeID', $party->getEndpointScheme());
+            $endpoint = $this->element($dom, $partyElem, 'cbc:EndpointID', $party->getEndpointId() ?? '');
+            $endpoint->setAttribute('schemeID', $party->getEndpointScheme() ?? '');
         }
 
         // PartyIdentification
@@ -87,7 +87,7 @@ final class UblSerializer {
         // PartyTaxScheme - VAT identifier (BT-31) with TaxScheme/ID = VAT
         if ($party->hasVatId()) {
             $partyTaxScheme = $dom->createElementNS(self::CAC_NS, 'cac:PartyTaxScheme');
-            $this->element($dom, $partyTaxScheme, 'cbc:CompanyID', $party->getVatId());
+            $this->element($dom, $partyTaxScheme, 'cbc:CompanyID', $party->getVatId() ?? '');
             $taxScheme = $dom->createElementNS(self::CAC_NS, 'cac:TaxScheme');
             $this->element($dom, $taxScheme, 'cbc:ID', 'VAT');
             $partyTaxScheme->appendChild($taxScheme);

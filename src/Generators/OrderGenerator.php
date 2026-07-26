@@ -16,6 +16,7 @@ use DOMDocument;
 use DOMElement;
 use ERechnungToolkit\Entities\{Order, OrderLine};
 use ERRORToolkit\Traits\ErrorLog;
+use RuntimeException;
 
 /**
  * Generator for UBL Order XML output (Peppol BIS Order only / XBestellung).
@@ -125,7 +126,12 @@ final class OrderGenerator {
             $root->appendChild($this->createOrderLine($dom, $line, $currency));
         }
 
-        return $dom->saveXML();
+        $xml = $dom->saveXML();
+        if ($xml === false) {
+            self::logErrorAndThrow(RuntimeException::class, 'XML-Dokument konnte nicht serialisiert werden.');
+        }
+
+        return $xml;
     }
 
     private function appendDelivery(DOMDocument $dom, DOMElement $root, Order $order): void {

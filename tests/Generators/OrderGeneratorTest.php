@@ -14,6 +14,7 @@ namespace Tests\Generators;
 
 use DateTimeImmutable;
 use DOMDocument;
+use DOMElement;
 use DOMXPath;
 use ERechnungToolkit\Builders\OrderBuilder;
 use ERechnungToolkit\Entities\Order;
@@ -65,8 +66,10 @@ class OrderGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('<?xml version="1.0"', $xml);
         $dom = new DOMDocument;
         $this->assertTrue($dom->loadXML($xml), 'Order XML should be well-formed');
-        $this->assertSame('Order', $dom->documentElement->localName);
-        $this->assertSame(self::ORDER_NS, $dom->documentElement->namespaceURI);
+        $root = $dom->documentElement;
+        $this->assertNotNull($root);
+        $this->assertSame('Order', $root->localName);
+        $this->assertSame(self::ORDER_NS, $root->namespaceURI);
     }
 
     public function test_emits_customization_and_profile_id(): void {
@@ -75,13 +78,13 @@ class OrderGeneratorTest extends BaseTestCase {
 
         $this->assertSame(
             'urn:fdc:peppol.eu:poacc:trns:order:3',
-            $xpath->query('/ubl:Order/cbc:CustomizationID')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:Order/cbc:CustomizationID')
         );
         $this->assertSame(
             'urn:fdc:peppol.eu:poacc:bis:order_only:3',
-            $xpath->query('/ubl:Order/cbc:ProfileID')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:Order/cbc:ProfileID')
         );
-        $this->assertSame('220', $xpath->query('/ubl:Order/cbc:OrderTypeCode')->item(0)->textContent);
+        $this->assertSame('220', $this->xpathText($xpath, '/ubl:Order/cbc:OrderTypeCode'));
     }
 
     public function test_emits_buyer_and_seller_parties(): void {
@@ -90,14 +93,15 @@ class OrderGeneratorTest extends BaseTestCase {
 
         $this->assertSame(
             'Stadt Musterstadt',
-            $xpath->query('/ubl:Order/cac:BuyerCustomerParty/cac:Party/cac:PartyName/cbc:Name')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:Order/cac:BuyerCustomerParty/cac:Party/cac:PartyName/cbc:Name')
         );
         $this->assertSame(
             'Lieferant GmbH',
-            $xpath->query('/ubl:Order/cac:SellerSupplierParty/cac:Party/cac:PartyName/cbc:Name')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:Order/cac:SellerSupplierParty/cac:Party/cac:PartyName/cbc:Name')
         );
         // Buyer endpoint (Leitweg-ID) with scheme.
-        $endpoint = $xpath->query('/ubl:Order/cac:BuyerCustomerParty/cac:Party/cbc:EndpointID')->item(0);
+        $endpoint = $this->xpathNode($xpath, '/ubl:Order/cac:BuyerCustomerParty/cac:Party/cbc:EndpointID');
+        $this->assertInstanceOf(DOMElement::class, $endpoint);
         $this->assertSame('04011000-12345-67', $endpoint->textContent);
         $this->assertSame('0204', $endpoint->getAttribute('schemeID'));
     }
@@ -106,28 +110,28 @@ class OrderGeneratorTest extends BaseTestCase {
         $xml = $this->generator->generateUbl($this->order);
         $xpath = $this->xpath($xml);
 
-        $lines = $xpath->query('/ubl:Order/cac:OrderLine/cac:LineItem');
-        $this->assertSame(2, $lines->length);
+        $this->assertSame(2, $this->xpathCount($xpath, '/ubl:Order/cac:OrderLine/cac:LineItem'));
 
-        $firstQty = $xpath->query('/ubl:Order/cac:OrderLine[1]/cac:LineItem/cbc:Quantity')->item(0);
+        $firstQty = $this->xpathNode($xpath, '/ubl:Order/cac:OrderLine[1]/cac:LineItem/cbc:Quantity');
+        $this->assertInstanceOf(DOMElement::class, $firstQty);
         $this->assertSame('5.00', $firstQty->textContent);
         $this->assertSame('C62', $firstQty->getAttribute('unitCode'));
 
         $this->assertSame(
             '600.00',
-            $xpath->query('/ubl:Order/cac:OrderLine[1]/cac:LineItem/cbc:LineExtensionAmount')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:Order/cac:OrderLine[1]/cac:LineItem/cbc:LineExtensionAmount')
         );
         $this->assertSame(
             '120.00',
-            $xpath->query('/ubl:Order/cac:OrderLine[1]/cac:LineItem/cac:Price/cbc:PriceAmount')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:Order/cac:OrderLine[1]/cac:LineItem/cac:Price/cbc:PriceAmount')
         );
         $this->assertSame(
             'Bürostuhl',
-            $xpath->query('/ubl:Order/cac:OrderLine[1]/cac:LineItem/cac:Item/cbc:Name')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:Order/cac:OrderLine[1]/cac:LineItem/cac:Item/cbc:Name')
         );
         $this->assertSame(
             'ART-4711',
-            $xpath->query('/ubl:Order/cac:OrderLine[1]/cac:LineItem/cac:Item/cac:SellersItemIdentification/cbc:ID')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:Order/cac:OrderLine[1]/cac:LineItem/cac:Item/cac:SellersItemIdentification/cbc:ID')
         );
     }
 
@@ -138,11 +142,11 @@ class OrderGeneratorTest extends BaseTestCase {
         // 5*120 + 2*250 = 1100.00
         $this->assertSame(
             '1100.00',
-            $xpath->query('/ubl:Order/cac:AnticipatedMonetaryTotal/cbc:LineExtensionAmount')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:Order/cac:AnticipatedMonetaryTotal/cbc:LineExtensionAmount')
         );
         $this->assertSame(
             '1100.00',
-            $xpath->query('/ubl:Order/cac:AnticipatedMonetaryTotal/cbc:PayableAmount')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:Order/cac:AnticipatedMonetaryTotal/cbc:PayableAmount')
         );
     }
 
@@ -161,10 +165,10 @@ class OrderGeneratorTest extends BaseTestCase {
         $xpath = $this->xpath($this->generator->generateUbl($order));
 
         // 1000 - 50 + 20 = 970
-        $this->assertSame('1000.00', $xpath->query('/ubl:Order/cac:AnticipatedMonetaryTotal/cbc:LineExtensionAmount')->item(0)->textContent);
-        $this->assertSame('50.00', $xpath->query('/ubl:Order/cac:AnticipatedMonetaryTotal/cbc:AllowanceTotalAmount')->item(0)->textContent);
-        $this->assertSame('20.00', $xpath->query('/ubl:Order/cac:AnticipatedMonetaryTotal/cbc:ChargeTotalAmount')->item(0)->textContent);
-        $this->assertSame('970.00', $xpath->query('/ubl:Order/cac:AnticipatedMonetaryTotal/cbc:PayableAmount')->item(0)->textContent);
+        $this->assertSame('1000.00', $this->xpathText($xpath, '/ubl:Order/cac:AnticipatedMonetaryTotal/cbc:LineExtensionAmount'));
+        $this->assertSame('50.00', $this->xpathText($xpath, '/ubl:Order/cac:AnticipatedMonetaryTotal/cbc:AllowanceTotalAmount'));
+        $this->assertSame('20.00', $this->xpathText($xpath, '/ubl:Order/cac:AnticipatedMonetaryTotal/cbc:ChargeTotalAmount'));
+        $this->assertSame('970.00', $this->xpathText($xpath, '/ubl:Order/cac:AnticipatedMonetaryTotal/cbc:PayableAmount'));
     }
 
     public function test_emits_requested_delivery_period(): void {
@@ -182,11 +186,11 @@ class OrderGeneratorTest extends BaseTestCase {
 
         $this->assertSame(
             '2026-07-01',
-            $xpath->query('/ubl:Order/cac:Delivery/cac:RequestedDeliveryPeriod/cbc:StartDate')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:Order/cac:Delivery/cac:RequestedDeliveryPeriod/cbc:StartDate')
         );
         $this->assertSame(
             '2026-07-15',
-            $xpath->query('/ubl:Order/cac:Delivery/cac:RequestedDeliveryPeriod/cbc:EndDate')->item(0)->textContent
+            $this->xpathText($xpath, '/ubl:Order/cac:Delivery/cac:RequestedDeliveryPeriod/cbc:EndDate')
         );
     }
 }

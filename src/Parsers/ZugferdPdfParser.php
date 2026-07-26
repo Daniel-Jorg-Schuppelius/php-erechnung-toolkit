@@ -34,8 +34,10 @@ use Throwable;
 final class ZugferdPdfParser {
     use ErrorLog;
 
+    /** @var class-string<\PDFToolkit\Readers\ZugferdReader> */
     private const ZUGFERD_READER_CLASS = 'PDFToolkit\\Readers\\ZugferdReader';
 
+    /** @var \PDFToolkit\Readers\ZugferdReader|null */
     private ?object $reader = null;
 
     /**
@@ -147,6 +149,8 @@ final class ZugferdPdfParser {
 
     /**
      * Gibt den ZugferdReader zurück (lazy loading).
+     *
+     * @return \PDFToolkit\Readers\ZugferdReader
      */
     private function getReader(): object {
         if ($this->reader === null) {

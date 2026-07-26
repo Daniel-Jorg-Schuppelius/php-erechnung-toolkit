@@ -138,15 +138,15 @@ final class MonetaryTotal {
 
         // Sum of line net amounts
         $lineExtensionAmount = Money::sum(
-            array_map(fn (InvoiceLine $line): Money => $line->getNetAmount(), $lines),
+            array_map(fn(InvoiceLine $line): Money => $line->getNetAmount(), $lines),
             $currency
         );
 
         // Document level allowances
         $allowanceTotalAmount = Money::sum(
             array_map(
-                fn (AllowanceCharge $ac): Money => $ac->getAmount(),
-                array_filter($allowanceCharges, fn (AllowanceCharge $ac): bool => $ac->isAllowance())
+                fn(AllowanceCharge $ac): Money => $ac->getAmount(),
+                array_filter($allowanceCharges, fn(AllowanceCharge $ac): bool => $ac->isAllowance())
             ),
             $currency
         );
@@ -154,8 +154,8 @@ final class MonetaryTotal {
         // Document level charges
         $chargeTotalAmount = Money::sum(
             array_map(
-                fn (AllowanceCharge $ac): Money => $ac->getAmount(),
-                array_filter($allowanceCharges, fn (AllowanceCharge $ac): bool => $ac->isCharge())
+                fn(AllowanceCharge $ac): Money => $ac->getAmount(),
+                array_filter($allowanceCharges, fn(AllowanceCharge $ac): bool => $ac->isCharge())
             ),
             $currency
         );

@@ -14,6 +14,7 @@ namespace Tests\Generators;
 
 use DateTimeImmutable;
 use DOMDocument;
+use DOMElement;
 use DOMXPath;
 use ERechnungToolkit\Builders\OrderBuilder;
 use ERechnungToolkit\Enums\{OrderXProfile, TaxCategory, UnitCode};
@@ -52,8 +53,10 @@ class OrderXGeneratorTest extends BaseTestCase {
         $xml = $this->buildOrderXml();
         $dom = new DOMDocument;
         $this->assertTrue($dom->loadXML($xml), 'Order-X XML should be well-formed');
-        $this->assertSame('SCRDMCCBDACIOMessageStructure', $dom->documentElement->localName);
-        $this->assertSame(self::RSM_NS, $dom->documentElement->namespaceURI);
+        $root = $dom->documentElement;
+        $this->assertNotNull($root);
+        $this->assertSame('SCRDMCCBDACIOMessageStructure', $root->localName);
+        $this->assertSame(self::RSM_NS, $root->namespaceURI);
         // ram namespace must be the D20B (128) version, not the invoice D16B (100).
         $this->assertStringContainsString('ReusableAggregateBusinessInformationEntity:128', $xml);
     }
@@ -63,14 +66,14 @@ class OrderXGeneratorTest extends BaseTestCase {
 
         $this->assertSame(
             'A1',
-            $xpath->query('//ram:BusinessProcessSpecifiedDocumentContextParameter/ram:ID')->item(0)->textContent
+            $this->xpathText($xpath, '//ram:BusinessProcessSpecifiedDocumentContextParameter/ram:ID')
         );
         $this->assertSame(
             OrderXProfile::COMFORT->value,
-            $xpath->query('//ram:GuidelineSpecifiedDocumentContextParameter/ram:ID')->item(0)->textContent
+            $this->xpathText($xpath, '//ram:GuidelineSpecifiedDocumentContextParameter/ram:ID')
         );
-        $this->assertSame('ORD-X-001', $xpath->query('//rsm:ExchangedDocument/ram:ID')->item(0)->textContent);
-        $this->assertSame('220', $xpath->query('//rsm:ExchangedDocument/ram:TypeCode')->item(0)->textContent);
+        $this->assertSame('ORD-X-001', $this->xpathText($xpath, '//rsm:ExchangedDocument/ram:ID'));
+        $this->assertSame('220', $this->xpathText($xpath, '//rsm:ExchangedDocument/ram:TypeCode'));
     }
 
     public function test_emits_parties_seller_first(): void {
@@ -78,28 +81,29 @@ class OrderXGeneratorTest extends BaseTestCase {
 
         $this->assertSame(
             'Lieferant GmbH',
-            $xpath->query('//ram:ApplicableHeaderTradeAgreement/ram:SellerTradeParty/ram:Name')->item(0)->textContent
+            $this->xpathText($xpath, '//ram:ApplicableHeaderTradeAgreement/ram:SellerTradeParty/ram:Name')
         );
         $this->assertSame(
             'Besteller AG',
-            $xpath->query('//ram:ApplicableHeaderTradeAgreement/ram:BuyerTradeParty/ram:Name')->item(0)->textContent
+            $this->xpathText($xpath, '//ram:ApplicableHeaderTradeAgreement/ram:BuyerTradeParty/ram:Name')
         );
     }
 
     public function test_emits_line_with_requested_quantity_and_net_price(): void {
         $xpath = $this->xpath($this->buildOrderXml());
 
-        $qty = $xpath->query('//ram:IncludedSupplyChainTradeLineItem/ram:SpecifiedLineTradeDelivery/ram:RequestedQuantity')->item(0);
+        $qty = $this->xpathNode($xpath, '//ram:IncludedSupplyChainTradeLineItem/ram:SpecifiedLineTradeDelivery/ram:RequestedQuantity');
+        $this->assertInstanceOf(DOMElement::class, $qty);
         $this->assertSame('5.00', $qty->textContent);
         $this->assertSame('C62', $qty->getAttribute('unitCode'));
 
         $this->assertSame(
             '120.00',
-            $xpath->query('//ram:SpecifiedLineTradeAgreement/ram:NetPriceProductTradePrice/ram:ChargeAmount')->item(0)->textContent
+            $this->xpathText($xpath, '//ram:SpecifiedLineTradeAgreement/ram:NetPriceProductTradePrice/ram:ChargeAmount')
         );
         $this->assertSame(
             '600.00',
-            $xpath->query('//ram:SpecifiedTradeSettlementLineMonetarySummation/ram:LineTotalAmount')->item(0)->textContent
+            $this->xpathText($xpath, '//ram:SpecifiedTradeSettlementLineMonetarySummation/ram:LineTotalAmount')
         );
     }
 
@@ -108,15 +112,15 @@ class OrderXGeneratorTest extends BaseTestCase {
 
         // Header VAT breakdown: basis 600, 19% => 114.
         $headerTax = '//ram:ApplicableHeaderTradeSettlement/ram:ApplicableTradeTax';
-        $this->assertSame('114.00', $xpath->query("{$headerTax}/ram:CalculatedAmount")->item(0)->textContent);
-        $this->assertSame('600.00', $xpath->query("{$headerTax}/ram:BasisAmount")->item(0)->textContent);
-        $this->assertSame('19.00', $xpath->query("{$headerTax}/ram:RateApplicablePercent")->item(0)->textContent);
+        $this->assertSame('114.00', $this->xpathText($xpath, "{$headerTax}/ram:CalculatedAmount"));
+        $this->assertSame('600.00', $this->xpathText($xpath, "{$headerTax}/ram:BasisAmount"));
+        $this->assertSame('19.00', $this->xpathText($xpath, "{$headerTax}/ram:RateApplicablePercent"));
 
         $sum = '//ram:SpecifiedTradeSettlementHeaderMonetarySummation';
-        $this->assertSame('600.00', $xpath->query("{$sum}/ram:LineTotalAmount")->item(0)->textContent);
-        $this->assertSame('600.00', $xpath->query("{$sum}/ram:TaxBasisTotalAmount")->item(0)->textContent);
-        $this->assertSame('114.00', $xpath->query("{$sum}/ram:TaxTotalAmount")->item(0)->textContent);
-        $this->assertSame('714.00', $xpath->query("{$sum}/ram:GrandTotalAmount")->item(0)->textContent);
-        $this->assertSame('EUR', $xpath->query('//ram:ApplicableHeaderTradeSettlement/ram:OrderCurrencyCode')->item(0)->textContent);
+        $this->assertSame('600.00', $this->xpathText($xpath, "{$sum}/ram:LineTotalAmount"));
+        $this->assertSame('600.00', $this->xpathText($xpath, "{$sum}/ram:TaxBasisTotalAmount"));
+        $this->assertSame('114.00', $this->xpathText($xpath, "{$sum}/ram:TaxTotalAmount"));
+        $this->assertSame('714.00', $this->xpathText($xpath, "{$sum}/ram:GrandTotalAmount"));
+        $this->assertSame('EUR', $this->xpathText($xpath, '//ram:ApplicableHeaderTradeSettlement/ram:OrderCurrencyCode'));
     }
 }

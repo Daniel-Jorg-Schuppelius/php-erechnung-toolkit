@@ -17,6 +17,7 @@ use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use DOMDocument;
 use DOMElement;
+use DOMNode;
 use DOMXPath;
 use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, MonetaryTotal, Party, PaymentTerms, PostalAddress, TaxSubtotal, TaxTotal};
 use ERechnungToolkit\Enums\{AllowanceChargeReasonCode, ERechnungProfile, InvoiceType, PaymentMeansCode, TaxCategory, UnitCode};
@@ -161,16 +162,20 @@ final class ERechnungParser {
         $root = $this->isCreditNote ? '/ubl:CreditNote' : '/ubl:Invoice';
 
         // Basic fields
-        $id = $this->getUblValue("{$root}/cbc:ID");
-        $issueDate = new DateTimeImmutable($this->getUblValue("{$root}/cbc:IssueDate"));
+        $id = $this->getUblValue("{$root}/cbc:ID") ?? '';
+        $issueDateStr = $this->getUblValue("{$root}/cbc:IssueDate");
+        if ($issueDateStr === null) {
+            $this->logErrorAndThrow(RuntimeException::class, 'Missing required cbc:IssueDate');
+        }
+        $issueDate = new DateTimeImmutable($issueDateStr);
 
         $typeCode = $this->isCreditNote
             ? $this->getUblValue("{$root}/cbc:CreditNoteTypeCode")
             : $this->getUblValue("{$root}/cbc:InvoiceTypeCode");
-        $invoiceType = InvoiceType::fromCode($typeCode) ?? InvoiceType::INVOICE;
+        $invoiceType = InvoiceType::fromCode($typeCode ?? '') ?? InvoiceType::INVOICE;
 
         $currencyCode = $this->getUblValue("{$root}/cbc:DocumentCurrencyCode");
-        $currency = CurrencyCode::tryFrom($currencyCode) ?? CurrencyCode::Euro;
+        $currency = CurrencyCode::tryFrom($currencyCode ?? '') ?? CurrencyCode::Euro;
 
         $profileId = $this->getUblValue("{$root}/cbc:CustomizationID");
         $profile = $this->detectProfile($profileId);
@@ -203,12 +208,12 @@ final class ERechnungParser {
         );
 
         // Notes
-        foreach ($this->xpath->query("{$root}/cbc:Note") as $noteNode) {
+        foreach ($this->nodes("{$root}/cbc:Note") as $noteNode) {
             $document->addNote($noteNode->textContent);
         }
 
         // Allowances/Charges
-        foreach ($this->xpath->query("{$root}/cac:AllowanceCharge") as $acNode) {
+        foreach ($this->nodes("{$root}/cac:AllowanceCharge") as $acNode) {
             if (!$acNode instanceof DOMElement) {
                 continue;
             }
@@ -217,7 +222,7 @@ final class ERechnungParser {
 
         // Lines
         $lineTag = $this->isCreditNote ? 'cac:CreditNoteLine' : 'cac:InvoiceLine';
-        foreach ($this->xpath->query("{$root}/{$lineTag}") as $lineNode) {
+        foreach ($this->nodes("{$root}/{$lineTag}") as $lineNode) {
             if (!$lineNode instanceof DOMElement) {
                 continue;
             }
@@ -243,20 +248,23 @@ final class ERechnungParser {
         $root = '/rsm:CrossIndustryInvoice';
 
         // Basic fields
-        $id = $this->getCiiValue("{$root}/rsm:ExchangedDocument/ram:ID");
+        $id = $this->getCiiValue("{$root}/rsm:ExchangedDocument/ram:ID") ?? '';
 
         $issueDateStr = $this->getCiiValue("{$root}/rsm:ExchangedDocument/ram:IssueDateTime/udt:DateTimeString");
         $issueDate = $this->parseCiiDate($issueDateStr);
+        if ($issueDate === null) {
+            $this->logErrorAndThrow(RuntimeException::class, 'Missing or invalid ram:IssueDateTime');
+        }
 
         $typeCode = $this->getCiiValue("{$root}/rsm:ExchangedDocument/ram:TypeCode");
-        $invoiceType = InvoiceType::fromCode($typeCode) ?? InvoiceType::INVOICE;
+        $invoiceType = InvoiceType::fromCode($typeCode ?? '') ?? InvoiceType::INVOICE;
         $this->isCreditNote = $invoiceType->isCredit();
 
         $profileId = $this->getCiiValue("{$root}/rsm:ExchangedDocumentContext/ram:GuidelineSpecifiedDocumentContextParameter/ram:ID");
         $profile = $this->detectProfile($profileId);
 
         $currencyCode = $this->getCiiValue("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeSettlement/ram:InvoiceCurrencyCode");
-        $currency = CurrencyCode::tryFrom($currencyCode) ?? CurrencyCode::Euro;
+        $currency = CurrencyCode::tryFrom($currencyCode ?? '') ?? CurrencyCode::Euro;
 
         // Seller
         $seller = $this->parseCiiParty("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement/ram:SellerTradeParty");
@@ -291,12 +299,12 @@ final class ERechnungParser {
         );
 
         // Notes
-        foreach ($this->xpath->query("{$root}/rsm:ExchangedDocument/ram:IncludedNote/ram:Content") as $noteNode) {
+        foreach ($this->nodes("{$root}/rsm:ExchangedDocument/ram:IncludedNote/ram:Content") as $noteNode) {
             $document->addNote($noteNode->textContent);
         }
 
         // Lines
-        foreach ($this->xpath->query("{$root}/rsm:SupplyChainTradeTransaction/ram:IncludedSupplyChainTradeLineItem") as $lineNode) {
+        foreach ($this->nodes("{$root}/rsm:SupplyChainTradeTransaction/ram:IncludedSupplyChainTradeLineItem") as $lineNode) {
             if (!$lineNode instanceof DOMElement) {
                 continue;
             }
@@ -317,12 +325,49 @@ final class ERechnungParser {
 
     // === UBL Parser Helpers ===
 
-    private function getUblValue(string $xpath): ?string {
-        $nodes = $this->xpath->query($xpath);
-        if ($nodes === false || $nodes->length === 0) {
+    /**
+     * Liefert den ersten Treffer-Knoten eines XPath-Ausdrucks (mit false-Guard
+     * und DOMNameSpaceNode-Filter), sonst null.
+     */
+    private function firstNode(string $xpath, ?DOMNode $context = null): ?DOMNode {
+        $nodes = $this->xpath->query($xpath, $context);
+        if ($nodes === false) {
             return null;
         }
-        return trim($nodes->item(0)->textContent);
+        $node = $nodes->item(0);
+        return $node instanceof DOMNode ? $node : null;
+    }
+
+    /**
+     * Liefert den (unbereinigten) Textinhalt des ersten Treffer-Knotens, sonst null.
+     */
+    private function firstText(string $xpath, ?DOMNode $context = null): ?string {
+        return $this->firstNode($xpath, $context)?->textContent;
+    }
+
+    /**
+     * Liefert die Treffer-Knoten eines XPath-Ausdrucks (mit false-Guard und
+     * DOMNameSpaceNode-Filter) als iterierbare Liste.
+     *
+     * @return list<DOMNode>
+     */
+    private function nodes(string $xpath, ?DOMNode $context = null): array {
+        $nodes = $this->xpath->query($xpath, $context);
+        if ($nodes === false) {
+            return [];
+        }
+        $result = [];
+        foreach ($nodes as $node) {
+            if ($node instanceof DOMNode) {
+                $result[] = $node;
+            }
+        }
+        return $result;
+    }
+
+    private function getUblValue(string $xpath): ?string {
+        $node = $this->firstNode($xpath);
+        return $node !== null ? trim($node->textContent) : null;
     }
 
     private function getUblDate(string $xpath): ?DateTimeImmutable {
@@ -349,10 +394,8 @@ final class ERechnungParser {
 
         $endpointId = $this->getUblValue("{$xpath}/cbc:EndpointID");
         $endpointScheme = null;
-        $endpointNodes = $this->xpath->query("{$xpath}/cbc:EndpointID");
-        if ($endpointNodes->length > 0 && $endpointNodes->item(0) instanceof \DOMElement) {
-            /** @var \DOMElement $endpointNode */
-            $endpointNode = $endpointNodes->item(0);
+        $endpointNode = $this->firstNode("{$xpath}/cbc:EndpointID");
+        if ($endpointNode instanceof \DOMElement) {
             $endpointScheme = $endpointNode->getAttribute('schemeID') ?: null;
         }
 
@@ -423,11 +466,10 @@ final class ERechnungParser {
         $id = $this->getNodeValue($node, 'cbc:ID') ?? '';
 
         $qtyTag = $this->isCreditNote ? 'cbc:CreditedQuantity' : 'cbc:InvoicedQuantity';
-        $qtyNodes = $this->xpath->query($qtyTag, $node);
+        $qtyNode = $this->firstNode($qtyTag, $node);
         $quantity = 0.0;
         $unitCode = UnitCode::PIECE;
-        if ($qtyNodes->length > 0) {
-            $qtyNode = $qtyNodes->item(0);
+        if ($qtyNode !== null) {
             $quantity = (float) $qtyNode->textContent;
             if ($qtyNode instanceof \DOMElement) {
                 $unitCodeStr = $qtyNode->getAttribute('unitCode');
@@ -469,7 +511,7 @@ final class ERechnungParser {
         $totalAmount = $this->money($this->getUblValue("{$xpath}/cbc:TaxAmount"), $currency);
 
         $subtotals = [];
-        foreach ($this->xpath->query("{$xpath}/cac:TaxSubtotal") as $subNode) {
+        foreach ($this->nodes("{$xpath}/cac:TaxSubtotal") as $subNode) {
             if (!$subNode instanceof DOMElement) {
                 continue;
             }
@@ -526,11 +568,8 @@ final class ERechnungParser {
     // === CII Parser Helpers ===
 
     private function getCiiValue(string $xpath): ?string {
-        $nodes = $this->xpath->query($xpath);
-        if ($nodes === false || $nodes->length === 0) {
-            return null;
-        }
-        return trim($nodes->item(0)->textContent);
+        $node = $this->firstNode($xpath);
+        return $node !== null ? trim($node->textContent) : null;
     }
 
     private function parseCiiDate(?string $dateStr): ?DateTimeImmutable {
@@ -561,10 +600,8 @@ final class ERechnungParser {
 
         $endpointId = $this->getCiiValue("{$xpath}/ram:URIUniversalCommunication/ram:URIID");
         $endpointScheme = null;
-        $endpointNodes = $this->xpath->query("{$xpath}/ram:URIUniversalCommunication/ram:URIID");
-        if ($endpointNodes->length > 0 && $endpointNodes->item(0) instanceof \DOMElement) {
-            /** @var \DOMElement $endpointNode */
-            $endpointNode = $endpointNodes->item(0);
+        $endpointNode = $this->firstNode("{$xpath}/ram:URIUniversalCommunication/ram:URIID");
+        if ($endpointNode instanceof \DOMElement) {
             $endpointScheme = $endpointNode->getAttribute('schemeID') ?: null;
         }
 
@@ -605,13 +642,11 @@ final class ERechnungParser {
 
         $quantity = 0.0;
         $unitCode = UnitCode::PIECE;
-        $qtyNodes = $this->xpath->query('ram:SpecifiedLineTradeDelivery/ram:BilledQuantity', $node);
-        if ($qtyNodes->length > 0) {
-            $qtyNode = $qtyNodes->item(0);
+        $qtyNode = $this->firstNode('ram:SpecifiedLineTradeDelivery/ram:BilledQuantity', $node);
+        if ($qtyNode !== null) {
             $quantity = (float) $qtyNode->textContent;
             if ($qtyNode instanceof \DOMElement) {
-                $unitCodeStr = $qtyNode->getAttribute('unitCode');
-                $unitCode = UnitCode::tryFrom($unitCodeStr) ?? UnitCode::PIECE;
+                $unitCode = UnitCode::tryFrom($qtyNode->getAttribute('unitCode')) ?? UnitCode::PIECE;
             }
         }
 
@@ -629,24 +664,13 @@ final class ERechnungParser {
 
         $taxCategoryCode = 'S';
         $taxPercent = 0.0;
-        $taxNodes = $this->xpath->query('ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax', $node);
-        if ($taxNodes->length > 0) {
-            $taxNode = $taxNodes->item(0);
-            $catNodes = $this->xpath->query('ram:CategoryCode', $taxNode);
-            if ($catNodes->length > 0) {
-                $taxCategoryCode = $catNodes->item(0)->textContent;
-            }
-            $rateNodes = $this->xpath->query('ram:RateApplicablePercent', $taxNode);
-            if ($rateNodes->length > 0) {
-                $taxPercent = (float) $rateNodes->item(0)->textContent;
-            }
+        $taxNode = $this->firstNode('ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax', $node);
+        if ($taxNode !== null) {
+            $taxCategoryCode = $this->firstText('ram:CategoryCode', $taxNode) ?? 'S';
+            $taxPercent = (float) ($this->firstText('ram:RateApplicablePercent', $taxNode) ?? '0');
         }
 
-        $sellersItemId = null;
-        $sellerIdNodes = $this->xpath->query('ram:SpecifiedTradeProduct/ram:SellerAssignedID', $node);
-        if ($sellerIdNodes->length > 0) {
-            $sellersItemId = $sellerIdNodes->item(0)->textContent;
-        }
+        $sellersItemId = $this->firstText('ram:SpecifiedTradeProduct/ram:SellerAssignedID', $node);
 
         return new InvoiceLine(
             id: $id,
@@ -665,7 +689,7 @@ final class ERechnungParser {
     private function parseCiiTaxTotal(string $xpath, CurrencyCode $currency): ?TaxTotal {
         $subtotals = [];
 
-        foreach ($this->xpath->query("{$xpath}/ram:ApplicableTradeTax") as $taxNode) {
+        foreach ($this->nodes("{$xpath}/ram:ApplicableTradeTax") as $taxNode) {
             if (!$taxNode instanceof DOMElement) {
                 continue;
             }
@@ -713,11 +737,8 @@ final class ERechnungParser {
     }
 
     private function getNodeValue(DOMElement $node, string $xpath): ?string {
-        $nodes = $this->xpath->query($xpath, $node);
-        if ($nodes === false || $nodes->length === 0) {
-            return null;
-        }
-        return trim($nodes->item(0)->textContent);
+        $first = $this->firstNode($xpath, $node);
+        return $first !== null ? trim($first->textContent) : null;
     }
 
     private function detectProfile(?string $profileId): ERechnungProfile {

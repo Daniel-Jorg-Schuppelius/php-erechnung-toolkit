@@ -35,7 +35,7 @@ class KositValidatorTest extends BaseTestCase {
     }
 
     public function test_is_available_returns_bool(): void {
-        $this->assertIsBool($this->validator->isAvailable());
+        $this->assertContains($this->validator->isAvailable(), [true, false]);
     }
 
     public function test_valid_xrechnung_is_accepted(): void {

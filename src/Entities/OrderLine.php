@@ -24,6 +24,8 @@ use ERechnungToolkit\Enums\{TaxCategory, UnitCode};
  * quantity and the expected price; the tax breakdown is settled on the invoice.
  */
 final class OrderLine {
+    private UnitCode $unitCode;
+
     public function __construct(
         private string $id,
         private float $quantity,
@@ -42,9 +44,9 @@ final class OrderLine {
         private ?float $baseQuantity = null,
         private ?bool $partialDeliveryAllowed = null
     ) {
-        if (is_string($this->unitCode)) {
-            $this->unitCode = UnitCode::tryFrom($this->unitCode) ?? UnitCode::PIECE;
-        }
+        $this->unitCode = is_string($unitCode)
+            ? (UnitCode::tryFrom($unitCode) ?? UnitCode::PIECE)
+            : $unitCode;
     }
 
     public function getId(): string {

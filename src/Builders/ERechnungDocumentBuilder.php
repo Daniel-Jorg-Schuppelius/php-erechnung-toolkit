@@ -499,11 +499,14 @@ final class ERechnungDocumentBuilder {
             throw new \InvalidArgumentException('Buyer name is required');
         }
 
+        $sellerName = $this->sellerName;
+        $buyerName = $this->buyerName;
+
         $this->logDebug('Building E-Rechnung document', ['id' => $this->id, 'profile' => $this->profile->name]);
 
         // Build seller party
         $seller = new Party(
-            name: $this->sellerName,
+            name: $sellerName,
             postalAddress: $this->sellerAddress,
             vatId: $this->sellerVatId,
             taxRegistrationId: $this->sellerTaxId,
@@ -520,7 +523,7 @@ final class ERechnungDocumentBuilder {
 
         // Build buyer party
         $buyer = new Party(
-            name: $this->buyerName,
+            name: $buyerName,
             postalAddress: $this->buyerAddress,
             vatId: $this->buyerVatId,
             endpointId: $this->buyerEndpointId,

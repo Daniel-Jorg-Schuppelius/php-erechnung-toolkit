@@ -26,6 +26,8 @@ final class InvoiceLine {
     /** @var AllowanceCharge[] */
     private array $allowanceCharges = [];
 
+    private UnitCode $unitCode;
+
     public function __construct(
         private string $id,
         private float $quantity,
@@ -44,9 +46,9 @@ final class InvoiceLine {
         private ?float $baseQuantity = null,
         private ?string $accountingCost = null
     ) {
-        if (is_string($this->unitCode)) {
-            $this->unitCode = UnitCode::tryFrom($this->unitCode) ?? UnitCode::PIECE;
-        }
+        $this->unitCode = is_string($unitCode)
+            ? (UnitCode::tryFrom($unitCode) ?? UnitCode::PIECE)
+            : $unitCode;
     }
 
     public function getId(): string {
@@ -151,8 +153,8 @@ final class InvoiceLine {
     public function getTotalAllowances(): Money {
         return Money::sum(
             array_map(
-                fn (AllowanceCharge $ac): Money => $ac->getAmount(),
-                array_filter($this->allowanceCharges, fn (AllowanceCharge $ac): bool => $ac->isAllowance())
+                fn(AllowanceCharge $ac): Money => $ac->getAmount(),
+                array_filter($this->allowanceCharges, fn(AllowanceCharge $ac): bool => $ac->isAllowance())
             ),
             $this->netAmount->getCurrency()
         );
@@ -164,8 +166,8 @@ final class InvoiceLine {
     public function getTotalCharges(): Money {
         return Money::sum(
             array_map(
-                fn (AllowanceCharge $ac): Money => $ac->getAmount(),
-                array_filter($this->allowanceCharges, fn (AllowanceCharge $ac): bool => $ac->isCharge())
+                fn(AllowanceCharge $ac): Money => $ac->getAmount(),
+                array_filter($this->allowanceCharges, fn(AllowanceCharge $ac): bool => $ac->isCharge())
             ),
             $this->netAmount->getCurrency()
         );

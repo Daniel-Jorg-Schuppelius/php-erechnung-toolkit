@@ -74,8 +74,11 @@ final class UglParser {
                 $adr = $record;
             } elseif ($type === 'POA') {
                 $lineGroups[] = ['poa' => $record, 'texts' => []];
-            } elseif ($type === 'POT' && $lineGroups !== []) {
-                $lineGroups[array_key_last($lineGroups)]['texts'][] = $record; // gehört zur vorigen POA
+            } elseif ($type === 'POT') {
+                $lastKey = array_key_last($lineGroups);
+                if ($lastKey !== null) {
+                    $lineGroups[$lastKey]['texts'][] = $record; // gehört zur vorigen POA
+                }
             } elseif ($type === 'POZ') {
                 $pozRecords[] = $record;
             } elseif ($type === 'END') {

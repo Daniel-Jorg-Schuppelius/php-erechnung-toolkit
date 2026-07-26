@@ -55,7 +55,7 @@ class OrderParserTest extends BaseTestCase {
         $this->assertSame('04011000-12345-67', $parsed->getBuyer()->getEndpointId());
         $this->assertSame('0204', $parsed->getBuyer()->getEndpointScheme());
         $this->assertSame('V-2026-77', $parsed->getContractReference());
-        $this->assertSame('2026-07-01', $parsed->getRequestedDeliveryStartDate()->format('Y-m-d'));
+        $this->assertSame('2026-07-01', $parsed->getRequestedDeliveryStartDate()?->format('Y-m-d'));
 
         $this->assertCount(2, $parsed->getLines());
         $firstLine = $parsed->getLines()[0];

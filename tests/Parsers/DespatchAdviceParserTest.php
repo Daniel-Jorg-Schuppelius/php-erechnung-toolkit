@@ -52,8 +52,8 @@ class DespatchAdviceParserTest extends BaseTestCase {
         $this->assertSame('SO-77', $parsed->getSalesOrderId());
         $this->assertSame('Lieferant GmbH', $parsed->getDespatchSupplierParty()->getName());
         $this->assertSame('Besteller AG', $parsed->getDeliveryCustomerParty()->getName());
-        $this->assertSame('2026-06-30', $parsed->getActualDeliveryDate()->format('Y-m-d'));
-        $this->assertSame('Wareneingang 9', $parsed->getDeliveryAddress()->getStreetName());
+        $this->assertSame('2026-06-30', $parsed->getActualDeliveryDate()?->format('Y-m-d'));
+        $this->assertSame('Wareneingang 9', $parsed->getDeliveryAddress()?->getStreetName());
 
         $this->assertCount(2, $parsed->getLines());
         $first = $parsed->getLines()[0];

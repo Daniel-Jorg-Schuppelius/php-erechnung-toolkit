@@ -29,12 +29,15 @@ use ERRORToolkit\Traits\ErrorLog;
 final class OrderXPdfGenerator {
     use ErrorLog;
 
+    /** @var class-string<\PDFToolkit\Writers\ZugferdWriter> */
     private const ZUGFERD_WRITER_CLASS = 'PDFToolkit\\Writers\\ZugferdWriter';
+    /** @var class-string<\PDFToolkit\Entities\PDFContent> */
     private const PDF_CONTENT_CLASS = 'PDFToolkit\\Entities\\PDFContent';
 
     /** Spec-conformant attachment filename for Order-X. */
     public const ORDERX_FILENAME = 'order-x.xml';
 
+    /** @var \PDFToolkit\Writers\ZugferdWriter|null */
     private ?object $writer = null;
 
     /**
@@ -103,6 +106,9 @@ final class OrderXPdfGenerator {
         return file_put_contents($outputPath, $pdfBytes) !== false;
     }
 
+    /**
+     * @return \PDFToolkit\Writers\ZugferdWriter
+     */
     private function getWriter(): object {
         if ($this->writer === null) {
             $writerClass = self::ZUGFERD_WRITER_CLASS;

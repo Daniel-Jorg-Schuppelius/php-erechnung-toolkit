@@ -62,53 +62,54 @@ class OpenTransOrderGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('<?xml version="1.0"', $xml);
         $dom = new DOMDocument;
         $this->assertTrue($dom->loadXML($xml), 'openTRANS ORDER XML should be well-formed');
-        $this->assertSame('ORDER', $dom->documentElement->localName);
-        $this->assertSame(self::OT_NS, $dom->documentElement->namespaceURI);
-        $this->assertSame('2.1', $dom->documentElement->getAttribute('version'));
-        $this->assertSame('standard', $dom->documentElement->getAttribute('type'));
+        $root = $dom->documentElement;
+        $this->assertNotNull($root);
+        $this->assertSame('ORDER', $root->localName);
+        $this->assertSame(self::OT_NS, $root->namespaceURI);
+        $this->assertSame('2.1', $root->getAttribute('version'));
+        $this->assertSame('standard', $root->getAttribute('type'));
     }
 
     public function test_emits_order_id_currency_and_parties(): void {
         $xpath = $this->xpath($this->generator->generateOrder($this->order));
         $info = '/ot:ORDER/ot:ORDER_HEADER/ot:ORDER_INFO';
 
-        $this->assertSame('ORD-2026-001', $xpath->query("{$info}/ot:ORDER_ID")->item(0)->textContent);
-        $this->assertSame('EUR', $xpath->query("{$info}/ot:CURRENCY")->item(0)->textContent);
+        $this->assertSame('ORD-2026-001', $this->xpathText($xpath, "{$info}/ot:ORDER_ID"));
+        $this->assertSame('EUR', $this->xpathText($xpath, "{$info}/ot:CURRENCY"));
         $this->assertSame(
             'Stadt Musterstadt',
-            $xpath->query("{$info}/ot:PARTIES/ot:PARTY[ot:PARTY_ROLE='buyer']/ot:ADDRESS/bmecat:NAME")->item(0)->textContent
+            $this->xpathText($xpath, "{$info}/ot:PARTIES/ot:PARTY[ot:PARTY_ROLE='buyer']/ot:ADDRESS/bmecat:NAME")
         );
         $this->assertSame(
             'Lieferant GmbH',
-            $xpath->query("{$info}/ot:PARTIES/ot:PARTY[ot:PARTY_ROLE='supplier']/ot:ADDRESS/bmecat:NAME")->item(0)->textContent
+            $this->xpathText($xpath, "{$info}/ot:PARTIES/ot:PARTY[ot:PARTY_ROLE='supplier']/ot:ADDRESS/bmecat:NAME")
         );
         $this->assertSame(
             'DE123456789',
-            $xpath->query("{$info}/ot:PARTIES/ot:PARTY[ot:PARTY_ROLE='supplier']/ot:ADDRESS/bmecat:VAT_ID")->item(0)->textContent
+            $this->xpathText($xpath, "{$info}/ot:PARTIES/ot:PARTY[ot:PARTY_ROLE='supplier']/ot:ADDRESS/bmecat:VAT_ID")
         );
     }
 
     public function test_emits_order_items_with_product_and_price(): void {
         $xpath = $this->xpath($this->generator->generateOrder($this->order));
 
-        $items = $xpath->query('/ot:ORDER/ot:ORDER_ITEM_LIST/ot:ORDER_ITEM');
-        $this->assertSame(2, $items->length);
+        $this->assertSame(2, $this->xpathCount($xpath, '/ot:ORDER/ot:ORDER_ITEM_LIST/ot:ORDER_ITEM'));
 
         $first = '/ot:ORDER/ot:ORDER_ITEM_LIST/ot:ORDER_ITEM[1]';
-        $this->assertSame('1', $xpath->query("{$first}/ot:LINE_ITEM_ID")->item(0)->textContent);
-        $this->assertSame('ART-4711', $xpath->query("{$first}/ot:PRODUCT_ID/bmecat:SUPPLIER_PID")->item(0)->textContent);
-        $this->assertSame('Bürostuhl', $xpath->query("{$first}/ot:PRODUCT_ID/bmecat:DESCRIPTION_SHORT")->item(0)->textContent);
-        $this->assertSame('5', $xpath->query("{$first}/ot:QUANTITY")->item(0)->textContent);
-        $this->assertSame('C62', $xpath->query("{$first}/bmecat:ORDER_UNIT")->item(0)->textContent);
-        $this->assertSame('120.00', $xpath->query("{$first}/ot:PRODUCT_PRICE_FIX/bmecat:PRICE_AMOUNT")->item(0)->textContent);
-        $this->assertSame('600.00', $xpath->query("{$first}/ot:PRICE_LINE_AMOUNT")->item(0)->textContent);
+        $this->assertSame('1', $this->xpathText($xpath, "{$first}/ot:LINE_ITEM_ID"));
+        $this->assertSame('ART-4711', $this->xpathText($xpath, "{$first}/ot:PRODUCT_ID/bmecat:SUPPLIER_PID"));
+        $this->assertSame('Bürostuhl', $this->xpathText($xpath, "{$first}/ot:PRODUCT_ID/bmecat:DESCRIPTION_SHORT"));
+        $this->assertSame('5', $this->xpathText($xpath, "{$first}/ot:QUANTITY"));
+        $this->assertSame('C62', $this->xpathText($xpath, "{$first}/bmecat:ORDER_UNIT"));
+        $this->assertSame('120.00', $this->xpathText($xpath, "{$first}/ot:PRODUCT_PRICE_FIX/bmecat:PRICE_AMOUNT"));
+        $this->assertSame('600.00', $this->xpathText($xpath, "{$first}/ot:PRICE_LINE_AMOUNT"));
     }
 
     public function test_emits_order_summary_totals(): void {
         $xpath = $this->xpath($this->generator->generateOrder($this->order));
 
-        $this->assertSame('2', $xpath->query('/ot:ORDER/ot:ORDER_SUMMARY/ot:TOTAL_ITEM_NUM')->item(0)->textContent);
+        $this->assertSame('2', $this->xpathText($xpath, '/ot:ORDER/ot:ORDER_SUMMARY/ot:TOTAL_ITEM_NUM'));
         // 5*120 + 2*250 = 1100.00
-        $this->assertSame('1100.00', $xpath->query('/ot:ORDER/ot:ORDER_SUMMARY/ot:TOTAL_AMOUNT')->item(0)->textContent);
+        $this->assertSame('1100.00', $this->xpathText($xpath, '/ot:ORDER/ot:ORDER_SUMMARY/ot:TOTAL_AMOUNT'));
     }
 }

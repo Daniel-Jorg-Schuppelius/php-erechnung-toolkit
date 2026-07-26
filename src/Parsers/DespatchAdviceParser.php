@@ -15,6 +15,7 @@ namespace ERechnungToolkit\Parsers;
 use DateTimeImmutable;
 use DOMDocument;
 use DOMElement;
+use DOMNode;
 use DOMXPath;
 use ERechnungToolkit\Entities\{DespatchAdvice, DespatchLine, Party, PostalAddress};
 use ERechnungToolkit\Enums\UnitCode;
@@ -107,11 +108,13 @@ final class DespatchAdviceParser {
             deliveryAddress: $this->parseAddress("{$root}/cac:Shipment/cac:Delivery/cac:DeliveryLocation/cac:Address")
         );
 
-        foreach ($this->xpath->query("{$root}/cbc:Note") as $noteNode) {
-            $advice->addNote($noteNode->textContent);
+        foreach ($this->xpath->query("{$root}/cbc:Note") ?: [] as $noteNode) {
+            if ($noteNode instanceof DOMNode) {
+                $advice->addNote($noteNode->textContent);
+            }
         }
 
-        foreach ($this->xpath->query("{$root}/cac:DespatchLine") as $lineNode) {
+        foreach ($this->xpath->query("{$root}/cac:DespatchLine") ?: [] as $lineNode) {
             if (!$lineNode instanceof DOMElement) {
                 continue;
             }
@@ -169,8 +172,8 @@ final class DespatchAdviceParser {
         $quantity = 0.0;
         $unitCode = UnitCode::PIECE;
         $qtyNodes = $this->xpath->query('cbc:DeliveredQuantity', $node);
-        if ($qtyNodes !== false && $qtyNodes->length > 0) {
-            $qtyNode = $qtyNodes->item(0);
+        $qtyNode = $qtyNodes !== false ? $qtyNodes->item(0) : null;
+        if ($qtyNode instanceof DOMNode) {
             $quantity = (float) $qtyNode->textContent;
             if ($qtyNode instanceof DOMElement) {
                 $unitCode = UnitCode::tryFrom($qtyNode->getAttribute('unitCode')) ?? UnitCode::PIECE;
@@ -196,10 +199,11 @@ final class DespatchAdviceParser {
 
     private function getValue(string $xpath): ?string {
         $nodes = $this->xpath->query($xpath);
-        if ($nodes === false || $nodes->length === 0) {
+        if ($nodes === false) {
             return null;
         }
-        return trim($nodes->item(0)->textContent);
+        $node = $nodes->item(0);
+        return $node instanceof DOMNode ? trim($node->textContent) : null;
     }
 
     private function getDate(string $xpath): ?DateTimeImmutable {
@@ -216,9 +220,10 @@ final class DespatchAdviceParser {
 
     private function getNodeValue(DOMElement $node, string $xpath): ?string {
         $nodes = $this->xpath->query($xpath, $node);
-        if ($nodes === false || $nodes->length === 0) {
+        if ($nodes === false) {
             return null;
         }
-        return trim($nodes->item(0)->textContent);
+        $found = $nodes->item(0);
+        return $found instanceof DOMNode ? trim($found->textContent) : null;
     }
 }
