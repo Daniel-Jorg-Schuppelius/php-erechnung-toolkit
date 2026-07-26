@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Generators;
 
+use CommonToolkit\ValueObjects\Money;
 use DOMDocument;
 use DOMElement;
 use ERechnungToolkit\Entities\{AllowanceCharge, Order, OrderLine, Party};
@@ -221,9 +222,9 @@ final class OrderXGenerator {
 
         // VAT breakdown grouped by category and rate.
         $taxGroups = $this->taxGroups($order);
-        $taxTotal = 0.0;
+        $taxTotal = Money::zero($order->getCurrency());
         foreach ($taxGroups as $group) {
-            $taxTotal += $group['tax'];
+            $taxTotal = $taxTotal->plus($group['tax']);
             $tax = $dom->createElementNS(self::RAM_NS, 'ram:ApplicableTradeTax');
             $this->ram($dom, $tax, 'ram:CalculatedAmount', $this->amount($group['tax']));
             $this->ram($dom, $tax, 'ram:TypeCode', 'VAT');
@@ -237,16 +238,15 @@ final class OrderXGenerator {
         $lineTotal = $order->getLineExtensionAmount();
         $allowanceTotal = $order->getAllowanceTotalAmount();
         $chargeTotal = $order->getChargeTotalAmount();
-        $taxBasis = round($lineTotal - $allowanceTotal + $chargeTotal, 2);
-        $taxTotal = round($taxTotal, 2);
-        $grandTotal = round($taxBasis + $taxTotal, 2);
+        $taxBasis = $lineTotal->minus($allowanceTotal)->plus($chargeTotal);
+        $grandTotal = $taxBasis->plus($taxTotal);
 
         $summation = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTradeSettlementHeaderMonetarySummation');
         $this->ram($dom, $summation, 'ram:LineTotalAmount', $this->amount($lineTotal));
-        if ($chargeTotal > 0) {
+        if ($chargeTotal->isPositive()) {
             $this->ram($dom, $summation, 'ram:ChargeTotalAmount', $this->amount($chargeTotal));
         }
-        if ($allowanceTotal > 0) {
+        if ($allowanceTotal->isPositive()) {
             $this->ram($dom, $summation, 'ram:AllowanceTotalAmount', $this->amount($allowanceTotal));
         }
         $this->ram($dom, $summation, 'ram:TaxBasisTotalAmount', $this->amount($taxBasis));
@@ -363,7 +363,7 @@ final class OrderXGenerator {
     /**
      * Groups order lines by tax category and rate.
      *
-     * @return array<string, array{category: string, percent: float, basis: float, tax: float}>
+     * @return array<string, array{category: string, percent: float, basis: Money, tax: Money}>
      */
     private function taxGroups(Order $order): array {
         $groups = [];
@@ -376,17 +376,15 @@ final class OrderXGenerator {
                 $groups[$key] = [
                     'category' => $line->getTaxCategory()->value,
                     'percent' => $line->getTaxPercent(),
-                    'basis' => 0.0,
-                    'tax' => 0.0,
+                    'basis' => Money::zero($order->getCurrency()),
+                    'tax' => Money::zero($order->getCurrency()),
                 ];
             }
-            $groups[$key]['basis'] += $line->getNetAmount();
+            $groups[$key]['basis'] = $groups[$key]['basis']->plus($line->getNetAmount());
         }
 
         foreach ($groups as $key => $group) {
-            $basis = round($group['basis'], 2);
-            $groups[$key]['basis'] = $basis;
-            $groups[$key]['tax'] = round($basis * $group['percent'] / 100, 2);
+            $groups[$key]['tax'] = $group['basis']->percentage($group['percent']);
         }
 
         return $groups;
@@ -410,7 +408,15 @@ final class OrderXGenerator {
         $parent->appendChild($dateString);
     }
 
-    private function amount(float $amount): string {
-        return number_format($amount, 2, '.', '');
+    /**
+     * Money liefert seinen kanonischen Betrag (exakte Währungsskala);
+     * Prozentsätze bleiben skalar mit zwei Nachkommastellen.
+     */
+    private function amount(Money|float|int|null $amount): string {
+        if ($amount instanceof Money) {
+            return $amount->getAmount();
+        }
+
+        return number_format((float) ($amount ?? 0), 2, '.', '');
     }
 }

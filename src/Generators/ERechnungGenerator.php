@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Generators;
 
+use CommonToolkit\ValueObjects\Money;
 use DOMDocument;
 use DOMElement;
 use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party};
@@ -276,7 +277,7 @@ final class ERechnungGenerator {
             );
             $taxIncl->setAttribute('currencyID', $currency);
 
-            if ($document->getMonetaryTotal()->getAllowanceTotalAmount() > 0) {
+            if ($document->getMonetaryTotal()->getAllowanceTotalAmount()->isPositive()) {
                 $allowance = $this->addUblElement(
                     $dom,
                     $monetaryTotal,
@@ -286,7 +287,7 @@ final class ERechnungGenerator {
                 $allowance->setAttribute('currencyID', $currency);
             }
 
-            if ($document->getMonetaryTotal()->getChargeTotalAmount() > 0) {
+            if ($document->getMonetaryTotal()->getChargeTotalAmount()->isPositive()) {
                 $charge = $this->addUblElement(
                     $dom,
                     $monetaryTotal,
@@ -296,7 +297,7 @@ final class ERechnungGenerator {
                 $charge->setAttribute('currencyID', $currency);
             }
 
-            if ($document->getMonetaryTotal()->getPrepaidAmount() > 0) {
+            if ($document->getMonetaryTotal()->getPrepaidAmount()->isPositive()) {
                 $prepaid = $this->addUblElement(
                     $dom,
                     $monetaryTotal,
@@ -507,7 +508,7 @@ final class ERechnungGenerator {
                 $this->formatAmount($document->getMonetaryTotal()->getLineExtensionAmount())
             );
 
-            if ($document->getMonetaryTotal()->getChargeTotalAmount() > 0) {
+            if ($document->getMonetaryTotal()->getChargeTotalAmount()->isPositive()) {
                 $this->addCiiElement(
                     $dom,
                     $summation,
@@ -515,7 +516,7 @@ final class ERechnungGenerator {
                     $this->formatAmount($document->getMonetaryTotal()->getChargeTotalAmount())
                 );
             }
-            if ($document->getMonetaryTotal()->getAllowanceTotalAmount() > 0) {
+            if ($document->getMonetaryTotal()->getAllowanceTotalAmount()->isPositive()) {
                 $this->addCiiElement(
                     $dom,
                     $summation,
@@ -535,7 +536,7 @@ final class ERechnungGenerator {
                 $dom,
                 $summation,
                 'ram:TaxTotalAmount',
-                $this->formatAmount($document->getTaxTotal()?->getTaxAmount() ?? 0)
+                $this->formatAmount($document->getTaxTotal()?->getTaxAmount())
             );
             $taxTotal->setAttribute('currencyID', $document->getCurrency()->value);
 
@@ -546,7 +547,7 @@ final class ERechnungGenerator {
                 $this->formatAmount($document->getMonetaryTotal()->getTaxInclusiveAmount())
             );
 
-            if ($document->getMonetaryTotal()->getPrepaidAmount() > 0) {
+            if ($document->getMonetaryTotal()->getPrepaidAmount()->isPositive()) {
                 $this->addCiiElement(
                     $dom,
                     $summation,
@@ -839,7 +840,16 @@ final class ERechnungGenerator {
         return $lineItem;
     }
 
-    private function formatAmount(float $amount): string {
-        return number_format($amount, 2, '.', '');
+    /**
+     * Formatiert Werte für UBL/CII: Money liefert seinen kanonischen Betrag
+     * (exakte Währungsskala, kein float-Zwischenschritt); Mengen und Prozentsätze
+     * bleiben skalar mit zwei Nachkommastellen.
+     */
+    private function formatAmount(Money|float|int|null $amount): string {
+        if ($amount instanceof Money) {
+            return $amount->getAmount();
+        }
+
+        return number_format((float) ($amount ?? 0), 2, '.', '');
     }
 }

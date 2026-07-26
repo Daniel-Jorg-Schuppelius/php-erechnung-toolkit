@@ -63,8 +63,8 @@ class OrderBuilderTest extends BaseTestCase {
             ->addLine('B', 1, 50.00)
             ->build();
 
-        $this->assertSame(250.00, $order->getLineExtensionAmount());
-        $this->assertSame(250.00, $order->getPayableAmount());
+        $this->assertSame('250.00', $order->getLineExtensionAmount()->getAmount());
+        $this->assertSame('250.00', $order->getPayableAmount()->getAmount());
     }
 
     public function test_build_without_buyer_throws(): void {

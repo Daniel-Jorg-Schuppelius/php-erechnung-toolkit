@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Entities;
 
 use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 
 /**
@@ -40,9 +41,9 @@ final class UglInvoice {
         private string $documentType,
         private DateTimeImmutable $date,
         private CurrencyCode $currency,
-        private float $grossTotal,
-        private float $vatAmount,
-        private float $netTotal,
+        private Money $grossTotal,
+        private Money $vatAmount,
+        private Money $netTotal,
         private ?DateTimeImmutable $dueDate = null,
         private array $lines = []
     ) {}
@@ -68,15 +69,15 @@ final class UglInvoice {
         return $this->currency;
     }
 
-    public function getGrossTotal(): float {
+    public function getGrossTotal(): Money {
         return $this->grossTotal;
     }
 
-    public function getVatAmount(): float {
+    public function getVatAmount(): Money {
         return $this->vatAmount;
     }
 
-    public function getNetTotal(): float {
+    public function getNetTotal(): Money {
         return $this->netTotal;
     }
 

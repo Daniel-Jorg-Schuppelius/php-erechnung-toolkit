@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Generators;
 
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use DOMDocument;
 use DOMElement;
@@ -251,8 +252,12 @@ final class OpenTransOrderGenerator {
         $parent->appendChild($node);
     }
 
-    private function amount(float $value): string {
-        return number_format($value, 2, '.', '');
+    private function amount(Money|float|int|null $value): string {
+        if ($value instanceof Money) {
+            return $value->getAmount();
+        }
+
+        return number_format((float) ($value ?? 0), 2, '.', '');
     }
 
     /** Quantity without trailing zeros (e.g. 5.0 → "5", 1.5 → "1.5"). */

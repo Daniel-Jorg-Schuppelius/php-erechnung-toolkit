@@ -392,8 +392,8 @@ CSS;
     private function createLineRow(InvoiceLine $line, string $currency): Element {
         $quantity = number_format($line->getQuantity(), 0, ',', '.');
         $unit = $line->getUnitCode()->abbreviation();
-        $unitPrice = number_format($line->getUnitPrice(), 2, ',', '.') . ' ' . $currency;
-        $netAmount = number_format($line->getNetAmount(), 2, ',', '.') . ' ' . $currency;
+        $unitPrice = $line->getUnitPrice()->format(false) . ' ' . $currency;
+        $netAmount = $line->getNetAmount()->format(false) . ' ' . $currency;
 
         $itemName = $line->getItemName();
 
@@ -421,8 +421,8 @@ CSS;
      */
     private function createTotalsSection(Document $invoice): Element {
         $currency = $invoice->getCurrency()->value;
-        $netAmount = number_format($invoice->getNetAmount(), 2, ',', '.');
-        $grossAmount = number_format($invoice->getGrossAmount(), 2, ',', '.');
+        $netAmount = $invoice->getNetAmount()->format(false);
+        $grossAmount = $invoice->getGrossAmount()->format(false);
 
         $rows = [];
 
@@ -440,7 +440,7 @@ CSS;
                 $rows[] = $this->createTaxRow($subtotal, $currency);
             }
         } else {
-            $taxAmount = number_format($invoice->getTaxAmount(), 2, ',', '.');
+            $taxAmount = $invoice->getTaxAmount()->format(false);
             $rows[] = Element::withChildren('tr', [
                 Element::create('td')->withClass('spacer'),
                 Element::create('td', 'Mehrwertsteuer')->withClass('label'),
@@ -464,7 +464,7 @@ CSS;
      */
     private function createTaxRow(TaxSubtotal $subtotal, string $currency): Element {
         $percent = number_format($subtotal->getPercent(), 0);
-        $taxAmount = number_format($subtotal->getTaxAmount(), 2, ',', '.');
+        $taxAmount = $subtotal->getTaxAmount()->format(false);
 
         return Element::withChildren('tr', [
             Element::create('td')->withClass('spacer'),

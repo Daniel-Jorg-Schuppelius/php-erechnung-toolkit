@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Entities;
 
 use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Contracts\Abstracts\DocumentAbstract;
 use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, NoteSubjectCode, PaymentMeansCode};
@@ -306,6 +307,7 @@ final class Document extends DocumentAbstract {
         }
 
         // Group lines by tax category and rate
+        $zero = Money::zero($this->currency);
         $taxGroups = [];
         foreach ($this->lines as $line) {
             $key = $line->getTaxCategory()->value . '_' . $line->getTaxPercent();
@@ -313,10 +315,10 @@ final class Document extends DocumentAbstract {
                 $taxGroups[$key] = [
                     'category' => $line->getTaxCategory(),
                     'percent' => $line->getTaxPercent(),
-                    'amount' => 0.0,
+                    'amount' => $zero,
                 ];
             }
-            $taxGroups[$key]['amount'] += $line->getNetAmount();
+            $taxGroups[$key]['amount'] = $taxGroups[$key]['amount']->plus($line->getNetAmount());
         }
 
         // Add document level allowances/charges to tax groups
@@ -327,19 +329,19 @@ final class Document extends DocumentAbstract {
                     $taxGroups[$key] = [
                         'category' => $ac->getTaxCategory(),
                         'percent' => $ac->getTaxPercent(),
-                        'amount' => 0.0,
+                        'amount' => $zero,
                     ];
                 }
-                $amount = $ac->isCharge() ? $ac->getAmount() : -$ac->getAmount();
-                $taxGroups[$key]['amount'] += $amount;
+                $amount = $ac->isCharge() ? $ac->getAmount() : $ac->getAmount()->negated();
+                $taxGroups[$key]['amount'] = $taxGroups[$key]['amount']->plus($amount);
             }
         }
 
         // Create tax subtotals
         $subtotals = [];
         foreach ($taxGroups as $group) {
-            $taxableAmount = round($group['amount'], 2);
-            $taxAmount = round($taxableAmount * $group['percent'] / 100, 2);
+            $taxableAmount = $group['amount'];
+            $taxAmount = $taxableAmount->percentage($group['percent']);
 
             // Apply the document-level exemption reason to non-taxable categories
             // (e.g. E - exempt §19 Kleinunternehmer, AE - reverse charge).
@@ -364,37 +366,36 @@ final class Document extends DocumentAbstract {
             $this->lines,
             $this->allowanceCharges,
             $this->taxTotal,
-            $this->currency,
-            0.0
+            $this->currency
         );
     }
 
     /**
      * Returns the total net amount.
      */
-    public function getNetAmount(): float {
-        return $this->monetaryTotal?->getTaxExclusiveAmount() ?? 0.0;
+    public function getNetAmount(): Money {
+        return $this->monetaryTotal?->getTaxExclusiveAmount() ?? Money::zero($this->currency);
     }
 
     /**
      * Returns the total tax amount.
      */
-    public function getTaxAmount(): float {
-        return $this->taxTotal?->getTaxAmount() ?? 0.0;
+    public function getTaxAmount(): Money {
+        return $this->taxTotal?->getTaxAmount() ?? Money::zero($this->currency);
     }
 
     /**
      * Returns the total gross amount.
      */
-    public function getGrossAmount(): float {
-        return $this->monetaryTotal?->getTaxInclusiveAmount() ?? 0.0;
+    public function getGrossAmount(): Money {
+        return $this->monetaryTotal?->getTaxInclusiveAmount() ?? Money::zero($this->currency);
     }
 
     /**
      * Returns the payable amount.
      */
-    public function getPayableAmount(): float {
-        return $this->monetaryTotal?->getPayableAmount() ?? 0.0;
+    public function getPayableAmount(): Money {
+        return $this->monetaryTotal?->getPayableAmount() ?? Money::zero($this->currency);
     }
 
     /**

@@ -12,12 +12,15 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Entities;
 
+use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use ERechnungToolkit\Enums\{TaxCategory, UnitCode};
 
 /**
  * Invoice Line for E-Rechnung (EN 16931).
  *
- * Represents a single line item in the invoice.
+ * Represents a single line item in the invoice. Beträge sind {@see Money},
+ * Mengen und Prozentsätze bleiben skalar.
  */
 final class InvoiceLine {
     /** @var AllowanceCharge[] */
@@ -27,9 +30,9 @@ final class InvoiceLine {
         private string $id,
         private float $quantity,
         private UnitCode|string $unitCode,
-        private float $netAmount,
+        private Money $netAmount,
         private string $itemName,
-        private float $unitPrice,
+        private Money $unitPrice,
         private TaxCategory $taxCategory,
         private float $taxPercent,
         private ?string $itemDescription = null,
@@ -58,15 +61,19 @@ final class InvoiceLine {
         return $this->unitCode;
     }
 
-    public function getNetAmount(): float {
+    public function getNetAmount(): Money {
         return $this->netAmount;
+    }
+
+    public function getCurrency(): CurrencyCode {
+        return $this->netAmount->getCurrency();
     }
 
     public function getItemName(): string {
         return $this->itemName;
     }
 
-    public function getUnitPrice(): float {
+    public function getUnitPrice(): Money {
         return $this->unitPrice;
     }
 
@@ -127,36 +134,40 @@ final class InvoiceLine {
     /**
      * Calculates the gross amount (net + tax).
      */
-    public function getGrossAmount(): float {
-        return round($this->netAmount * (1 + $this->taxPercent / 100), 2);
+    public function getGrossAmount(): Money {
+        return $this->netAmount->plus($this->getTaxAmount());
     }
 
     /**
      * Calculates the tax amount for this line.
      */
-    public function getTaxAmount(): float {
-        return round($this->netAmount * $this->taxPercent / 100, 2);
+    public function getTaxAmount(): Money {
+        return $this->netAmount->percentage($this->taxPercent);
     }
 
     /**
      * Returns the total allowances for this line.
      */
-    public function getTotalAllowances(): float {
-        return array_reduce(
-            array_filter($this->allowanceCharges, fn (AllowanceCharge $ac) => !$ac->isCharge()),
-            fn (float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
-            0.0
+    public function getTotalAllowances(): Money {
+        return Money::sum(
+            array_map(
+                fn (AllowanceCharge $ac): Money => $ac->getAmount(),
+                array_filter($this->allowanceCharges, fn (AllowanceCharge $ac): bool => $ac->isAllowance())
+            ),
+            $this->netAmount->getCurrency()
         );
     }
 
     /**
      * Returns the total charges for this line.
      */
-    public function getTotalCharges(): float {
-        return array_reduce(
-            array_filter($this->allowanceCharges, fn (AllowanceCharge $ac) => $ac->isCharge()),
-            fn (float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
-            0.0
+    public function getTotalCharges(): Money {
+        return Money::sum(
+            array_map(
+                fn (AllowanceCharge $ac): Money => $ac->getAmount(),
+                array_filter($this->allowanceCharges, fn (AllowanceCharge $ac): bool => $ac->isCharge())
+            ),
+            $this->netAmount->getCurrency()
         );
     }
 
@@ -167,12 +178,12 @@ final class InvoiceLine {
         string $id,
         string $itemName,
         float $quantity,
-        float $unitPrice,
+        Money $unitPrice,
         float $taxPercent = 19.0,
         UnitCode $unitCode = UnitCode::PIECE,
         TaxCategory $taxCategory = TaxCategory::STANDARD
     ): self {
-        $netAmount = round($quantity * $unitPrice, 2);
+        $netAmount = $unitPrice->times($quantity);
 
         return new self(
             id: $id,
@@ -193,7 +204,7 @@ final class InvoiceLine {
         string $id,
         string $description,
         float $hours,
-        float $hourlyRate,
+        Money $hourlyRate,
         float $taxPercent = 19.0
     ): self {
         return self::create(
@@ -212,7 +223,7 @@ final class InvoiceLine {
     public static function lumpSum(
         string $id,
         string $description,
-        float $amount,
+        Money $amount,
         float $taxPercent = 19.0
     ): self {
         return self::create(

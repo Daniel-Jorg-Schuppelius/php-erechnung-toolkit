@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Parsers;
 
 use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use DOMDocument;
 use DOMElement;
@@ -111,7 +112,7 @@ final class OpenTransOrderParser {
             if (!$itemNode instanceof DOMElement) {
                 continue;
             }
-            $order->addLine($this->parseLine($itemNode));
+            $order->addLine($this->parseLine($itemNode, $currency));
         }
 
         return $order;
@@ -142,14 +143,12 @@ final class OpenTransOrderParser {
         );
     }
 
-    private function parseLine(DOMElement $node): OrderLine {
+    private function parseLine(DOMElement $node, CurrencyCode $currency): OrderLine {
         $id = $this->getNodeValue($node, 'ot:LINE_ITEM_ID') ?? '';
         $quantity = (float) ($this->getNodeValue($node, 'ot:QUANTITY') ?? '0');
         $unitCode = UnitCode::tryFrom($this->getNodeValue($node, 'bmecat:ORDER_UNIT') ?? '') ?? UnitCode::PIECE;
-        $unitPrice = (float) ($this->getNodeValue($node, 'ot:PRODUCT_PRICE_FIX/bmecat:PRICE_AMOUNT') ?? '0');
-
-        $netAmount = $this->getNodeValue($node, 'ot:PRICE_LINE_AMOUNT');
-        $netAmount = $netAmount !== null ? (float) $netAmount : round($quantity * $unitPrice, 2);
+        $unitPrice = Money::ofNullable($this->getNodeValue($node, 'ot:PRODUCT_PRICE_FIX/bmecat:PRICE_AMOUNT'), $currency) ?? Money::zero($currency);
+        $netAmount = Money::ofNullable($this->getNodeValue($node, 'ot:PRICE_LINE_AMOUNT'), $currency) ?? $unitPrice->times($quantity);
 
         return new OrderLine(
             id: $id,

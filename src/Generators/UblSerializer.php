@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Generators;
 
+use CommonToolkit\ValueObjects\Money;
 use DOMDocument;
 use DOMElement;
 use ERechnungToolkit\Entities\{AllowanceCharge, Party, PostalAddress};
@@ -207,9 +208,15 @@ final class UblSerializer {
     }
 
     /**
-     * Formats a monetary/numeric amount with two decimals and a dot separator.
+     * Formats a monetary/numeric amount. Money liefert seinen kanonischen Betrag
+     * (exakte Währungsskala, kein float-Zwischenschritt); Mengen und Prozentsätze
+     * werden mit zwei Nachkommastellen formatiert.
      */
-    public function amount(float $amount): string {
-        return number_format($amount, 2, '.', '');
+    public function amount(Money|float|int|null $amount): string {
+        if ($amount instanceof Money) {
+            return $amount->getAmount();
+        }
+
+        return number_format((float) ($amount ?? 0), 2, '.', '');
     }
 }

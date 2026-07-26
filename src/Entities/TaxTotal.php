@@ -13,34 +13,34 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Entities;
 
 use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use ERechnungToolkit\Enums\TaxCategory;
 
 /**
  * Tax Total and Tax Subtotal for E-Rechnung (EN 16931).
  *
- * Represents VAT breakdown information for the invoice.
+ * Represents VAT breakdown information for the invoice. Die Währung ergibt sich
+ * aus dem Steuerbetrag ({@see Money}) — kein getrenntes Währungsfeld mehr.
+ *
+ * @param TaxSubtotal[] $subtotals
  */
 final class TaxTotal {
     /** @var TaxSubtotal[] */
     private array $subtotals = [];
 
     public function __construct(
-        private float $taxAmount,
-        private CurrencyCode|string $currency,
+        private Money $taxAmount,
         array $subtotals = []
     ) {
-        if (is_string($this->currency)) {
-            $this->currency = CurrencyCode::tryFrom($this->currency) ?? CurrencyCode::fromSymbol($this->currency);
-        }
         $this->subtotals = $subtotals;
     }
 
-    public function getTaxAmount(): float {
+    public function getTaxAmount(): Money {
         return $this->taxAmount;
     }
 
     public function getCurrency(): CurrencyCode {
-        return $this->currency;
+        return $this->taxAmount->getCurrency();
     }
 
     /**
@@ -59,10 +59,9 @@ final class TaxTotal {
      * Recalculates the total tax amount from subtotals.
      */
     private function recalculateTaxAmount(): void {
-        $this->taxAmount = array_reduce(
-            $this->subtotals,
-            fn (float $sum, TaxSubtotal $sub) => $sum + $sub->getTaxAmount(),
-            0.0
+        $this->taxAmount = Money::sum(
+            array_map(fn (TaxSubtotal $sub): Money => $sub->getTaxAmount(), $this->subtotals),
+            $this->taxAmount->getCurrency()
         );
     }
 
@@ -72,27 +71,25 @@ final class TaxTotal {
      * @param TaxSubtotal[] $subtotals
      */
     public static function fromSubtotals(array $subtotals, CurrencyCode $currency): self {
-        $taxAmount = array_reduce(
-            $subtotals,
-            fn (float $sum, TaxSubtotal $sub) => $sum + $sub->getTaxAmount(),
-            0.0
+        $taxAmount = Money::sum(
+            array_map(fn (TaxSubtotal $sub): Money => $sub->getTaxAmount(), $subtotals),
+            $currency
         );
 
-        return new self($taxAmount, $currency, $subtotals);
+        return new self($taxAmount, $subtotals);
     }
 
     /**
      * Creates a simple tax total with a single rate.
      */
     public static function simple(
-        float $taxableAmount,
+        Money $taxableAmount,
         float $taxRate,
-        CurrencyCode $currency,
         TaxCategory $category = TaxCategory::STANDARD
     ): self {
-        $taxAmount = round($taxableAmount * $taxRate / 100, 2);
+        $taxAmount = $taxableAmount->percentage($taxRate);
         $subtotal = new TaxSubtotal($taxableAmount, $taxAmount, $category, $taxRate);
 
-        return new self($taxAmount, $currency, [$subtotal]);
+        return new self($taxAmount, [$subtotal]);
     }
 }

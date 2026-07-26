@@ -13,101 +13,112 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Entities;
 
 use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 
 /**
  * Monetary Total for E-Rechnung (EN 16931).
  *
- * Represents the monetary totals of the invoice.
+ * Represents the monetary totals of the invoice. Alle Beträge sind {@see Money};
+ * die Belegwährung ergibt sich aus dem Zahlbetrag — kein getrenntes Feld mehr.
  */
 final class MonetaryTotal {
+    private readonly Money $allowanceTotalAmount;
+
+    private readonly Money $chargeTotalAmount;
+
+    private readonly Money $prepaidAmount;
+
+    private readonly Money $payableRoundingAmount;
+
     public function __construct(
-        private float $lineExtensionAmount,
-        private float $taxExclusiveAmount,
-        private float $taxInclusiveAmount,
-        private float $payableAmount,
-        private CurrencyCode|string $currency,
-        private float $allowanceTotalAmount = 0.0,
-        private float $chargeTotalAmount = 0.0,
-        private float $prepaidAmount = 0.0,
-        private float $payableRoundingAmount = 0.0
+        private Money $lineExtensionAmount,
+        private Money $taxExclusiveAmount,
+        private Money $taxInclusiveAmount,
+        private Money $payableAmount,
+        ?Money $allowanceTotalAmount = null,
+        ?Money $chargeTotalAmount = null,
+        ?Money $prepaidAmount = null,
+        ?Money $payableRoundingAmount = null
     ) {
-        if (is_string($this->currency)) {
-            $this->currency = CurrencyCode::tryFrom($this->currency) ?? CurrencyCode::fromSymbol($this->currency);
-        }
+        $zero = Money::zero($payableAmount->getCurrency());
+        $this->allowanceTotalAmount = $allowanceTotalAmount ?? $zero;
+        $this->chargeTotalAmount = $chargeTotalAmount ?? $zero;
+        $this->prepaidAmount = $prepaidAmount ?? $zero;
+        $this->payableRoundingAmount = $payableRoundingAmount ?? $zero;
     }
 
     /**
      * Sum of all invoice line net amounts.
      */
-    public function getLineExtensionAmount(): float {
+    public function getLineExtensionAmount(): Money {
         return $this->lineExtensionAmount;
     }
 
     /**
      * Total amount without VAT.
      */
-    public function getTaxExclusiveAmount(): float {
+    public function getTaxExclusiveAmount(): Money {
         return $this->taxExclusiveAmount;
     }
 
     /**
      * Total amount including VAT.
      */
-    public function getTaxInclusiveAmount(): float {
+    public function getTaxInclusiveAmount(): Money {
         return $this->taxInclusiveAmount;
     }
 
     /**
      * Amount to be paid.
      */
-    public function getPayableAmount(): float {
+    public function getPayableAmount(): Money {
         return $this->payableAmount;
     }
 
     public function getCurrency(): CurrencyCode {
-        return $this->currency;
+        return $this->payableAmount->getCurrency();
     }
 
     /**
      * Sum of all document level allowances.
      */
-    public function getAllowanceTotalAmount(): float {
+    public function getAllowanceTotalAmount(): Money {
         return $this->allowanceTotalAmount;
     }
 
     /**
      * Sum of all document level charges.
      */
-    public function getChargeTotalAmount(): float {
+    public function getChargeTotalAmount(): Money {
         return $this->chargeTotalAmount;
     }
 
     /**
      * Amount already paid (prepayments, deposits).
      */
-    public function getPrepaidAmount(): float {
+    public function getPrepaidAmount(): Money {
         return $this->prepaidAmount;
     }
 
     /**
      * Rounding amount for the payable amount.
      */
-    public function getPayableRoundingAmount(): float {
+    public function getPayableRoundingAmount(): Money {
         return $this->payableRoundingAmount;
     }
 
     /**
      * Returns the calculated tax amount.
      */
-    public function getTaxAmount(): float {
-        return round($this->taxInclusiveAmount - $this->taxExclusiveAmount, 2);
+    public function getTaxAmount(): Money {
+        return $this->taxInclusiveAmount->minus($this->taxExclusiveAmount);
     }
 
     /**
      * Returns the outstanding amount (payable minus prepaid).
      */
-    public function getOutstandingAmount(): float {
-        return round($this->payableAmount - $this->prepaidAmount, 2);
+    public function getOutstandingAmount(): Money {
+        return $this->payableAmount->minus($this->prepaidAmount);
     }
 
     /**
@@ -121,52 +132,47 @@ final class MonetaryTotal {
         array $allowanceCharges,
         TaxTotal $taxTotal,
         CurrencyCode $currency,
-        float $prepaidAmount = 0.0
+        ?Money $prepaidAmount = null
     ): self {
+        $prepaidAmount ??= Money::zero($currency);
+
         // Sum of line net amounts
-        $lineExtensionAmount = array_reduce(
-            $lines,
-            fn (float $sum, InvoiceLine $line) => $sum + $line->getNetAmount(),
-            0.0
+        $lineExtensionAmount = Money::sum(
+            array_map(fn (InvoiceLine $line): Money => $line->getNetAmount(), $lines),
+            $currency
         );
 
         // Document level allowances
-        $allowanceTotalAmount = array_reduce(
-            array_filter($allowanceCharges, fn (AllowanceCharge $ac) => $ac->isAllowance()),
-            fn (float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
-            0.0
+        $allowanceTotalAmount = Money::sum(
+            array_map(
+                fn (AllowanceCharge $ac): Money => $ac->getAmount(),
+                array_filter($allowanceCharges, fn (AllowanceCharge $ac): bool => $ac->isAllowance())
+            ),
+            $currency
         );
 
         // Document level charges
-        $chargeTotalAmount = array_reduce(
-            array_filter($allowanceCharges, fn (AllowanceCharge $ac) => $ac->isCharge()),
-            fn (float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
-            0.0
+        $chargeTotalAmount = Money::sum(
+            array_map(
+                fn (AllowanceCharge $ac): Money => $ac->getAmount(),
+                array_filter($allowanceCharges, fn (AllowanceCharge $ac): bool => $ac->isCharge())
+            ),
+            $currency
         );
 
         // Tax exclusive = lines - allowances + charges
-        $taxExclusiveAmount = round(
-            $lineExtensionAmount - $allowanceTotalAmount + $chargeTotalAmount,
-            2
-        );
+        $taxExclusiveAmount = $lineExtensionAmount->minus($allowanceTotalAmount)->plus($chargeTotalAmount);
 
         // Tax inclusive = tax exclusive + tax
-        $taxInclusiveAmount = round(
-            $taxExclusiveAmount + $taxTotal->getTaxAmount(),
-            2
-        );
-
-        // Payable = tax inclusive - prepaid
-        $payableAmount = round($taxInclusiveAmount - $prepaidAmount, 2);
+        $taxInclusiveAmount = $taxExclusiveAmount->plus($taxTotal->getTaxAmount());
 
         return new self(
-            lineExtensionAmount: round($lineExtensionAmount, 2),
+            lineExtensionAmount: $lineExtensionAmount,
             taxExclusiveAmount: $taxExclusiveAmount,
             taxInclusiveAmount: $taxInclusiveAmount,
-            payableAmount: $payableAmount,
-            currency: $currency,
-            allowanceTotalAmount: round($allowanceTotalAmount, 2),
-            chargeTotalAmount: round($chargeTotalAmount, 2),
+            payableAmount: $taxInclusiveAmount->minus($prepaidAmount),
+            allowanceTotalAmount: $allowanceTotalAmount,
+            chargeTotalAmount: $chargeTotalAmount,
             prepaidAmount: $prepaidAmount
         );
     }
@@ -174,19 +180,14 @@ final class MonetaryTotal {
     /**
      * Creates a simple monetary total.
      */
-    public static function simple(
-        float $netAmount,
-        float $taxAmount,
-        CurrencyCode $currency
-    ): self {
-        $grossAmount = round($netAmount + $taxAmount, 2);
+    public static function simple(Money $netAmount, Money $taxAmount): self {
+        $grossAmount = $netAmount->plus($taxAmount);
 
         return new self(
             lineExtensionAmount: $netAmount,
             taxExclusiveAmount: $netAmount,
             taxInclusiveAmount: $grossAmount,
-            payableAmount: $grossAmount,
-            currency: $currency
+            payableAmount: $grossAmount
         );
     }
 }

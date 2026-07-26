@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Parsers;
 
 use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Entities\{AllowanceCharge, Order, OrderLine, Party, PostalAddress};
 use ERechnungToolkit\Enums\{AllowanceChargeReasonCode, UnitCode};
@@ -150,7 +151,7 @@ final class UglParser {
         }
 
         foreach ($lineGroups as $group) {
-            $order->addLine($this->parseLine($group['poa'], $group['texts']));
+            $order->addLine($this->parseLine($group['poa'], $currency, $group['texts']));
         }
 
         foreach ($pozRecords as $poz) {
@@ -163,7 +164,7 @@ final class UglParser {
             $label = $this->alpha($poz, 26, 105);
             $reason = $label !== '' ? $label : ($reasonCode?->label() ?? 'Zuschlag');
             $order->addAllowanceCharge(
-                AllowanceCharge::surcharge($this->num($poz, 117, 127, 2), $reason, $reasonCode, null, null)
+                AllowanceCharge::surcharge($this->money($poz, 117, 127, 2, $currency), $reason, $reasonCode, null, null)
             );
         }
 
@@ -173,7 +174,7 @@ final class UglParser {
     /**
      * @param  list<string>  $texts  POT records belonging to this position
      */
-    private function parseLine(string $record, array $texts = []): OrderLine {
+    private function parseLine(string $record, CurrencyCode $currency, array $texts = []): OrderLine {
         $position = $this->num($record, 4, 13, 0);
         $unitRaw = $this->alpha($record, 184, 186);
 
@@ -181,9 +182,9 @@ final class UglParser {
             id: (string) (int) $position,
             quantity: $this->num($record, 39, 49, 3),
             unitCode: UnitCode::tryFrom(self::UNIT_MAP[$unitRaw] ?? $unitRaw) ?? UnitCode::PIECE,
-            netAmount: $this->num($record, 142, 152, 2),
+            netAmount: $this->money($record, 142, 152, 2, $currency),
             itemName: $this->alpha($record, 50, 89),
-            unitPrice: $this->num($record, 130, 140, 2),
+            unitPrice: $this->money($record, 130, 140, 2, $currency),
             itemDescription: $this->alpha($record, 90, 129) ?: null,
             sellersItemId: $this->alpha($record, 24, 38) ?: null,
             taxPercent: ($tax = $this->num($record, 189, 193, 2)) > 0 ? $tax : null,
@@ -222,6 +223,18 @@ final class UglParser {
     }
 
     /** Reads a numeric field with implicit decimals. */
+    /**
+     * Betragsfeld mit impliziten Nachkommastellen → Money (kein float-Zwischenschritt).
+     */
+    private function money(string $record, int $from, int $to, int $decimals, CurrencyCode $currency): Money {
+        $raw = trim(substr($record, $from - 1, $to - $from + 1));
+        if ($raw === '' || !ctype_digit($raw)) {
+            return Money::zero($currency);
+        }
+
+        return Money::ofMinor((int) $raw, $currency, $decimals)->withScale($currency->getDefaultFractionDigits());
+    }
+
     private function num(string $record, int $from, int $to, int $decimals): float {
         $raw = trim(substr($record, $from - 1, $to - $from + 1));
         if ($raw === '' || !ctype_digit($raw)) {

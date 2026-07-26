@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Generators;
 
+use CommonToolkit\ValueObjects\Money;
 use ERechnungToolkit\Entities\{AllowanceCharge, Order, OrderLine};
 use ERechnungToolkit\Enums\{AllowanceChargeReasonCode, UnitCode};
 use ERRORToolkit\Traits\ErrorLog;
@@ -255,10 +256,15 @@ final class UglGenerator {
         return $this->place($record, $from, $value, $length);
     }
 
-    /** Writes a right-aligned, zero-padded numeric field with implicit decimals. */
-    private function putNum(string $record, int $from, int $to, float $value, int $decimals): string {
+    /**
+     * Writes a right-aligned, zero-padded numeric field with implicit decimals.
+     * Money wird über seine Minor Units skaliert (kein float-Zwischenschritt).
+     */
+    private function putNum(string $record, int $from, int $to, Money|float $value, int $decimals): string {
         $length = $to - $from + 1;
-        $scaled = (int) round(abs($value) * (10 ** $decimals));
+        $scaled = $value instanceof Money
+            ? abs($value->withScale($decimals)->getMinorAmount())
+            : (int) round(abs($value) * (10 ** $decimals));
         $digits = (string) $scaled;
         if (strlen($digits) > $length) {
             $digits = substr($digits, -$length); // Überlauf: niederwertige Stellen behalten

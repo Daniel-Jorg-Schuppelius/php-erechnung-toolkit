@@ -159,12 +159,12 @@ final class OrderGenerator {
         $lineExt = $this->ubl->element($dom, $total, 'cbc:LineExtensionAmount', $this->ubl->amount($order->getLineExtensionAmount()));
         $lineExt->setAttribute('currencyID', $currency);
 
-        if ($order->getAllowanceTotalAmount() > 0) {
+        if ($order->getAllowanceTotalAmount()->isPositive()) {
             $allowance = $this->ubl->element($dom, $total, 'cbc:AllowanceTotalAmount', $this->ubl->amount($order->getAllowanceTotalAmount()));
             $allowance->setAttribute('currencyID', $currency);
         }
 
-        if ($order->getChargeTotalAmount() > 0) {
+        if ($order->getChargeTotalAmount()->isPositive()) {
             $charge = $this->ubl->element($dom, $total, 'cbc:ChargeTotalAmount', $this->ubl->amount($order->getChargeTotalAmount()));
             $charge->setAttribute('currencyID', $currency);
         }

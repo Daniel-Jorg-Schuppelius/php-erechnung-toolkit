@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Tests\Entities;
 
 use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party, PaymentTerms, PostalAddress, TaxSubtotal};
 use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, NoteSubjectCode, TaxCategory, UnitCode};
@@ -104,14 +105,14 @@ class ERechnungDocumentTest extends BaseTestCase {
             buyer: $this->buyer
         );
 
-        $line1 = InvoiceLine::create('1', 'Beratungsleistung', 10, 150.00, 19.0, UnitCode::HOUR);
-        $line2 = InvoiceLine::create('2', 'Software-Lizenz', 1, 499.00, 19.0);
+        $line1 = InvoiceLine::create('1', 'Beratungsleistung', 10, Money::of('150.00', CurrencyCode::Euro), 19.0, UnitCode::HOUR);
+        $line2 = InvoiceLine::create('2', 'Software-Lizenz', 1, Money::of('499.00', CurrencyCode::Euro), 19.0);
 
         $document->addLine($line1);
         $document->addLine($line2);
 
         $this->assertEquals(2, $document->countLines());
-        $this->assertEquals(1999.00, $document->getNetAmount()); // 1500 + 499
+        $this->assertSame('1999.00', $document->getNetAmount()->getAmount()); // 1500 + 499
     }
 
     public function test_tax_calculation(): void {
@@ -122,12 +123,12 @@ class ERechnungDocumentTest extends BaseTestCase {
             buyer: $this->buyer
         );
 
-        $line = InvoiceLine::create('1', 'Produkt', 1, 100.00, 19.0);
+        $line = InvoiceLine::create('1', 'Produkt', 1, Money::of('100.00', CurrencyCode::Euro), 19.0);
         $document->addLine($line);
 
-        $this->assertEquals(100.00, $document->getNetAmount());
-        $this->assertEquals(19.00, $document->getTaxAmount());
-        $this->assertEquals(119.00, $document->getGrossAmount());
+        $this->assertSame('100.00', $document->getNetAmount()->getAmount());
+        $this->assertSame('19.00', $document->getTaxAmount()->getAmount());
+        $this->assertSame('119.00', $document->getGrossAmount()->getAmount());
     }
 
     public function test_mixed_tax_rates(): void {
@@ -139,17 +140,17 @@ class ERechnungDocumentTest extends BaseTestCase {
         );
 
         // Standard rate 19%
-        $line1 = InvoiceLine::create('1', 'Software', 1, 100.00, 19.0);
+        $line1 = InvoiceLine::create('1', 'Software', 1, Money::of('100.00', CurrencyCode::Euro), 19.0);
         // Reduced rate 7%
-        $line2 = InvoiceLine::create('2', 'Buch', 1, 50.00, 7.0);
+        $line2 = InvoiceLine::create('2', 'Buch', 1, Money::of('50.00', CurrencyCode::Euro), 7.0);
 
         $document->addLine($line1);
         $document->addLine($line2);
 
-        $this->assertEquals(150.00, $document->getNetAmount());
+        $this->assertSame('150.00', $document->getNetAmount()->getAmount());
         // 19% of 100 = 19, 7% of 50 = 3.50
-        $this->assertEquals(22.50, $document->getTaxAmount());
-        $this->assertEquals(172.50, $document->getGrossAmount());
+        $this->assertSame('22.50', $document->getTaxAmount()->getAmount());
+        $this->assertSame('172.50', $document->getGrossAmount()->getAmount());
 
         // Check tax subtotals
         $taxTotal = $document->getTaxTotal();
@@ -165,16 +166,16 @@ class ERechnungDocumentTest extends BaseTestCase {
             buyer: $this->buyer
         );
 
-        $line = InvoiceLine::create('1', 'Produkt', 10, 100.00, 19.0);
+        $line = InvoiceLine::create('1', 'Produkt', 10, Money::of('100.00', CurrencyCode::Euro), 19.0);
         $document->addLine($line);
 
         // Add 10% discount
-        $discount = AllowanceCharge::discount(100.00, '10% Rabatt');
+        $discount = AllowanceCharge::discount(Money::of('100.00', CurrencyCode::Euro), '10% Rabatt');
         $document->addAllowanceCharge($discount);
 
-        $this->assertEquals(1000.00, $document->getMonetaryTotal()->getLineExtensionAmount());
-        $this->assertEquals(100.00, $document->getMonetaryTotal()->getAllowanceTotalAmount());
-        $this->assertEquals(900.00, $document->getNetAmount()); // 1000 - 100
+        $this->assertSame('1000.00', $document->getMonetaryTotal()->getLineExtensionAmount()->getAmount());
+        $this->assertSame('100.00', $document->getMonetaryTotal()->getAllowanceTotalAmount()->getAmount());
+        $this->assertSame('900.00', $document->getNetAmount()->getAmount()); // 1000 - 100
     }
 
     public function test_document_level_charges(): void {
@@ -185,16 +186,16 @@ class ERechnungDocumentTest extends BaseTestCase {
             buyer: $this->buyer
         );
 
-        $line = InvoiceLine::create('1', 'Produkt', 1, 100.00, 19.0);
+        $line = InvoiceLine::create('1', 'Produkt', 1, Money::of('100.00', CurrencyCode::Euro), 19.0);
         $document->addLine($line);
 
         // Add shipping
-        $shipping = AllowanceCharge::shipping(5.95);
+        $shipping = AllowanceCharge::shipping(Money::of('5.95', CurrencyCode::Euro));
         $document->addAllowanceCharge($shipping);
 
-        $this->assertEquals(100.00, $document->getMonetaryTotal()->getLineExtensionAmount());
-        $this->assertEquals(5.95, $document->getMonetaryTotal()->getChargeTotalAmount());
-        $this->assertEquals(105.95, $document->getNetAmount()); // 100 + 5.95
+        $this->assertSame('100.00', $document->getMonetaryTotal()->getLineExtensionAmount()->getAmount());
+        $this->assertSame('5.95', $document->getMonetaryTotal()->getChargeTotalAmount()->getAmount());
+        $this->assertSame('105.95', $document->getNetAmount()->getAmount()); // 100 + 5.95
     }
 
     public function test_validation(): void {
@@ -211,7 +212,7 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertContains('BG-25: At least one invoice line is required', $errors);
 
         // Add a line
-        $line = InvoiceLine::create('1', 'Test', 1, 100.00);
+        $line = InvoiceLine::create('1', 'Test', 1, Money::of('100.00', CurrencyCode::Euro));
         $document->addLine($line);
 
         $errors = $document->validate();
@@ -233,7 +234,7 @@ class ERechnungDocumentTest extends BaseTestCase {
             profile: ERechnungProfile::XRECHNUNG
         );
 
-        $line = InvoiceLine::create('1', 'Test', 1, 100.00);
+        $line = InvoiceLine::create('1', 'Test', 1, Money::of('100.00', CurrencyCode::Euro));
         $document->addLine($line);
 
         $errors = $document->validate();
@@ -314,36 +315,36 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertNotNull($discountDeadline);
         $this->assertEquals('2026-02-01', $discountDeadline->format('Y-m-d'));
 
-        $discountedAmount = $terms->calculateDiscountedAmount(1000.00);
-        $this->assertEquals(980.00, $discountedAmount);
+        $discountedAmount = $terms->calculateDiscountedAmount(Money::of('1000.00', CurrencyCode::Euro));
+        $this->assertSame('980.00', $discountedAmount->getAmount());
     }
 
     public function test_invoice_line_factory_methods(): void {
-        $line1 = InvoiceLine::service('1', 'Consulting', 8, 125.00);
+        $line1 = InvoiceLine::service('1', 'Consulting', 8, Money::of('125.00', CurrencyCode::Euro));
         $this->assertEquals(8.0, $line1->getQuantity());
         $this->assertEquals(UnitCode::HOUR, $line1->getUnitCode());
-        $this->assertEquals(1000.00, $line1->getNetAmount());
+        $this->assertSame('1000.00', $line1->getNetAmount()->getAmount());
 
-        $line2 = InvoiceLine::lumpSum('2', 'Projektpauschale', 5000.00);
+        $line2 = InvoiceLine::lumpSum('2', 'Projektpauschale', Money::of('5000.00', CurrencyCode::Euro));
         $this->assertEquals(1.0, $line2->getQuantity());
         $this->assertEquals(UnitCode::LUMP_SUM, $line2->getUnitCode());
-        $this->assertEquals(5000.00, $line2->getNetAmount());
+        $this->assertSame('5000.00', $line2->getNetAmount()->getAmount());
     }
 
     public function test_tax_subtotal_factory_methods(): void {
-        $standard = TaxSubtotal::standard(1000.00);
+        $standard = TaxSubtotal::standard(Money::of('1000.00', CurrencyCode::Euro));
         $this->assertEquals(TaxCategory::STANDARD, $standard->getCategory());
         $this->assertEquals(19.0, $standard->getPercent());
-        $this->assertEquals(190.00, $standard->getTaxAmount());
+        $this->assertSame('190.00', $standard->getTaxAmount()->getAmount());
         $this->assertFalse($standard->isExempt());
 
-        $reduced = TaxSubtotal::reduced(1000.00);
+        $reduced = TaxSubtotal::reduced(Money::of('1000.00', CurrencyCode::Euro));
         $this->assertEquals(7.0, $reduced->getPercent());
-        $this->assertEquals(70.00, $reduced->getTaxAmount());
+        $this->assertSame('70.00', $reduced->getTaxAmount()->getAmount());
 
-        $reverseCharge = TaxSubtotal::reverseCharge(1000.00);
+        $reverseCharge = TaxSubtotal::reverseCharge(Money::of('1000.00', CurrencyCode::Euro));
         $this->assertEquals(TaxCategory::REVERSE_CHARGE, $reverseCharge->getCategory());
-        $this->assertEquals(0.0, $reverseCharge->getTaxAmount());
+        $this->assertSame('0.00', $reverseCharge->getTaxAmount()->getAmount());
         $this->assertTrue($reverseCharge->isExempt());
     }
 }

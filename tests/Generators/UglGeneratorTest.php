@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace Tests\Generators;
 
+use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\OrderBuilder;
 use ERechnungToolkit\Entities\{AllowanceCharge, Order, OrderLine};
@@ -129,13 +131,13 @@ class UglGeneratorTest extends BaseTestCase {
             ->withSeller('GC Grosshandel', 'DE123456789')
             ->withSellerAddress('Lagerstr 2', '54321', 'Lieferstadt')
             ->addOrderLine(new OrderLine(
-                id: '1', quantity: 2, unitCode: UnitCode::PIECE, netAmount: 240.00,
-                itemName: 'Pumpe', unitPrice: 120.00, sellersItemId: 'ART-1',
+                id: '1', quantity: 2, unitCode: UnitCode::PIECE, netAmount: Money::of('240.00', CurrencyCode::Euro),
+                itemName: 'Pumpe', unitPrice: Money::of('120.00', CurrencyCode::Euro), sellersItemId: 'ART-1',
                 note: 'Bitte vormontiert liefern'
             ))
             ->build();
-        $order->addAllowanceCharge(AllowanceCharge::shipping(20.00));                  // FREIGHT → Typ 07
-        $order->addAllowanceCharge(AllowanceCharge::surcharge(5.00, 'Mindermengenzuschlag')); // → Typ 99
+        $order->addAllowanceCharge(AllowanceCharge::shipping(Money::of('20.00', CurrencyCode::Euro)));                  // FREIGHT → Typ 07
+        $order->addAllowanceCharge(AllowanceCharge::surcharge(Money::of('5.00', CurrencyCode::Euro), 'Mindermengenzuschlag')); // → Typ 99
 
         $records = $this->records($this->generator->generateOrder($order));
 

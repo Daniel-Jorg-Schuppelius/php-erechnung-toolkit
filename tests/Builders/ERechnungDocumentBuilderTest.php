@@ -36,7 +36,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertEquals('Muster GmbH', $document->getSeller()->getName());
         $this->assertEquals('Kunde AG', $document->getBuyer()->getName());
         $this->assertEquals(1, $document->countLines());
-        $this->assertEquals(1500.00, $document->getNetAmount());
+        $this->assertSame('1500.00', $document->getNetAmount()->getAmount());
     }
 
     public function test_create_x_rechnung_invoice(): void {
@@ -71,7 +71,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
 
         $this->assertEquals(ERechnungProfile::EN16931, $document->getProfile());
         $this->assertEquals(2, $document->countLines());
-        $this->assertEquals(1000.00, $document->getNetAmount()); // 500 + 500
+        $this->assertSame('1000.00', $document->getNetAmount()->getAmount()); // 500 + 500
     }
 
     public function test_create_credit_note(): void {
@@ -149,7 +149,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
 
         $this->assertCount(1, $document->getAllowanceCharges());
         $this->assertFalse($document->getAllowanceCharges()[0]->isCharge());
-        $this->assertEquals(900.00, $document->getNetAmount());
+        $this->assertSame('900.00', $document->getNetAmount()->getAmount());
     }
 
     public function test_builder_with_shipping(): void {
@@ -164,7 +164,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
 
         $this->assertCount(1, $document->getAllowanceCharges());
         $this->assertTrue($document->getAllowanceCharges()[0]->isCharge());
-        $this->assertEquals(105.95, $document->getNetAmount());
+        $this->assertSame('105.95', $document->getNetAmount()->getAmount());
     }
 
     public function test_builder_with_service_line(): void {
@@ -180,7 +180,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertCount(1, $lines);
         $this->assertEquals(UnitCode::HOUR, $lines[0]->getUnitCode());
         $this->assertEquals(8.0, $lines[0]->getQuantity());
-        $this->assertEquals(1200.00, $lines[0]->getNetAmount());
+        $this->assertSame('1200.00', $lines[0]->getNetAmount()->getAmount());
     }
 
     public function test_builder_with_lump_sum_line(): void {
@@ -196,7 +196,7 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertCount(1, $lines);
         $this->assertEquals(UnitCode::LUMP_SUM, $lines[0]->getUnitCode());
         $this->assertEquals(1.0, $lines[0]->getQuantity());
-        $this->assertEquals(5000.00, $lines[0]->getNetAmount());
+        $this->assertSame('5000.00', $lines[0]->getNetAmount()->getAmount());
     }
 
     public function test_builder_with_notes(): void {
@@ -296,14 +296,12 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
         $this->assertEquals(3, $document->countLines());
 
         // Net: 1500 + 499 + 500 + 9.95 = 2508.95
-        $this->assertEquals(2508.95, $document->getNetAmount());
+        $this->assertSame('2508.95', $document->getNetAmount()->getAmount());
 
-        // Tax: 2508.95 * 0.19 = 476.70 (rounded)
-        $expectedTax = round(2508.95 * 0.19, 2);
-        $this->assertEquals($expectedTax, $document->getTaxAmount());
+        // Tax: 2508.95 * 0.19 = 476.70 (kaufmännisch gerundet)
+        $this->assertSame('476.70', $document->getTaxAmount()->getAmount());
 
         // Gross: 2508.95 + 476.70 = 2985.65
-        $expectedGross = round(2508.95 + $expectedTax, 2);
-        $this->assertEquals($expectedGross, $document->getGrossAmount());
+        $this->assertSame('2985.65', $document->getGrossAmount()->getAmount());
     }
 }

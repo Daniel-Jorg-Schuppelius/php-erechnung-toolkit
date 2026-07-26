@@ -14,6 +14,7 @@ namespace ERechnungToolkit\Entities;
 
 use CommonToolkit\Contracts\Abstracts\XML\DomainXmlDocumentAbstract;
 use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Enums\{OrderProfile, OrderXProfile};
 use ERechnungToolkit\Generators\{OpenTransOrderGenerator, OrderGenerator, OrderXGenerator, UglGenerator};
@@ -189,55 +190,46 @@ final class Order extends DomainXmlDocumentAbstract {
     /**
      * Sum of all order line net amounts (BT line extension equivalent).
      */
-    public function getLineExtensionAmount(): float {
-        return round(
-            array_reduce(
-                $this->lines,
-                fn (float $sum, OrderLine $line) => $sum + $line->getNetAmount(),
-                0.0
-            ),
-            2
+    public function getLineExtensionAmount(): Money {
+        return Money::sum(
+            array_map(fn (OrderLine $line): Money => $line->getNetAmount(), $this->lines),
+            $this->currency
         );
     }
 
     /**
      * Sum of document level allowances.
      */
-    public function getAllowanceTotalAmount(): float {
-        return round(
-            array_reduce(
-                array_filter($this->allowanceCharges, fn (AllowanceCharge $ac) => $ac->isAllowance()),
-                fn (float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
-                0.0
+    public function getAllowanceTotalAmount(): Money {
+        return Money::sum(
+            array_map(
+                fn (AllowanceCharge $ac): Money => $ac->getAmount(),
+                array_filter($this->allowanceCharges, fn (AllowanceCharge $ac): bool => $ac->isAllowance())
             ),
-            2
+            $this->currency
         );
     }
 
     /**
      * Sum of document level charges.
      */
-    public function getChargeTotalAmount(): float {
-        return round(
-            array_reduce(
-                array_filter($this->allowanceCharges, fn (AllowanceCharge $ac) => $ac->isCharge()),
-                fn (float $sum, AllowanceCharge $ac) => $sum + $ac->getAmount(),
-                0.0
+    public function getChargeTotalAmount(): Money {
+        return Money::sum(
+            array_map(
+                fn (AllowanceCharge $ac): Money => $ac->getAmount(),
+                array_filter($this->allowanceCharges, fn (AllowanceCharge $ac): bool => $ac->isCharge())
             ),
-            2
+            $this->currency
         );
     }
 
     /**
      * Anticipated payable amount = line extension - allowances + charges.
      */
-    public function getPayableAmount(): float {
-        return round(
-            $this->getLineExtensionAmount()
-                - $this->getAllowanceTotalAmount()
-                + $this->getChargeTotalAmount(),
-            2
-        );
+    public function getPayableAmount(): Money {
+        return $this->getLineExtensionAmount()
+            ->minus($this->getAllowanceTotalAmount())
+            ->plus($this->getChargeTotalAmount());
     }
 
     public function countLines(): int {

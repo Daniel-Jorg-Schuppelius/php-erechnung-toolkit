@@ -43,8 +43,8 @@ class OrderXParserTest extends BaseTestCase {
         $firstLine = $order->getLines()[0];
         $this->assertSame('Product Name', $firstLine->getItemName());
         $this->assertSame(6.0, $firstLine->getQuantity());
-        $this->assertSame(10.00, $firstLine->getUnitPrice());
-        $this->assertSame(60.00, $firstLine->getNetAmount());
+        $this->assertSame('10.00', $firstLine->getUnitPrice()->getAmount());
+        $this->assertSame('60.00', $firstLine->getNetAmount()->getAmount());
     }
 
     public function test_roundtrip_orderx(): void {
@@ -72,13 +72,13 @@ class OrderXParserTest extends BaseTestCase {
         $first = $parsed->getLines()[0];
         $this->assertSame('Ware A', $first->getItemName());
         $this->assertSame(5.0, $first->getQuantity());
-        $this->assertSame(120.00, $first->getUnitPrice());
-        $this->assertSame(600.00, $first->getNetAmount());
+        $this->assertSame('120.00', $first->getUnitPrice()->getAmount());
+        $this->assertSame('600.00', $first->getNetAmount()->getAmount());
         $this->assertSame('ART-1', $first->getSellersItemId());
         $this->assertSame(TaxCategory::STANDARD, $first->getTaxCategory());
         $this->assertSame(19.0, $first->getTaxPercent());
 
-        $this->assertSame(1100.00, $parsed->getLineExtensionAmount());
+        $this->assertSame('1100.00', $parsed->getLineExtensionAmount()->getAmount());
     }
 
     public function test_rejects_non_orderx_document(): void {

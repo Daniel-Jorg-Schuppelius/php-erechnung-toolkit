@@ -61,12 +61,12 @@ class OrderParserTest extends BaseTestCase {
         $firstLine = $parsed->getLines()[0];
         $this->assertSame('Bürostuhl', $firstLine->getItemName());
         $this->assertSame(5.0, $firstLine->getQuantity());
-        $this->assertSame(120.00, $firstLine->getUnitPrice());
-        $this->assertSame(600.00, $firstLine->getNetAmount());
+        $this->assertSame('120.00', $firstLine->getUnitPrice()->getAmount());
+        $this->assertSame('600.00', $firstLine->getNetAmount()->getAmount());
         $this->assertSame('ART-4711', $firstLine->getSellersItemId());
         $this->assertSame(UnitCode::PIECE, $firstLine->getUnitCode());
 
-        $this->assertSame(1100.00, $parsed->getLineExtensionAmount());
+        $this->assertSame('1100.00', $parsed->getLineExtensionAmount()->getAmount());
     }
 
     public function test_parse_rejects_non_order_document(): void {

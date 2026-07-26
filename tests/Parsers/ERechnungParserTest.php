@@ -116,13 +116,13 @@ class ERechnungParserTest extends BaseTestCase {
 
         $this->assertEquals('Beratungsleistung', $lines[0]->getItemName());
         $this->assertEquals(10.0, $lines[0]->getQuantity());
-        $this->assertEquals(150.00, $lines[0]->getUnitPrice());
-        $this->assertEquals(1500.00, $lines[0]->getNetAmount());
+        $this->assertSame('150.00', $lines[0]->getUnitPrice()->getAmount());
+        $this->assertSame('1500.00', $lines[0]->getNetAmount()->getAmount());
         $this->assertEquals(19.0, $lines[0]->getTaxPercent());
 
         $this->assertEquals('Software-Lizenz', $lines[1]->getItemName());
         $this->assertEquals(1.0, $lines[1]->getQuantity());
-        $this->assertEquals(499.00, $lines[1]->getNetAmount());
+        $this->assertSame('499.00', $lines[1]->getNetAmount()->getAmount());
     }
 
     public function test_parse_ubl_tax_total(): void {
@@ -140,11 +140,11 @@ class ERechnungParserTest extends BaseTestCase {
 
         $taxTotal = $parsed->getTaxTotal();
         $this->assertNotNull($taxTotal);
-        $this->assertEquals(19.00, $taxTotal->getTaxAmount());
+        $this->assertSame('19.00', $taxTotal->getTaxAmount()->getAmount());
 
         $subtotals = $taxTotal->getSubtotals();
         $this->assertCount(1, $subtotals);
-        $this->assertEquals(100.00, $subtotals[0]->getTaxableAmount());
+        $this->assertSame('100.00', $subtotals[0]->getTaxableAmount()->getAmount());
         $this->assertEquals(19.0, $subtotals[0]->getPercent());
     }
 
@@ -163,10 +163,10 @@ class ERechnungParserTest extends BaseTestCase {
 
         $total = $parsed->getMonetaryTotal();
         $this->assertNotNull($total);
-        $this->assertEquals(100.00, $total->getLineExtensionAmount());
-        $this->assertEquals(100.00, $total->getTaxExclusiveAmount());
-        $this->assertEquals(119.00, $total->getTaxInclusiveAmount());
-        $this->assertEquals(119.00, $total->getPayableAmount());
+        $this->assertSame('100.00', $total->getLineExtensionAmount()->getAmount());
+        $this->assertSame('100.00', $total->getTaxExclusiveAmount()->getAmount());
+        $this->assertSame('119.00', $total->getTaxInclusiveAmount()->getAmount());
+        $this->assertSame('119.00', $total->getPayableAmount()->getAmount());
     }
 
     public function test_parse_cii_invoice(): void {
@@ -224,8 +224,8 @@ class ERechnungParserTest extends BaseTestCase {
 
         $this->assertEquals('Ware A', $lines[0]->getItemName());
         $this->assertEquals(5.0, $lines[0]->getQuantity());
-        $this->assertEquals(100.00, $lines[0]->getUnitPrice());
-        $this->assertEquals(500.00, $lines[0]->getNetAmount());
+        $this->assertSame('100.00', $lines[0]->getUnitPrice()->getAmount());
+        $this->assertSame('500.00', $lines[0]->getNetAmount()->getAmount());
     }
 
     public function test_roundtrip_ubl(): void {
@@ -407,26 +407,26 @@ class ERechnungParserTest extends BaseTestCase {
         // Line 1: Zeitschrift
         $this->assertEquals('Zeitschrift [...]', $lines[0]->getItemName());
         $this->assertEquals(1, $lines[0]->getQuantity());
-        $this->assertEquals(288.79, $lines[0]->getUnitPrice());
-        $this->assertEquals(288.79, $lines[0]->getNetAmount());
+        $this->assertSame('288.79', $lines[0]->getUnitPrice()->getAmount());
+        $this->assertSame('288.79', $lines[0]->getNetAmount()->getAmount());
         $this->assertEquals(7.0, $lines[0]->getTaxPercent());
 
         // Line 2: Porto
         $this->assertEquals('Porto + Versandkosten', $lines[1]->getItemName());
         $this->assertEquals(1, $lines[1]->getQuantity());
-        $this->assertEquals(26.07, $lines[1]->getUnitPrice());
-        $this->assertEquals(26.07, $lines[1]->getNetAmount());
+        $this->assertSame('26.07', $lines[1]->getUnitPrice()->getAmount());
+        $this->assertSame('26.07', $lines[1]->getNetAmount()->getAmount());
         $this->assertEquals(7.0, $lines[1]->getTaxPercent());
 
         // Tax total
         $taxTotal = $doc->getTaxTotal();
         $this->assertNotNull($taxTotal);
-        $this->assertEquals(22.04, $taxTotal->getTaxAmount());
+        $this->assertSame('22.04', $taxTotal->getTaxAmount()->getAmount());
 
         // Monetary total
         $monetaryTotal = $doc->getMonetaryTotal();
         $this->assertNotNull($monetaryTotal);
-        $this->assertEquals(314.86, $monetaryTotal->getLineExtensionAmount());
-        $this->assertEquals(336.9, $monetaryTotal->getPayableAmount());
+        $this->assertSame('314.86', $monetaryTotal->getLineExtensionAmount()->getAmount());
+        $this->assertSame('336.90', $monetaryTotal->getPayableAmount()->getAmount());
     }
 }

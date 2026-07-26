@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Parsers;
 
 use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use DOMDocument;
 use DOMElement;
@@ -125,7 +126,7 @@ final class OrderXParser {
             if (!$lineNode instanceof DOMElement) {
                 continue;
             }
-            $order->addLine($this->parseLine($lineNode));
+            $order->addLine($this->parseLine($lineNode, $currency));
         }
 
         return $order;
@@ -179,7 +180,7 @@ final class OrderXParser {
         );
     }
 
-    private function parseLine(DOMElement $node): OrderLine {
+    private function parseLine(DOMElement $node, CurrencyCode $currency): OrderLine {
         $id = $this->getNodeValue($node, 'ram:AssociatedDocumentLineDocument/ram:LineID') ?? '';
 
         $itemName = $this->getNodeValue($node, 'ram:SpecifiedTradeProduct/ram:Name') ?? '';
@@ -188,10 +189,10 @@ final class OrderXParser {
         $buyersItemId = $this->getNodeValue($node, 'ram:SpecifiedTradeProduct/ram:BuyerAssignedID');
         $standardItemId = $this->getNodeValue($node, 'ram:SpecifiedTradeProduct/ram:GlobalID');
 
-        $unitPrice = (float) ($this->getNodeValue(
+        $unitPrice = Money::ofNullable($this->getNodeValue(
             $node,
             'ram:SpecifiedLineTradeAgreement/ram:NetPriceProductTradePrice/ram:ChargeAmount'
-        ) ?? '0');
+        ), $currency) ?? Money::zero($currency);
 
         $quantity = 0.0;
         $unitCode = UnitCode::PIECE;
@@ -204,10 +205,10 @@ final class OrderXParser {
             }
         }
 
-        $netAmount = (float) ($this->getNodeValue(
+        $netAmount = Money::ofNullable($this->getNodeValue(
             $node,
             'ram:SpecifiedLineTradeSettlement/ram:SpecifiedTradeSettlementLineMonetarySummation/ram:LineTotalAmount'
-        ) ?? '0');
+        ), $currency) ?? Money::zero($currency);
 
         $categoryCode = $this->getNodeValue($node, 'ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:CategoryCode');
         $percentValue = $this->getNodeValue($node, 'ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:RateApplicablePercent');

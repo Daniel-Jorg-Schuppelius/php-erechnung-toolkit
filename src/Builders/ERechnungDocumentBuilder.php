@@ -13,9 +13,11 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Builders;
 
 use CommonToolkit\Enums\{CountryCode, CurrencyCode};
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party, PaymentTerms, PostalAddress};
 use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, NoteSubjectCode, PaymentMeansCode, TaxCategory, UnitCode};
+use ERechnungToolkit\Traits\MoneyInputTrait;
 use ERRORToolkit\Traits\ErrorLog;
 
 /**
@@ -37,6 +39,8 @@ use ERRORToolkit\Traits\ErrorLog;
  */
 final class ERechnungDocumentBuilder {
     use ErrorLog;
+
+    use MoneyInputTrait;
     private string $id;
     private DateTimeImmutable $issueDate;
     private InvoiceType $invoiceType = InvoiceType::INVOICE;
@@ -135,6 +139,10 @@ final class ERechnungDocumentBuilder {
     public function withInvoiceType(InvoiceType $type): self {
         $this->invoiceType = $type;
         return $this;
+    }
+
+    protected function documentCurrency(): CurrencyCode {
+        return $this->currency;
     }
 
     public function withCurrency(CurrencyCode $currency): self {
@@ -346,7 +354,7 @@ final class ERechnungDocumentBuilder {
     public function addLine(
         string $itemName,
         float $quantity,
-        float $unitPrice,
+        Money|string|float $unitPrice,
         float $taxPercent = 19.0,
         ?UnitCode $unitCode = null,
         ?TaxCategory $taxCategory = null,
@@ -354,13 +362,14 @@ final class ERechnungDocumentBuilder {
         ?string $sellersItemId = null
     ): self {
         $this->lineCounter++;
+        $price = $this->toMoney($unitPrice);
         $line = new InvoiceLine(
             id: (string) $this->lineCounter,
             quantity: $quantity,
             unitCode: $unitCode ?? UnitCode::PIECE,
-            netAmount: round($quantity * $unitPrice, 2),
+            netAmount: $price->times($quantity),
             itemName: $itemName,
-            unitPrice: $unitPrice,
+            unitPrice: $price,
             taxCategory: $taxCategory ?? TaxCategory::STANDARD,
             taxPercent: $taxPercent,
             itemDescription: $itemDescription,
@@ -407,11 +416,11 @@ final class ERechnungDocumentBuilder {
      * Adds a document-level discount.
      */
     public function addDiscount(
-        float $amount,
+        Money|string|float $amount,
         string $reason = 'Rabatt',
         float $taxPercent = 19.0
     ): self {
-        $this->allowanceCharges[] = AllowanceCharge::discount($amount, $reason, null, TaxCategory::STANDARD, $taxPercent);
+        $this->allowanceCharges[] = AllowanceCharge::discount($this->toMoney($amount), $reason, null, TaxCategory::STANDARD, $taxPercent);
         return $this;
     }
 
@@ -424,10 +433,9 @@ final class ERechnungDocumentBuilder {
         float $taxPercent = 19.0
     ): self {
         // Calculate base amount from lines
-        $baseAmount = array_reduce(
-            $this->lines,
-            fn (float $sum, InvoiceLine $line) => $sum + $line->getNetAmount(),
-            0.0
+        $baseAmount = Money::sum(
+            array_map(fn (InvoiceLine $line): Money => $line->getNetAmount(), $this->lines),
+            $this->currency
         );
         $this->allowanceCharges[] = AllowanceCharge::percentageDiscount(
             $baseAmount,
@@ -443,16 +451,16 @@ final class ERechnungDocumentBuilder {
     /**
      * Adds shipping/freight charges.
      */
-    public function addShipping(float $amount, float $taxPercent = 19.0): self {
-        $this->allowanceCharges[] = AllowanceCharge::shipping($amount, TaxCategory::STANDARD, $taxPercent);
+    public function addShipping(Money|string|float $amount, float $taxPercent = 19.0): self {
+        $this->allowanceCharges[] = AllowanceCharge::shipping($this->toMoney($amount), TaxCategory::STANDARD, $taxPercent);
         return $this;
     }
 
     /**
      * Adds packing charges.
      */
-    public function addPacking(float $amount, float $taxPercent = 19.0): self {
-        $this->allowanceCharges[] = AllowanceCharge::packing($amount, TaxCategory::STANDARD, $taxPercent);
+    public function addPacking(Money|string|float $amount, float $taxPercent = 19.0): self {
+        $this->allowanceCharges[] = AllowanceCharge::packing($this->toMoney($amount), TaxCategory::STANDARD, $taxPercent);
         return $this;
     }
 

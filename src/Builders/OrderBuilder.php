@@ -13,9 +13,11 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Builders;
 
 use CommonToolkit\Enums\{CountryCode, CurrencyCode};
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Entities\{AllowanceCharge, Order, OrderLine, Party, PostalAddress};
 use ERechnungToolkit\Enums\{OrderProfile, TaxCategory, UnitCode};
+use ERechnungToolkit\Traits\MoneyInputTrait;
 use ERRORToolkit\Traits\ErrorLog;
 use InvalidArgumentException;
 
@@ -38,6 +40,8 @@ use InvalidArgumentException;
  */
 final class OrderBuilder {
     use ErrorLog;
+
+    use MoneyInputTrait;
 
     private DateTimeImmutable $issueDate;
     private CurrencyCode $currency = CurrencyCode::Euro;
@@ -105,6 +109,10 @@ final class OrderBuilder {
     public function withIssueDate(DateTimeImmutable $date): self {
         $this->issueDate = $date;
         return $this;
+    }
+
+    protected function documentCurrency(): CurrencyCode {
+        return $this->currency;
     }
 
     public function withCurrency(CurrencyCode $currency): self {
@@ -244,7 +252,7 @@ final class OrderBuilder {
     public function addLine(
         string $itemName,
         float $quantity,
-        float $unitPrice,
+        Money|string|float $unitPrice,
         ?UnitCode $unitCode = null,
         ?string $sellersItemId = null,
         ?float $taxPercent = null,
@@ -252,13 +260,14 @@ final class OrderBuilder {
         ?string $itemDescription = null
     ): self {
         $this->lineCounter++;
+        $price = $this->toMoney($unitPrice);
         $this->lines[] = new OrderLine(
             id: (string) $this->lineCounter,
             quantity: $quantity,
             unitCode: $unitCode ?? UnitCode::PIECE,
-            netAmount: round($quantity * $unitPrice, 2),
+            netAmount: $price->times($quantity),
             itemName: $itemName,
-            unitPrice: $unitPrice,
+            unitPrice: $price,
             itemDescription: $itemDescription,
             sellersItemId: $sellersItemId,
             taxCategory: $taxCategory,
@@ -277,13 +286,13 @@ final class OrderBuilder {
 
     // === Allowances and charges ===
 
-    public function addDiscount(float $amount, string $reason = 'Rabatt'): self {
-        $this->allowanceCharges[] = AllowanceCharge::discount($amount, $reason, null, null, null);
+    public function addDiscount(Money|string|float $amount, string $reason = 'Rabatt'): self {
+        $this->allowanceCharges[] = AllowanceCharge::discount($this->toMoney($amount), $reason, null, null, null);
         return $this;
     }
 
-    public function addCharge(float $amount, string $reason): self {
-        $this->allowanceCharges[] = AllowanceCharge::surcharge($amount, $reason, null, null, null);
+    public function addCharge(Money|string|float $amount, string $reason): self {
+        $this->allowanceCharges[] = AllowanceCharge::surcharge($this->toMoney($amount), $reason, null, null, null);
         return $this;
     }
 

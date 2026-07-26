@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Parsers;
 
 use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use DOMDocument;
 use DOMElement;
@@ -127,7 +128,7 @@ final class OrderParser {
             if (!$lineNode instanceof DOMElement) {
                 continue;
             }
-            $order->addLine($this->parseLine($lineNode));
+            $order->addLine($this->parseLine($lineNode, $currency));
         }
 
         return $order;
@@ -185,7 +186,7 @@ final class OrderParser {
         );
     }
 
-    private function parseLine(DOMElement $node): OrderLine {
+    private function parseLine(DOMElement $node, CurrencyCode $currency): OrderLine {
         $id = $this->getNodeValue($node, 'cbc:ID') ?? '';
 
         $quantity = 0.0;
@@ -199,8 +200,8 @@ final class OrderParser {
             }
         }
 
-        $netAmount = (float) ($this->getNodeValue($node, 'cbc:LineExtensionAmount') ?? '0');
-        $unitPrice = (float) ($this->getNodeValue($node, 'cac:Price/cbc:PriceAmount') ?? '0');
+        $netAmount = Money::ofNullable($this->getNodeValue($node, 'cbc:LineExtensionAmount'), $currency) ?? Money::zero($currency);
+        $unitPrice = Money::ofNullable($this->getNodeValue($node, 'cac:Price/cbc:PriceAmount'), $currency) ?? Money::zero($currency);
 
         $itemName = $this->getNodeValue($node, 'cac:Item/cbc:Name') ?? '';
         $itemDescription = $this->getNodeValue($node, 'cac:Item/cbc:Description');

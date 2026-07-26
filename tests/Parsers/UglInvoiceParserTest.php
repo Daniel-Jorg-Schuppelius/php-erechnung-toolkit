@@ -79,9 +79,9 @@ class UglInvoiceParserTest extends BaseTestCase {
         $this->assertFalse($invoice->isCreditNote());
         $this->assertSame('2026-06-28', $invoice->getDate()->format('Y-m-d'));
         $this->assertSame('EUR', $invoice->getCurrency()->value);
-        $this->assertSame(119.00, $invoice->getGrossTotal());
-        $this->assertSame(19.00, $invoice->getVatAmount());
-        $this->assertSame(100.00, $invoice->getNetTotal());
+        $this->assertSame('119.00', $invoice->getGrossTotal()->getAmount());
+        $this->assertSame('19.00', $invoice->getVatAmount()->getAmount());
+        $this->assertSame('100.00', $invoice->getNetTotal()->getAmount());
         $this->assertSame('2026-07-28', $invoice->getDueDate()?->format('Y-m-d'));
 
         $this->assertSame(1, $invoice->countLines());
@@ -89,7 +89,7 @@ class UglInvoiceParserTest extends BaseTestCase {
         $this->assertSame('ART-1', $line->getSellersItemId());
         $this->assertSame('Pumpe', $line->getItemName());
         $this->assertSame(2.0, $line->getQuantity());
-        $this->assertSame(100.00, $line->getNetAmount());
+        $this->assertSame('100.00', $line->getNetAmount()->getAmount());
     }
 
     public function test_detects_credit_note(): void {

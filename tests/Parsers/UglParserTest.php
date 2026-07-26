@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace Tests\Parsers;
 
+use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\OrderBuilder;
 use ERechnungToolkit\Entities\OrderLine;
@@ -57,12 +59,12 @@ class UglParserTest extends BaseTestCase {
         $this->assertSame(5.0, $line->getQuantity());
         // UGL kennt nur „ST" → C62/H87 normalisieren auf H87 (Stück).
         $this->assertSame(UnitCode::UNIT_H87, $line->getUnitCode());
-        $this->assertSame(120.00, $line->getUnitPrice());
-        $this->assertSame(600.00, $line->getNetAmount());
+        $this->assertSame('120.00', $line->getUnitPrice()->getAmount());
+        $this->assertSame('600.00', $line->getNetAmount()->getAmount());
 
         $second = $parsed->getLines()[1];
         $this->assertSame('Kugelhahn', $second->getItemName());
-        $this->assertSame(25.00, $second->getNetAmount()); // 2 * 12.50
+        $this->assertSame('25.00', $second->getNetAmount()->getAmount()); // 2 * 12.50
     }
 
     public function test_roundtrip_preserves_umlauts(): void {
@@ -111,13 +113,13 @@ class UglParserTest extends BaseTestCase {
             ->withSeller('GC Grosshandel', 'DE123456789')
             ->withSellerAddress('Lagerstr 2', '54321', 'Lieferstadt')
             ->addOrderLine(new OrderLine(
-                id: '1', quantity: 2, unitCode: UnitCode::PIECE, netAmount: 240.00,
-                itemName: 'Pumpe', unitPrice: 120.00, sellersItemId: 'ART-1',
+                id: '1', quantity: 2, unitCode: UnitCode::PIECE, netAmount: Money::of('240.00', CurrencyCode::Euro),
+                itemName: 'Pumpe', unitPrice: Money::of('120.00', CurrencyCode::Euro), sellersItemId: 'ART-1',
                 note: 'Bitte vormontiert liefern'
             ))
             ->addCharge(5.00, 'Mindermengenzuschlag')
             ->build();
-        $order->addAllowanceCharge(\ERechnungToolkit\Entities\AllowanceCharge::shipping(20.00));
+        $order->addAllowanceCharge(\ERechnungToolkit\Entities\AllowanceCharge::shipping(Money::of('20.00', CurrencyCode::Euro)));
 
         $parsed = $this->parser->parse($order->toUgl());
 
@@ -129,11 +131,11 @@ class UglParserTest extends BaseTestCase {
         $this->assertCount(2, $charges);
         $byAmount = [];
         foreach ($charges as $c) {
-            $byAmount[(string) $c->getAmount()] = $c;
+            $byAmount[$c->getAmount()->getAmount()] = $c;
         }
-        $this->assertSame('Mindermengenzuschlag', $byAmount['5']->getReason());
-        $this->assertSame(AllowanceChargeReasonCode::FREIGHT, $byAmount['20']->getReasonCode());
-        $this->assertTrue($byAmount['20']->isCharge());
+        $this->assertSame('Mindermengenzuschlag', $byAmount['5.00']->getReason());
+        $this->assertSame(AllowanceChargeReasonCode::FREIGHT, $byAmount['20.00']->getReasonCode());
+        $this->assertTrue($byAmount['20.00']->isCharge());
     }
 
     public function test_rejects_non_ugl_content(): void {

@@ -56,11 +56,11 @@ class OpenTransOrderParserTest extends BaseTestCase {
         $this->assertSame('ART-4711', $line->getSellersItemId());
         $this->assertSame(5.0, $line->getQuantity());
         $this->assertSame(UnitCode::PIECE, $line->getUnitCode());
-        $this->assertSame(120.00, $line->getUnitPrice());
-        $this->assertSame(600.00, $line->getNetAmount());
+        $this->assertSame('120.00', $line->getUnitPrice()->getAmount());
+        $this->assertSame('600.00', $line->getNetAmount()->getAmount());
 
         // Anticipated total reconstructs from the parsed lines.
-        $this->assertSame(1100.00, $parsed->getPayableAmount());
+        $this->assertSame('1100.00', $parsed->getPayableAmount()->getAmount());
     }
 
     public function test_parses_address_and_seller_order_id(): void {

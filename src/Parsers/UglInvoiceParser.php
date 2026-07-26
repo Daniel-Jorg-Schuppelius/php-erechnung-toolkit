@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Parsers;
 
 use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Entities\{OrderLine, UglInvoice};
 use ERechnungToolkit\Enums\UnitCode;
@@ -52,7 +53,7 @@ final class UglInvoiceParser {
         $records = preg_split('/\r\n|\r|\n/', $content) ?: [];
 
         $rgd = null;
-        $lines = [];
+        $lineRecords = [];
         foreach ($records as $record) {
             if (strlen($record) < 3) {
                 continue;
@@ -61,7 +62,7 @@ final class UglInvoiceParser {
             if ($type === 'RGD' && $rgd === null) {
                 $rgd = $record;
             } elseif ($type === 'POA') {
-                $lines[] = $this->parseLine($record);
+                $lineRecords[] = $record;
             } elseif ($type === 'END') {
                 break;
             }
@@ -71,7 +72,7 @@ final class UglInvoiceParser {
             $this->logErrorAndThrow(RuntimeException::class, 'Unknown format. Expected a UGL invoice with an RGD record.');
         }
 
-        return $this->buildInvoice($rgd, $lines);
+        return $this->buildInvoice($rgd, $lineRecords);
     }
 
     /**
@@ -90,25 +91,27 @@ final class UglInvoiceParser {
     }
 
     /**
-     * @param  OrderLine[]  $lines
+     * @param  list<string>  $lineRecords  POA-Rohsätze (die Währung steht erst im RGD-Kopf)
      */
-    private function buildInvoice(string $rgd, array $lines): UglInvoice {
+    private function buildInvoice(string $rgd, array $lineRecords): UglInvoice {
         $type = $this->alpha($rgd, 14, 15);
+        // Die Belegwährung steht im RGD-Kopf und gilt auch für alle Positionen.
+        $currency = CurrencyCode::tryFrom($this->alpha($rgd, 24, 26) ?: 'EUR') ?? CurrencyCode::Euro;
 
         return new UglInvoice(
             number: $this->alpha($rgd, 4, 13),
             documentType: $type !== '' ? $type : UglInvoice::TYPE_INVOICE,
             date: $this->date($this->alpha($rgd, 16, 23)) ?? new DateTimeImmutable('now'),
-            currency: CurrencyCode::tryFrom($this->alpha($rgd, 24, 26) ?: 'EUR') ?? CurrencyCode::Euro,
-            grossTotal: $this->num($rgd, 27, 37, 2),
-            vatAmount: $this->num($rgd, 38, 48, 2),
-            netTotal: $this->num($rgd, 54, 64, 2),
+            currency: $currency,
+            grossTotal: $this->money($rgd, 27, 37, 2, $currency),
+            vatAmount: $this->money($rgd, 38, 48, 2, $currency),
+            netTotal: $this->money($rgd, 54, 64, 2, $currency),
             dueDate: $this->date($this->alpha($rgd, 113, 120)),
-            lines: $lines
+            lines: array_map(fn (string $record): OrderLine => $this->parseLine($record, $currency), $lineRecords)
         );
     }
 
-    private function parseLine(string $record): OrderLine {
+    private function parseLine(string $record, CurrencyCode $currency): OrderLine {
         $position = $this->num($record, 4, 13, 0);
         $unitRaw = $this->alpha($record, 184, 186);
 
@@ -116,9 +119,9 @@ final class UglInvoiceParser {
             id: (string) (int) $position,
             quantity: $this->num($record, 39, 49, 3),
             unitCode: UnitCode::tryFrom(self::UNIT_MAP[$unitRaw] ?? $unitRaw) ?? UnitCode::PIECE,
-            netAmount: $this->num($record, 142, 152, 2),
+            netAmount: $this->money($record, 142, 152, 2, $currency),
             itemName: $this->alpha($record, 50, 89),
-            unitPrice: $this->num($record, 130, 140, 2),
+            unitPrice: $this->money($record, 130, 140, 2, $currency),
             itemDescription: $this->alpha($record, 90, 129) ?: null,
             sellersItemId: $this->alpha($record, 24, 38) ?: null,
             taxPercent: ($tax = $this->num($record, 189, 193, 2)) > 0 ? $tax : null
@@ -130,6 +133,18 @@ final class UglInvoiceParser {
         $decoded = @iconv(self::ENCODING, 'UTF-8', $raw);
 
         return rtrim($decoded !== false ? $decoded : $raw);
+    }
+
+    /**
+     * Betragsfeld mit impliziten Nachkommastellen → Money (kein float-Zwischenschritt).
+     */
+    private function money(string $record, int $from, int $to, int $decimals, CurrencyCode $currency): Money {
+        $raw = trim(substr($record, $from - 1, $to - $from + 1));
+        if ($raw === '' || !ctype_digit($raw)) {
+            return Money::zero($currency);
+        }
+
+        return Money::ofMinor((int) $raw, $currency, $decimals)->withScale($currency->getDefaultFractionDigits());
     }
 
     private function num(string $record, int $from, int $to, int $decimals): float {

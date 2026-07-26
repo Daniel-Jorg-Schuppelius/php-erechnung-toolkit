@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Entities;
 
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 
 /**
@@ -79,36 +80,38 @@ final class PaymentTerms {
     /**
      * Calculates the discounted amount.
      */
-    public function calculateDiscountedAmount(float $amount): float {
+    public function calculateDiscountedAmount(Money $amount): Money {
         if ($this->discountPercent === null) {
             return $amount;
         }
 
-        return round($amount * (1 - $this->discountPercent / 100), 2);
+        return $amount->minusPercentage($this->discountPercent);
     }
 
     /**
      * Generates a German payment terms note.
      */
-    public function generateNote(float $amount, DateTimeImmutable $invoiceDate): string {
+    public function generateNote(Money $amount, DateTimeImmutable $invoiceDate): string {
         $parts = [];
 
         if ($this->discountPercent !== null && $this->discountDays !== null) {
             $discountDeadline = $this->calculateDiscountDeadline($invoiceDate);
             $discountedAmount = $this->calculateDiscountedAmount($amount);
             $parts[] = sprintf(
-                "Bei Zahlung bis zum %s: %.2f%% Skonto (%.2f EUR)",
-                $discountDeadline->format('d.m.Y'),
+                "Bei Zahlung bis zum %s: %.2f%% Skonto (%s %s)",
+                $discountDeadline?->format('d.m.Y') ?? '',
                 $this->discountPercent,
-                $discountedAmount
+                $discountedAmount->getAmount(),
+                $discountedAmount->getCurrency()->value
             );
         }
 
         $dueDate = $this->calculateDueDate($invoiceDate);
         $parts[] = sprintf(
-            "Zahlbar bis zum %s (%.2f EUR)",
+            "Zahlbar bis zum %s (%s %s)",
             $dueDate->format('d.m.Y'),
-            $amount
+            $amount->getAmount(),
+            $amount->getCurrency()->value
         );
 
         return implode('. ', $parts) . '.';

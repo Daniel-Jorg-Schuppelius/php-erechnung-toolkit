@@ -125,9 +125,9 @@ final class OrderXPdfGenerator {
                 htmlspecialchars($line->getItemName()),
                 number_format($line->getQuantity(), 2, ',', '.'),
                 htmlspecialchars($line->getUnitCode()->value),
-                number_format($line->getUnitPrice(), 2, ',', '.'),
+                $line->getUnitPrice()->format(false),
                 $currency,
-                number_format($line->getNetAmount(), 2, ',', '.'),
+                $line->getNetAmount()->format(false),
                 $currency
             );
         }
@@ -148,7 +148,7 @@ final class OrderXPdfGenerator {
             htmlspecialchars($order->getBuyer()->getName()),
             htmlspecialchars($order->getSeller()->getName()),
             $rows,
-            number_format($order->getPayableAmount(), 2, ',', '.'),
+            $order->getPayableAmount()->format(false),
             $currency
         );
     }

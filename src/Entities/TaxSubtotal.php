@@ -12,29 +12,37 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Entities;
 
+use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use ERechnungToolkit\Enums\TaxCategory;
 
 /**
  * Tax Subtotal for VAT breakdown (EN 16931).
  *
  * Represents a single VAT category and rate combination in the tax breakdown.
+ * Amounts are {@see Money} value objects — the VAT breakdown is the place where
+ * float rounding used to break BR-CO-14/BR-S-09 (sum of subtotals vs. total).
  */
 final class TaxSubtotal {
     public function __construct(
-        private float $taxableAmount,
-        private float $taxAmount,
+        private Money $taxableAmount,
+        private Money $taxAmount,
         private TaxCategory $category,
         private float $percent,
         private ?string $exemptionReason = null,
         private ?string $exemptionReasonCode = null
     ) {}
 
-    public function getTaxableAmount(): float {
+    public function getTaxableAmount(): Money {
         return $this->taxableAmount;
     }
 
-    public function getTaxAmount(): float {
+    public function getTaxAmount(): Money {
         return $this->taxAmount;
+    }
+
+    public function getCurrency(): CurrencyCode {
+        return $this->taxableAmount->getCurrency();
     }
 
     public function getCategory(): TaxCategory {
@@ -63,10 +71,10 @@ final class TaxSubtotal {
     /**
      * Creates a standard rate subtotal.
      */
-    public static function standard(float $taxableAmount, float $rate = 19.0): self {
+    public static function standard(Money $taxableAmount, float $rate = 19.0): self {
         return new self(
             $taxableAmount,
-            round($taxableAmount * $rate / 100, 2),
+            $taxableAmount->percentage($rate),
             TaxCategory::STANDARD,
             $rate
         );
@@ -75,10 +83,10 @@ final class TaxSubtotal {
     /**
      * Creates a reduced rate subtotal (7% in Germany).
      */
-    public static function reduced(float $taxableAmount, float $rate = 7.0): self {
+    public static function reduced(Money $taxableAmount, float $rate = 7.0): self {
         return new self(
             $taxableAmount,
-            round($taxableAmount * $rate / 100, 2),
+            $taxableAmount->percentage($rate),
             TaxCategory::STANDARD,
             $rate
         );
@@ -87,10 +95,10 @@ final class TaxSubtotal {
     /**
      * Creates a reverse charge subtotal.
      */
-    public static function reverseCharge(float $taxableAmount, string $reason = 'Reverse Charge'): self {
+    public static function reverseCharge(Money $taxableAmount, string $reason = 'Reverse Charge'): self {
         return new self(
             $taxableAmount,
-            0.0,
+            Money::zero($taxableAmount->getCurrency()),
             TaxCategory::REVERSE_CHARGE,
             0.0,
             $reason,
@@ -101,10 +109,10 @@ final class TaxSubtotal {
     /**
      * Creates an exempt subtotal.
      */
-    public static function exempt(float $taxableAmount, string $reason, ?string $reasonCode = null): self {
+    public static function exempt(Money $taxableAmount, string $reason, ?string $reasonCode = null): self {
         return new self(
             $taxableAmount,
-            0.0,
+            Money::zero($taxableAmount->getCurrency()),
             TaxCategory::EXEMPT,
             0.0,
             $reason,

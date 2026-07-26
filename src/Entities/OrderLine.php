@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Entities;
 
+use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use ERechnungToolkit\Enums\{TaxCategory, UnitCode};
 
 /**
@@ -26,9 +28,9 @@ final class OrderLine {
         private string $id,
         private float $quantity,
         private UnitCode|string $unitCode,
-        private float $netAmount,
+        private Money $netAmount,
         private string $itemName,
-        private float $unitPrice,
+        private Money $unitPrice,
         private ?string $itemDescription = null,
         private ?string $sellersItemId = null,
         private ?string $buyersItemId = null,
@@ -57,15 +59,19 @@ final class OrderLine {
         return $this->unitCode;
     }
 
-    public function getNetAmount(): float {
+    public function getNetAmount(): Money {
         return $this->netAmount;
+    }
+
+    public function getCurrency(): CurrencyCode {
+        return $this->netAmount->getCurrency();
     }
 
     public function getItemName(): string {
         return $this->itemName;
     }
 
-    public function getUnitPrice(): float {
+    public function getUnitPrice(): Money {
         return $this->unitPrice;
     }
 
@@ -117,7 +123,7 @@ final class OrderLine {
         string $id,
         string $itemName,
         float $quantity,
-        float $unitPrice,
+        Money $unitPrice,
         UnitCode $unitCode = UnitCode::PIECE,
         ?string $sellersItemId = null
     ): self {
@@ -125,7 +131,7 @@ final class OrderLine {
             id: $id,
             quantity: $quantity,
             unitCode: $unitCode,
-            netAmount: round($quantity * $unitPrice, 2),
+            netAmount: $unitPrice->times($quantity),
             itemName: $itemName,
             unitPrice: $unitPrice,
             sellersItemId: $sellersItemId

@@ -12,20 +12,23 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Entities;
 
+use CommonToolkit\Enums\CurrencyCode;
+use CommonToolkit\ValueObjects\Money;
 use ERechnungToolkit\Enums\{AllowanceChargeReasonCode, TaxCategory};
 
 /**
  * Allowance/Charge for E-Rechnung (EN 16931).
  *
  * Represents document or line level allowances (discounts) and charges (surcharges).
+ * Beträge sind {@see Money}-Value-Objects; Prozentsätze bleiben skalar.
  */
 final class AllowanceCharge {
     public function __construct(
         private bool $chargeIndicator,
-        private float $amount,
+        private Money $amount,
         private ?AllowanceChargeReasonCode $reasonCode = null,
         private ?string $reason = null,
-        private ?float $baseAmount = null,
+        private ?Money $baseAmount = null,
         private ?float $percentage = null,
         private ?TaxCategory $taxCategory = null,
         private ?float $taxPercent = null
@@ -45,8 +48,12 @@ final class AllowanceCharge {
         return !$this->chargeIndicator;
     }
 
-    public function getAmount(): float {
+    public function getAmount(): Money {
         return $this->amount;
+    }
+
+    public function getCurrency(): CurrencyCode {
+        return $this->amount->getCurrency();
     }
 
     public function getReasonCode(): ?AllowanceChargeReasonCode {
@@ -57,7 +64,7 @@ final class AllowanceCharge {
         return $this->reason ?? $this->reasonCode?->label();
     }
 
-    public function getBaseAmount(): ?float {
+    public function getBaseAmount(): ?Money {
         return $this->baseAmount;
     }
 
@@ -75,20 +82,23 @@ final class AllowanceCharge {
 
     /**
      * Calculates the tax amount for this allowance/charge.
+     * Rabatte mindern die Steuer, deshalb negatives Vorzeichen.
      */
-    public function getTaxAmount(): float {
+    public function getTaxAmount(): Money {
         if ($this->taxPercent === null) {
-            return 0.0;
+            return Money::zero($this->amount->getCurrency());
         }
-        $tax = round($this->amount * $this->taxPercent / 100, 2);
-        return $this->chargeIndicator ? $tax : -$tax;
+
+        $tax = $this->amount->percentage($this->taxPercent);
+
+        return $this->chargeIndicator ? $tax : $tax->negated();
     }
 
     /**
      * Creates a document-level discount (Rabatt).
      */
     public static function discount(
-        float $amount,
+        Money $amount,
         string $reason = 'Discount',
         ?AllowanceChargeReasonCode $reasonCode = AllowanceChargeReasonCode::DISCOUNT,
         ?TaxCategory $taxCategory = TaxCategory::STANDARD,
@@ -108,18 +118,16 @@ final class AllowanceCharge {
      * Creates a percentage-based discount.
      */
     public static function percentageDiscount(
-        float $baseAmount,
+        Money $baseAmount,
         float $percentage,
         string $reason = 'Discount',
         ?AllowanceChargeReasonCode $reasonCode = AllowanceChargeReasonCode::DISCOUNT,
         ?TaxCategory $taxCategory = TaxCategory::STANDARD,
         ?float $taxPercent = 19.0
     ): self {
-        $amount = round($baseAmount * $percentage / 100, 2);
-
         return new self(
             chargeIndicator: false,
-            amount: $amount,
+            amount: $baseAmount->percentage($percentage),
             reasonCode: $reasonCode,
             reason: $reason,
             baseAmount: $baseAmount,
@@ -133,7 +141,7 @@ final class AllowanceCharge {
      * Creates a document-level surcharge (Zuschlag).
      */
     public static function surcharge(
-        float $amount,
+        Money $amount,
         string $reason,
         ?AllowanceChargeReasonCode $reasonCode = null,
         ?TaxCategory $taxCategory = TaxCategory::STANDARD,
@@ -153,7 +161,7 @@ final class AllowanceCharge {
      * Creates a shipping/freight charge.
      */
     public static function shipping(
-        float $amount,
+        Money $amount,
         ?TaxCategory $taxCategory = TaxCategory::STANDARD,
         ?float $taxPercent = 19.0
     ): self {
@@ -171,7 +179,7 @@ final class AllowanceCharge {
      * Creates a packing charge.
      */
     public static function packing(
-        float $amount,
+        Money $amount,
         ?TaxCategory $taxCategory = TaxCategory::STANDARD,
         ?float $taxPercent = 19.0
     ): self {
