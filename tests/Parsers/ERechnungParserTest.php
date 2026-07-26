@@ -273,12 +273,12 @@ class ERechnungParserTest extends BaseTestCase {
 
         // Compare totals
         $this->assertEquals(
-            $original->getMonetaryTotal()->getLineExtensionAmount(),
-            $parsed->getMonetaryTotal()->getLineExtensionAmount()
+            $original->getMonetaryTotal()?->getLineExtensionAmount(),
+            $parsed->getMonetaryTotal()?->getLineExtensionAmount()
         );
         $this->assertEquals(
-            $original->getTaxTotal()->getTaxAmount(),
-            $parsed->getTaxTotal()->getTaxAmount()
+            $original->getTaxTotal()?->getTaxAmount(),
+            $parsed->getTaxTotal()?->getTaxAmount()
         );
     }
 

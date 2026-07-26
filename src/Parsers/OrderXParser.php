@@ -16,6 +16,7 @@ use CommonToolkit\Enums\CurrencyCode;
 use DateTimeImmutable;
 use DOMDocument;
 use DOMElement;
+use DOMNode;
 use DOMXPath;
 use ERechnungToolkit\Entities\{Order, OrderLine, Party, PostalAddress};
 use ERechnungToolkit\Enums\{OrderProfile, TaxCategory, UnitCode};
@@ -117,11 +118,13 @@ final class OrderXParser {
             )
         );
 
-        foreach ($this->xpath->query("{$root}/rsm:ExchangedDocument/ram:IncludedNote/ram:Content") as $noteNode) {
-            $order->addNote($noteNode->textContent);
+        foreach ($this->xpath->query("{$root}/rsm:ExchangedDocument/ram:IncludedNote/ram:Content") ?: [] as $noteNode) {
+            if ($noteNode instanceof DOMNode) {
+                $order->addNote($noteNode->textContent);
+            }
         }
 
-        foreach ($this->xpath->query("{$tx}/ram:IncludedSupplyChainTradeLineItem") as $lineNode) {
+        foreach ($this->xpath->query("{$tx}/ram:IncludedSupplyChainTradeLineItem") ?: [] as $lineNode) {
             if (!$lineNode instanceof DOMElement) {
                 continue;
             }
@@ -196,8 +199,8 @@ final class OrderXParser {
         $quantity = 0.0;
         $unitCode = UnitCode::PIECE;
         $qtyNodes = $this->xpath->query('ram:SpecifiedLineTradeDelivery/ram:RequestedQuantity', $node);
-        if ($qtyNodes !== false && $qtyNodes->length > 0) {
-            $qtyNode = $qtyNodes->item(0);
+        $qtyNode = $qtyNodes !== false ? $qtyNodes->item(0) : null;
+        if ($qtyNode instanceof DOMNode) {
             $quantity = (float) $qtyNode->textContent;
             if ($qtyNode instanceof DOMElement) {
                 $unitCode = UnitCode::tryFrom($qtyNode->getAttribute('unitCode')) ?? UnitCode::PIECE;
@@ -230,18 +233,20 @@ final class OrderXParser {
 
     private function getValue(string $xpath): ?string {
         $nodes = $this->xpath->query($xpath);
-        if ($nodes === false || $nodes->length === 0) {
+        if ($nodes === false) {
             return null;
         }
-        return trim($nodes->item(0)->textContent);
+        $found = $nodes->item(0);
+        return $found instanceof DOMNode ? trim($found->textContent) : null;
     }
 
     private function getNodeValue(DOMElement $node, string $xpath): ?string {
         $nodes = $this->xpath->query($xpath, $node);
-        if ($nodes === false || $nodes->length === 0) {
+        if ($nodes === false) {
             return null;
         }
-        return trim($nodes->item(0)->textContent);
+        $found = $nodes->item(0);
+        return $found instanceof DOMNode ? trim($found->textContent) : null;
     }
 
     private function parseDate(?string $value): ?DateTimeImmutable {

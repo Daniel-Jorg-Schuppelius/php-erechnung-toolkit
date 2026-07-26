@@ -33,9 +33,12 @@ use ERRORToolkit\Traits\ErrorLog;
 final class ZugferdPdfGenerator {
     use ErrorLog;
 
+    /** @var class-string<\PDFToolkit\Writers\ZugferdWriter> */
     private const ZUGFERD_WRITER_CLASS = 'PDFToolkit\\Writers\\ZugferdWriter';
+    /** @var class-string<\PDFToolkit\Entities\PDFContent> */
     private const PDF_CONTENT_CLASS = 'PDFToolkit\\Entities\\PDFContent';
 
+    /** @var \PDFToolkit\Writers\ZugferdWriter|null */
     private ?object $writer = null;
 
     /**
@@ -58,7 +61,7 @@ final class ZugferdPdfGenerator {
      *
      * @param Document $invoice Das E-Rechnung Document
      * @param string|null $visualHtml Optionales HTML für visuelle Darstellung (sonst wird Standard-Template verwendet)
-     * @param array $options Zusätzliche Optionen für die PDF-Generierung
+     * @param array<string, mixed> $options Zusätzliche Optionen für die PDF-Generierung
      * @return string|null PDF-Inhalt als Bytes oder null bei Fehler
      */
     public function generate(Document $invoice, ?string $visualHtml = null, array $options = []): ?string {
@@ -115,7 +118,7 @@ final class ZugferdPdfGenerator {
      * @param Document $invoice Das E-Rechnung Document
      * @param string $outputPath Dateipfad für das PDF
      * @param string|null $visualHtml Optionales HTML für visuelle Darstellung
-     * @param array $options Zusätzliche Optionen
+     * @param array<string, mixed> $options Zusätzliche Optionen
      * @return bool True bei Erfolg
      */
     public function generateToFile(
@@ -135,6 +138,8 @@ final class ZugferdPdfGenerator {
 
     /**
      * Gibt den ZugferdWriter zurück (lazy loading).
+     *
+     * @return \PDFToolkit\Writers\ZugferdWriter
      */
     private function getWriter(): object {
         if ($this->writer === null) {

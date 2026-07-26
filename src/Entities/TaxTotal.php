@@ -24,14 +24,19 @@ final class TaxTotal {
     /** @var TaxSubtotal[] */
     private array $subtotals = [];
 
+    private CurrencyCode $currency;
+
+    /**
+     * @param TaxSubtotal[] $subtotals
+     */
     public function __construct(
         private float $taxAmount,
-        private CurrencyCode|string $currency,
+        CurrencyCode|string $currency,
         array $subtotals = []
     ) {
-        if (is_string($this->currency)) {
-            $this->currency = CurrencyCode::tryFrom($this->currency) ?? CurrencyCode::fromSymbol($this->currency);
-        }
+        $this->currency = is_string($currency)
+            ? (CurrencyCode::tryFrom($currency) ?? CurrencyCode::fromSymbol($currency))
+            : $currency;
         $this->subtotals = $subtotals;
     }
 

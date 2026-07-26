@@ -23,10 +23,12 @@ final class InvoiceLine {
     /** @var AllowanceCharge[] */
     private array $allowanceCharges = [];
 
+    private UnitCode $unitCode;
+
     public function __construct(
         private string $id,
         private float $quantity,
-        private UnitCode|string $unitCode,
+        UnitCode|string $unitCode,
         private float $netAmount,
         private string $itemName,
         private float $unitPrice,
@@ -41,9 +43,9 @@ final class InvoiceLine {
         private ?float $baseQuantity = null,
         private ?string $accountingCost = null
     ) {
-        if (is_string($this->unitCode)) {
-            $this->unitCode = UnitCode::tryFrom($this->unitCode) ?? UnitCode::PIECE;
-        }
+        $this->unitCode = is_string($unitCode)
+            ? (UnitCode::tryFrom($unitCode) ?? UnitCode::PIECE)
+            : $unitCode;
     }
 
     public function getId(): string {

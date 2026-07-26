@@ -17,6 +17,7 @@ use DOMElement;
 use ERechnungToolkit\Entities\{AllowanceCharge, Order, OrderLine, Party};
 use ERechnungToolkit\Enums\OrderXProfile;
 use ERRORToolkit\Traits\ErrorLog;
+use RuntimeException;
 
 /**
  * Generator for Order-X CII XML (UN/CEFACT Cross Industry Order, D20B).
@@ -70,7 +71,12 @@ final class OrderXGenerator {
         $this->appendHeaderSettlement($dom, $transaction, $order);
         $root->appendChild($transaction);
 
-        return $dom->saveXML();
+        $xml = $dom->saveXML();
+        if ($xml === false) {
+            self::logErrorAndThrow(RuntimeException::class, 'XML-Dokument konnte nicht serialisiert werden.');
+        }
+
+        return $xml;
     }
 
     private function appendContext(DOMDocument $dom, DOMElement $root, OrderXProfile $profile): void {
@@ -313,14 +319,14 @@ final class OrderXGenerator {
 
         if ($party->hasEndpoint()) {
             $uri = $dom->createElementNS(self::RAM_NS, 'ram:URIUniversalCommunication');
-            $uriId = $this->ram($dom, $uri, 'ram:URIID', $party->getEndpointId());
-            $uriId->setAttribute('schemeID', $party->getEndpointScheme());
+            $uriId = $this->ram($dom, $uri, 'ram:URIID', $party->getEndpointId() ?? '');
+            $uriId->setAttribute('schemeID', $party->getEndpointScheme() ?? '');
             $parent->appendChild($uri);
         }
 
         if ($party->hasVatId()) {
             $taxReg = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTaxRegistration');
-            $id = $this->ram($dom, $taxReg, 'ram:ID', $party->getVatId());
+            $id = $this->ram($dom, $taxReg, 'ram:ID', $party->getVatId() ?? '');
             $id->setAttribute('schemeID', 'VA');
             $parent->appendChild($taxReg);
         }

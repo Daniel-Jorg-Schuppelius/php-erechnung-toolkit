@@ -244,9 +244,9 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
             ->build();
 
         $this->assertEquals('2026-01-22', $document->getIssueDate()->format('Y-m-d'));
-        $this->assertEquals('2026-02-21', $document->getDueDate()->format('Y-m-d'));
-        $this->assertEquals('2026-01-20', $document->getDeliveryDate()->format('Y-m-d'));
-        $this->assertEquals('2026-01-22', $document->getTaxPointDate()->format('Y-m-d'));
+        $this->assertEquals('2026-02-21', $document->getDueDate()?->format('Y-m-d'));
+        $this->assertEquals('2026-01-20', $document->getDeliveryDate()?->format('Y-m-d'));
+        $this->assertEquals('2026-01-22', $document->getTaxPointDate()?->format('Y-m-d'));
     }
 
     public function test_builder_throws_exception_without_seller(): void {

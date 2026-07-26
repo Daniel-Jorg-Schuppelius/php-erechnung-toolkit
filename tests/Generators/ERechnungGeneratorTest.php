@@ -14,6 +14,7 @@ namespace Tests\Generators;
 
 use DateTimeImmutable;
 use DOMDocument;
+use DOMNode;
 use DOMXPath;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
 use ERechnungToolkit\Entities\{Document, Party, PostalAddress};
@@ -94,9 +95,8 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $xpath->registerNamespace('ubl', 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2');
         $xpath->registerNamespace('cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
 
-        $idNodes = $xpath->query('/ubl:Invoice/cbc:ID');
-        $this->assertEquals(1, $idNodes->length);
-        $this->assertEquals('INV-2026-001', $idNodes->item(0)->textContent);
+        $this->assertSame(1, $this->xpathCount($xpath, '/ubl:Invoice/cbc:ID'));
+        $this->assertEquals('INV-2026-001', $this->xpathText($xpath, '/ubl:Invoice/cbc:ID'));
     }
 
     public function test_ubl_xml_seller_party(): void {
@@ -349,22 +349,18 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $xpath->registerNamespace('cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2');
 
         // BT-32 must be a PartyTaxScheme with TaxScheme/ID = FC.
-        $fcNodes = $xpath->query(
-            "//cac:PartyTaxScheme[cac:TaxScheme/cbc:ID='FC']/cbc:CompanyID"
-        );
-        $this->assertNotNull($fcNodes);
-        $this->assertSame(1, $fcNodes->length);
-        $this->assertSame('151/815/08150', $fcNodes->item(0)->textContent);
+        $fcXpath = "//cac:PartyTaxScheme[cac:TaxScheme/cbc:ID='FC']/cbc:CompanyID";
+        $this->assertSame(1, $this->xpathCount($xpath, $fcXpath));
+        $this->assertSame('151/815/08150', $this->xpathText($xpath, $fcXpath));
 
         // It must NOT live in PartyLegalEntity/CompanyID anymore.
-        $legalCompanyId = $xpath->query('//cac:PartyLegalEntity/cbc:CompanyID');
-        $this->assertSame(0, $legalCompanyId->length);
+        $this->assertSame(0, $this->xpathCount($xpath, '//cac:PartyLegalEntity/cbc:CompanyID'));
 
         // VAT ID (BT-31) stays as PartyTaxScheme with TaxScheme/ID = VAT.
-        $vatNodes = $xpath->query(
-            "//cac:PartyTaxScheme[cac:TaxScheme/cbc:ID='VAT']/cbc:CompanyID"
+        $this->assertSame(
+            'DE123456789',
+            $this->xpathText($xpath, "//cac:PartyTaxScheme[cac:TaxScheme/cbc:ID='VAT']/cbc:CompanyID")
         );
-        $this->assertSame('DE123456789', $vatNodes->item(0)->textContent);
     }
 
     public function test_cii_national_tax_number_is_emitted_with_scheme_fc(): void {
@@ -420,7 +416,12 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $xpath->registerNamespace('cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
         $xpath->registerNamespace('cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2');
         $nodes = $xpath->query($query);
-        return ($nodes !== false && $nodes->length > 0) ? $nodes->item(0)->textContent : null;
+        if ($nodes === false) {
+            return null;
+        }
+        $node = $nodes->item(0);
+
+        return $node instanceof DOMNode ? $node->textContent : null;
     }
 
     public function test_remittance_information_and_account_holder_are_emitted(): void {

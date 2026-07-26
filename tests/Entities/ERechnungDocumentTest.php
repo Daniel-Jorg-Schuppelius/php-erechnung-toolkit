@@ -172,8 +172,8 @@ class ERechnungDocumentTest extends BaseTestCase {
         $discount = AllowanceCharge::discount(100.00, '10% Rabatt');
         $document->addAllowanceCharge($discount);
 
-        $this->assertEquals(1000.00, $document->getMonetaryTotal()->getLineExtensionAmount());
-        $this->assertEquals(100.00, $document->getMonetaryTotal()->getAllowanceTotalAmount());
+        $this->assertEquals(1000.00, $document->getMonetaryTotal()?->getLineExtensionAmount());
+        $this->assertEquals(100.00, $document->getMonetaryTotal()?->getAllowanceTotalAmount());
         $this->assertEquals(900.00, $document->getNetAmount()); // 1000 - 100
     }
 
@@ -192,8 +192,8 @@ class ERechnungDocumentTest extends BaseTestCase {
         $shipping = AllowanceCharge::shipping(5.95);
         $document->addAllowanceCharge($shipping);
 
-        $this->assertEquals(100.00, $document->getMonetaryTotal()->getLineExtensionAmount());
-        $this->assertEquals(5.95, $document->getMonetaryTotal()->getChargeTotalAmount());
+        $this->assertEquals(100.00, $document->getMonetaryTotal()?->getLineExtensionAmount());
+        $this->assertEquals(5.95, $document->getMonetaryTotal()?->getChargeTotalAmount());
         $this->assertEquals(105.95, $document->getNetAmount()); // 100 + 5.95
     }
 

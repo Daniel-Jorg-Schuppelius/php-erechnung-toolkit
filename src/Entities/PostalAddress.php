@@ -20,6 +20,8 @@ use CommonToolkit\Enums\CountryCode;
  * Represents a postal address for seller, buyer, or delivery party.
  */
 final class PostalAddress {
+    private ?CountryCode $country;
+
     public function __construct(
         private ?string $streetName = null,
         private ?string $additionalStreetName = null,
@@ -28,11 +30,9 @@ final class PostalAddress {
         private ?string $postalCode = null,
         private ?string $city = null,
         private ?string $countrySubdivision = null,
-        private CountryCode|string|null $country = null
+        CountryCode|string|null $country = null
     ) {
-        if (is_string($this->country)) {
-            $this->country = CountryCode::tryFrom($this->country);
-        }
+        $this->country = is_string($country) ? CountryCode::tryFrom($country) : $country;
     }
 
     public function getStreetName(): ?string {
