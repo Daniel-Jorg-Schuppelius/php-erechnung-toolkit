@@ -486,6 +486,12 @@ final class ERechnungGenerator {
             }
         }
 
+        // Dokument-Rabatte/-Zuschläge (BG-20/BG-21) — nach ApplicableTradeTax,
+        // vor SpecifiedTradePaymentTerms (XSD-Sequenz TradeSettlementType).
+        foreach ($document->getAllowanceCharges() as $ac) {
+            $settlement->appendChild($this->createCiiAllowanceCharge($dom, $ac, withTax: true));
+        }
+
         // BillingPeriod (if available)
         // PaymentTerms
         if ($document->getPaymentTerms() !== null) {
@@ -841,6 +847,12 @@ final class ERechnungGenerator {
         $this->addCiiElement($dom, $tax, 'ram:RateApplicablePercent', $this->formatAmount($line->getTaxPercent()));
         $settlement->appendChild($tax);
 
+        // Positionsrabatte/-zuschläge (BG-27/BG-28) — ohne CategoryTradeTax
+        // (EN-16931-Mapping kennt die Steuerkategorie nur auf Dokumentebene).
+        foreach ($line->getAllowanceCharges() as $ac) {
+            $settlement->appendChild($this->createCiiAllowanceCharge($dom, $ac, withTax: false));
+        }
+
         // SpecifiedTradeSettlementLineMonetarySummation
         $summation = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTradeSettlementLineMonetarySummation');
         $this->addCiiElement($dom, $summation, 'ram:LineTotalAmount', $this->formatAmount($line->getNetAmount()));
@@ -849,6 +861,45 @@ final class ERechnungGenerator {
         $lineItem->appendChild($settlement);
 
         return $lineItem;
+    }
+
+    /**
+     * CII-Rabatt/-Zuschlag (`ram:SpecifiedTradeAllowanceCharge`) in
+     * XSD-Sequenz: ChargeIndicator, CalculationPercent?, BasisAmount?,
+     * ActualAmount, ReasonCode?, Reason?, CategoryTradeTax?.
+     */
+    private function createCiiAllowanceCharge(DOMDocument $dom, AllowanceCharge $ac, bool $withTax): DOMElement {
+        $acElem = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTradeAllowanceCharge');
+
+        $indicator = $dom->createElementNS(self::RAM_NS, 'ram:ChargeIndicator');
+        $this->addCiiElement($dom, $indicator, 'udt:Indicator', $ac->isCharge() ? 'true' : 'false');
+        $acElem->appendChild($indicator);
+
+        if ($ac->getPercentage() !== null) {
+            $this->addCiiElement($dom, $acElem, 'ram:CalculationPercent', $this->formatAmount($ac->getPercentage()));
+        }
+        if ($ac->getBaseAmount() !== null) {
+            $this->addCiiElement($dom, $acElem, 'ram:BasisAmount', $this->formatAmount($ac->getBaseAmount()));
+        }
+        $this->addCiiElement($dom, $acElem, 'ram:ActualAmount', $this->formatAmount($ac->getAmount()));
+        if ($ac->getReasonCode() !== null) {
+            $this->addCiiElement($dom, $acElem, 'ram:ReasonCode', $ac->getReasonCode()->value);
+        }
+        if ($ac->getReason() !== null) {
+            $this->addCiiElement($dom, $acElem, 'ram:Reason', $ac->getReason());
+        }
+
+        if ($withTax && $ac->getTaxCategory() !== null) {
+            $categoryTax = $dom->createElementNS(self::RAM_NS, 'ram:CategoryTradeTax');
+            $this->addCiiElement($dom, $categoryTax, 'ram:TypeCode', 'VAT');
+            $this->addCiiElement($dom, $categoryTax, 'ram:CategoryCode', $ac->getTaxCategory()->value);
+            if ($ac->getTaxPercent() !== null) {
+                $this->addCiiElement($dom, $categoryTax, 'ram:RateApplicablePercent', $this->formatAmount($ac->getTaxPercent()));
+            }
+            $acElem->appendChild($categoryTax);
+        }
+
+        return $acElem;
     }
 
     /**

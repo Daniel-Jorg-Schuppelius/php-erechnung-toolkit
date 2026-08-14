@@ -346,6 +346,99 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals(ERechnungProfile::XRECHNUNG, $parsed->getProfile());
     }
 
+    /** Gemeinsames Roundtrip-Dokument für die Zahlungs-/Rabatt-Features. */
+    private function buildPaymentFeatureDocument(): \ERechnungToolkit\Entities\Document {
+        $line = new \ERechnungToolkit\Entities\InvoiceLine(
+            id: '1',
+            quantity: 2.0,
+            unitCode: \ERechnungToolkit\Enums\UnitCode::HOUR,
+            netAmount: \CommonToolkit\ValueObjects\Money::of('190.00', CurrencyCode::Euro),
+            itemName: 'Beratung',
+            unitPrice: \CommonToolkit\ValueObjects\Money::of('100.00', CurrencyCode::Euro),
+            taxCategory: \ERechnungToolkit\Enums\TaxCategory::STANDARD,
+            taxPercent: 19.0
+        );
+        $line->addAllowanceCharge(\ERechnungToolkit\Entities\AllowanceCharge::discount(
+            \CommonToolkit\ValueObjects\Money::of('10.00', CurrencyCode::Euro),
+            'Rabatt',
+            taxCategory: \ERechnungToolkit\Enums\TaxCategory::STANDARD,
+            taxPercent: 19.0
+        ));
+
+        $document = ERechnungDocumentBuilder::create('INV-2026-077')
+            ->withIssueDate(new DateTimeImmutable('2026-08-14'))
+            ->withSeller('Muster GmbH', 'DE123456789')
+            ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
+            ->withSellerBankAccount('DE89 3704 0044 0532 0130 00', 'COBADEFFXXX')
+            ->withBuyer('Kunde AG', 'DE987654321')
+            ->withBuyerAddress('Kundenweg 2', '54321', 'München')
+            ->withPaymentTerms(new \ERechnungToolkit\Entities\PaymentTerms(
+                note: '#SKONTO#TAGE=7#PROZENT=2.00#',
+                netPaymentDays: 14,
+                discountPercent: 2.0,
+                discountDays: 7
+            ))
+            ->addInvoiceLine($line)
+            ->build();
+
+        $document->addAllowanceCharge(\ERechnungToolkit\Entities\AllowanceCharge::discount(
+            \CommonToolkit\ValueObjects\Money::of('5.00', CurrencyCode::Euro),
+            'Belegrabatt',
+            taxCategory: \ERechnungToolkit\Enums\TaxCategory::STANDARD,
+            taxPercent: 19.0
+        ));
+        $document->setRemittanceInformation('RE-2026-077');
+
+        return $document;
+    }
+
+    public function test_parse_ubl_payment_details_line_and_document_allowances(): void {
+        $xml = $this->generator->generateUbl($this->buildPaymentFeatureDocument());
+        $parsed = $this->parser->parse($xml);
+
+        $this->assertEquals('DE89370400440532013000', str_replace(' ', '', (string) $parsed->getSeller()->getIban()));
+        $this->assertEquals('COBADEFFXXX', $parsed->getSeller()->getBic());
+        $this->assertEquals('RE-2026-077', $parsed->getRemittanceInformation());
+
+        $terms = $parsed->getPaymentTerms();
+        $this->assertNotNull($terms);
+        $this->assertEquals(2.0, $terms->getDiscountPercent());
+        $this->assertEquals(7, $terms->getDiscountDays());
+
+        $lines = $parsed->getLines();
+        $this->assertCount(1, $lines);
+        $this->assertCount(1, $lines[0]->getAllowanceCharges());
+        $this->assertEquals('10.00', $lines[0]->getTotalAllowances()->getAmount());
+
+        $documentAllowances = $parsed->getAllowanceCharges();
+        $this->assertCount(1, $documentAllowances);
+        $this->assertTrue($documentAllowances[0]->isAllowance());
+        $this->assertEquals('5.00', $documentAllowances[0]->getAmount()->getAmount());
+    }
+
+    public function test_parse_cii_payment_details_line_and_document_allowances(): void {
+        $xml = $this->generator->generateCii($this->buildPaymentFeatureDocument());
+        $parsed = $this->parser->parse($xml);
+
+        $this->assertEquals('DE89370400440532013000', str_replace(' ', '', (string) $parsed->getSeller()->getIban()));
+        $this->assertEquals('COBADEFFXXX', $parsed->getSeller()->getBic());
+        $this->assertEquals('RE-2026-077', $parsed->getRemittanceInformation());
+
+        $terms = $parsed->getPaymentTerms();
+        $this->assertNotNull($terms);
+        $this->assertEquals(2.0, $terms->getDiscountPercent());
+        $this->assertEquals(7, $terms->getDiscountDays());
+
+        $lines = $parsed->getLines();
+        $this->assertCount(1, $lines);
+        $this->assertCount(1, $lines[0]->getAllowanceCharges());
+        $this->assertEquals('10.00', $lines[0]->getTotalAllowances()->getAmount());
+
+        $documentAllowances = $parsed->getAllowanceCharges();
+        $this->assertCount(1, $documentAllowances);
+        $this->assertEquals('5.00', $documentAllowances[0]->getAmount()->getAmount());
+    }
+
     public function test_parse_invalid_xml_throws_exception(): void {
         $this->expectException(\Exception::class);
 

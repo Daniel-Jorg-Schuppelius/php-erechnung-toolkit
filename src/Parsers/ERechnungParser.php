@@ -183,6 +183,15 @@ final class ERechnungParser {
         // Seller
         $seller = $this->parseUblParty("{$root}/cac:AccountingSupplierParty/cac:Party");
 
+        // Zahlungsverbindung (BG-17): PayeeFinancialAccount → Seller-Bankdaten.
+        $iban = $this->getUblValue("{$root}/cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:ID");
+        if ($iban !== null && $iban !== '') {
+            $seller = $seller->withBankingInfo(
+                $iban,
+                $this->getUblValue("{$root}/cac:PaymentMeans/cac:PayeeFinancialAccount/cac:FinancialInstitutionBranch/cbc:ID")
+            );
+        }
+
         // Buyer
         $buyer = $this->parseUblParty("{$root}/cac:AccountingCustomerParty/cac:Party");
 
@@ -206,6 +215,12 @@ final class ERechnungParser {
             deliveryDate: $this->getUblDate("{$root}/cac:Delivery/cbc:ActualDeliveryDate"),
             precedingInvoiceReference: $this->getUblValue("{$root}/cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID")
         );
+
+        // Verwendungszweck (BT-83).
+        $paymentId = $this->getUblValue("{$root}/cac:PaymentMeans/cbc:PaymentID");
+        if ($paymentId !== null && $paymentId !== '') {
+            $document->setRemittanceInformation($paymentId);
+        }
 
         // Notes
         foreach ($this->nodes("{$root}/cbc:Note") as $noteNode) {
@@ -269,14 +284,27 @@ final class ERechnungParser {
         // Seller
         $seller = $this->parseCiiParty("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement/ram:SellerTradeParty");
 
+        // Zahlungsverbindung (BG-17): PayeePartyCreditorFinancialAccount → Seller-Bankdaten.
+        $settlement = "{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeSettlement";
+        $iban = $this->getCiiValue("{$settlement}/ram:SpecifiedTradeSettlementPaymentMeans/ram:PayeePartyCreditorFinancialAccount/ram:IBANID");
+        if ($iban !== null && $iban !== '') {
+            $seller = $seller->withBankingInfo(
+                $iban,
+                $this->getCiiValue("{$settlement}/ram:SpecifiedTradeSettlementPaymentMeans/ram:PayeeSpecifiedCreditorFinancialInstitution/ram:BICID")
+            );
+        }
+
         // Buyer
         $buyer = $this->parseCiiParty("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement/ram:BuyerTradeParty");
 
         // Payment means
-        $paymentCode = $this->getCiiValue("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradeSettlementPaymentMeans/ram:TypeCode");
+        $paymentCode = $this->getCiiValue("{$settlement}/ram:SpecifiedTradeSettlementPaymentMeans/ram:TypeCode");
 
         // Due date
-        $dueDateStr = $this->getCiiValue("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradePaymentTerms/ram:DueDateDateTime/udt:DateTimeString");
+        $dueDateStr = $this->getCiiValue("{$settlement}/ram:SpecifiedTradePaymentTerms/ram:DueDateDateTime/udt:DateTimeString");
+
+        // Zahlungsbedingungen (BT-20) inkl. Skonto aus der BR-DE-18-Note.
+        $paymentTermsNote = $this->getCiiValue("{$settlement}/ram:SpecifiedTradePaymentTerms/ram:Description");
 
         // Delivery date
         $deliveryDateStr = $this->getCiiValue("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeDelivery/ram:ActualDeliverySupplyChainEvent/ram:OccurrenceDateTime/udt:DateTimeString");
@@ -295,12 +323,27 @@ final class ERechnungParser {
             orderReference: $this->getCiiValue("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement/ram:BuyerOrderReferencedDocument/ram:IssuerAssignedID"),
             contractReference: $this->getCiiValue("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement/ram:ContractReferencedDocument/ram:IssuerAssignedID"),
             paymentMeansCode: $paymentCode ? PaymentMeansCode::fromCode($paymentCode) : null,
+            paymentTerms: $paymentTermsNote !== null ? $this->paymentTermsFromNote($paymentTermsNote) : null,
             deliveryDate: $deliveryDateStr ? $this->parseCiiDate($deliveryDateStr) : null
         );
+
+        // Verwendungszweck (BT-83).
+        $paymentReference = $this->getCiiValue("{$settlement}/ram:PaymentReference");
+        if ($paymentReference !== null && $paymentReference !== '') {
+            $document->setRemittanceInformation($paymentReference);
+        }
 
         // Notes
         foreach ($this->nodes("{$root}/rsm:ExchangedDocument/ram:IncludedNote/ram:Content") as $noteNode) {
             $document->addNote($noteNode->textContent);
+        }
+
+        // Dokument-Rabatte/-Zuschläge (BG-20/BG-21).
+        foreach ($this->nodes("{$settlement}/ram:SpecifiedTradeAllowanceCharge") as $acNode) {
+            if (!$acNode instanceof DOMElement) {
+                continue;
+            }
+            $document->addAllowanceCharge($this->parseCiiAllowanceCharge($acNode, $currency));
         }
 
         // Lines
@@ -490,7 +533,7 @@ final class ERechnungParser {
         $sellersItemId = $this->getNodeValue($node, 'cac:Item/cac:SellersItemIdentification/cbc:ID');
         $buyersItemId = $this->getNodeValue($node, 'cac:Item/cac:BuyersItemIdentification/cbc:ID');
 
-        return new InvoiceLine(
+        $line = new InvoiceLine(
             id: $id,
             quantity: $quantity,
             unitCode: $unitCode,
@@ -505,6 +548,15 @@ final class ERechnungParser {
             note: $this->getNodeValue($node, 'cbc:Note'),
             accountingCost: $this->getNodeValue($node, 'cbc:AccountingCost')
         );
+
+        // Positionsrabatte/-zuschläge (BG-27/BG-28).
+        foreach ($this->nodes('cac:AllowanceCharge', $node) as $acNode) {
+            if ($acNode instanceof DOMElement) {
+                $line->addAllowanceCharge($this->parseUblAllowanceCharge($acNode, $currency));
+            }
+        }
+
+        return $line;
     }
 
     private function parseUblTaxTotal(string $xpath, CurrencyCode $currency): ?TaxTotal {
@@ -553,6 +605,21 @@ final class ERechnungParser {
         $note = $this->getUblValue("{$xpath}/cbc:Note");
         if ($note === null) {
             return null;
+        }
+        return $this->paymentTermsFromNote($note);
+    }
+
+    /**
+     * Skonto-Konditionen aus der BR-DE-18-Note (XRechnung-CIUS:
+     * `#SKONTO#TAGE=n#PROZENT=p#`) zusätzlich typisiert bereitstellen.
+     */
+    private function paymentTermsFromNote(string $note): PaymentTerms {
+        if (preg_match('/#SKONTO#TAGE=(\d+)#PROZENT=(\d+(?:[.,]\d+)?)#/', $note, $matches) === 1) {
+            return new PaymentTerms(
+                note: $note,
+                discountPercent: (float) str_replace(',', '.', $matches[2]),
+                discountDays: (int) $matches[1]
+            );
         }
         return new PaymentTerms(note: $note);
     }
@@ -656,7 +723,7 @@ final class ERechnungParser {
 
         $sellersItemId = $this->firstText('ram:SpecifiedTradeProduct/ram:SellerAssignedID', $node);
 
-        return new InvoiceLine(
+        $line = new InvoiceLine(
             id: $id,
             quantity: $quantity,
             unitCode: $unitCode,
@@ -667,6 +734,38 @@ final class ERechnungParser {
             taxPercent: $taxPercent,
             itemDescription: $itemDescription,
             sellersItemId: $sellersItemId
+        );
+
+        // Positionsrabatte/-zuschläge (BG-27/BG-28).
+        foreach ($this->nodes('ram:SpecifiedLineTradeSettlement/ram:SpecifiedTradeAllowanceCharge', $node) as $acNode) {
+            if ($acNode instanceof DOMElement) {
+                $line->addAllowanceCharge($this->parseCiiAllowanceCharge($acNode, $currency));
+            }
+        }
+
+        return $line;
+    }
+
+    /**
+     * CII-Rabatt/-Zuschlag (`ram:SpecifiedTradeAllowanceCharge`) — Pendant zu
+     * {@see parseUblAllowanceCharge()} für Dokument- und Zeilenebene.
+     */
+    private function parseCiiAllowanceCharge(DOMElement $node, CurrencyCode $currency): AllowanceCharge {
+        $chargeIndicator = strtolower((string) $this->getNodeValue($node, 'ram:ChargeIndicator/udt:Indicator')) === 'true';
+        $reasonCode = $this->getNodeValue($node, 'ram:ReasonCode');
+        $percentage = $this->getNodeValue($node, 'ram:CalculationPercent');
+        $taxCategoryCode = $this->getNodeValue($node, 'ram:CategoryTradeTax/ram:CategoryCode');
+        $taxPercent = $this->getNodeValue($node, 'ram:CategoryTradeTax/ram:RateApplicablePercent');
+
+        return new AllowanceCharge(
+            chargeIndicator: $chargeIndicator,
+            amount: $this->money($this->getNodeValue($node, 'ram:ActualAmount'), $currency),
+            reasonCode: $reasonCode ? AllowanceChargeReasonCode::tryFrom($reasonCode) : null,
+            reason: $this->getNodeValue($node, 'ram:Reason'),
+            baseAmount: Money::ofNullable($this->getNodeValue($node, 'ram:BasisAmount'), $currency),
+            percentage: $percentage !== null ? (float) $percentage : null,
+            taxCategory: $taxCategoryCode ? TaxCategory::tryFrom($taxCategoryCode) : null,
+            taxPercent: $taxPercent !== null ? (float) $taxPercent : null
         );
     }
 
