@@ -15,7 +15,7 @@ namespace ERechnungToolkit\Parsers;
 use CommonToolkit\Enums\CurrencyCode;
 use CommonToolkit\Helper\Data\{NumberHelper, XmlHelper};
 use CommonToolkit\ValueObjects\Money;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebItem, GaebSection, GaebSubDescription, GaebTextComplement, GaebTotals, GaebUpComponent};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalog, GaebCatalogAssignment, GaebItem, GaebQuantitySplit, GaebSection, GaebSubDescription, GaebTextComplement, GaebTotals, GaebUpComponent};
 use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderStatus, GaebItemType};
 use InvalidArgumentException;
 use SimpleXMLElement;
@@ -76,6 +76,7 @@ final class GaebDaXmlParser {
             sections: $sections,
             items: $items,
             upComponents: $this->parseUpComponents($boq),
+            catalogs: $this->parseCatalogs($this->findFirst($boq, 'BoQInfo')),
             totals: $this->parseTotals($this->findFirst($this->findFirst($boq, 'BoQInfo'), 'Totals'), $currency),
             currency: $currency,
         );
@@ -113,6 +114,8 @@ final class GaebDaXmlParser {
                     label: $this->textOf($this->findFirst($node, 'LblTx')),
                     position: $counters['section']++,
                     totals: $this->parseTotals($this->findFirst($node, 'Totals'), $currency),
+                    externalId: $this->attr($node, 'ID'),
+                    catalogAssignments: $this->parseCatalogAssignments($node),
                 );
 
                 $childBody = $this->findFirst($node, 'BoQBody');
@@ -206,6 +209,8 @@ final class GaebDaXmlParser {
             bidderComment: $this->trimOrNull($this->textOf($this->findFirst($item, 'BidComm'))),
             alternativeBidStatus: GaebAlternativeBidStatus::tryFrom((string) $this->trimOrNull($this->textOf($this->findFirst($item, 'AlterBidStatus')))),
             externalId: $this->attr($item, 'ID'),
+            catalogAssignments: $this->parseCatalogAssignments($item),
+            quantitySplits: $this->parseQuantitySplits($item),
             position: $position,
         );
     }
@@ -503,6 +508,85 @@ final class GaebDaXmlParser {
     }
 
     /** GAEB uses the dot as decimal separator; tolerant against comma and grouping. */
+    /**
+     * Catalogues declared in the header. Without them an assignment is a code
+     * without a meaning - the type carries the edition of DIN 276.
+     *
+     * @return list<GaebCatalog>
+     */
+    private function parseCatalogs(?SimpleXMLElement $boqInfo): array {
+        if ($boqInfo === null) {
+            return [];
+        }
+
+        $catalogs = [];
+        foreach ($boqInfo->children() as $child) {
+            if ($child->getName() !== 'Ctlg') {
+                continue;
+            }
+            $id = $this->trimOrNull($this->textOf($this->findFirst($child, 'CtlgID')));
+            if ($id === null) {
+                continue;
+            }
+            $catalogs[] = new GaebCatalog(
+                id: $id,
+                type: $this->trimOrNull($this->textOf($this->findFirst($child, 'CtlgType'))),
+                name: $this->trimOrNull($this->textOf($this->findFirst($child, 'CtlgName'))),
+                assignType: $this->trimOrNull($this->textOf($this->findFirst($child, 'CtlgAssignType'))),
+            );
+        }
+
+        return $catalogs;
+    }
+
+    /**
+     * Catalogue assignments of one node - the same mechanism carries cost group,
+     * work category, building and model identifier.
+     *
+     * @return list<GaebCatalogAssignment>
+     */
+    private function parseCatalogAssignments(SimpleXMLElement $node): array {
+        $assignments = [];
+        foreach ($node->children() as $child) {
+            if ($child->getName() !== 'CtlgAssign') {
+                continue;
+            }
+            $id = $this->trimOrNull($this->textOf($this->findFirst($child, 'CtlgID')));
+            $code = $this->trimOrNull($this->textOf($this->findFirst($child, 'CtlgCode')));
+            if ($id === null || $code === null) {
+                continue;
+            }
+            $assignments[] = new GaebCatalogAssignment(
+                catalogId: $id,
+                code: $code,
+                quantity: $this->cleanNumber($this->textOf($this->findFirst($child, 'Quantity'))),
+            );
+        }
+
+        return $assignments;
+    }
+
+    /**
+     * Partial quantities of an item, each with its own assignments.
+     *
+     * @return list<GaebQuantitySplit>
+     */
+    private function parseQuantitySplits(SimpleXMLElement $item): array {
+        $splits = [];
+        foreach ($item->children() as $child) {
+            if ($child->getName() !== 'QtySplit') {
+                continue;
+            }
+            $splits[] = new GaebQuantitySplit(
+                quantity: $this->cleanNumber($this->textOf($this->findFirst($child, 'Qty'))),
+                percent: $this->cleanNumber($this->textOf($this->findFirst($child, 'QtyPcnt'))),
+                catalogAssignments: $this->parseCatalogAssignments($child),
+            );
+        }
+
+        return $splits;
+    }
+
     /**
      * Currency of the document (GAEB `Cur`). The schema demands it, so an
      * unreadable value falls back to the euro instead of guessing per amount.

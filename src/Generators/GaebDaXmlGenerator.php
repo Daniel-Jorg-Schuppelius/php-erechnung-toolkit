@@ -15,8 +15,9 @@ namespace ERechnungToolkit\Generators;
 use CommonToolkit\ValueObjects\Money;
 use DOMDocument;
 use DOMElement;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebItem, GaebParty, GaebSection, GaebTotals};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalogAssignment, GaebItem, GaebParty, GaebSection, GaebTotals};
 use ERechnungToolkit\Enums\{GaebItemType, GaebPhase};
+use ERechnungToolkit\Helper\Gaeb\GaebCalculator;
 
 /**
  * Writer for GAEB DA XML, the counterpart of {@see \ERechnungToolkit\Parsers\GaebDaXmlParser}.
@@ -29,6 +30,12 @@ use ERechnungToolkit\Enums\{GaebItemType, GaebPhase};
  */
 final class GaebDaXmlGenerator {
     private const VERSION = '3.3';
+
+    private readonly GaebCalculator $calculator;
+
+    public function __construct(?GaebCalculator $calculator = null) {
+        $this->calculator = $calculator ?? new GaebCalculator;
+    }
 
     /**
      * Edition of the schema, not of the writing program. The bill of quantities,
@@ -120,6 +127,22 @@ final class GaebDaXmlGenerator {
                 $boqInfo->appendChild($label);
             }
         }
+        // Kataloge und Zuordnungen beschreiben das Dokument; die Angebotsabgabe
+        // antwortet darauf und trägt sie nicht erneut.
+        foreach ($phase->carriesTexts() ? $boq->getCatalogs() : [] as $catalog) {
+            $el = $dom->createElement('Ctlg');
+            $el->appendChild($this->textElement($dom, 'CtlgID', $catalog->getId()));
+            if ($catalog->getType() !== null) {
+                $el->appendChild($this->textElement($dom, 'CtlgType', $catalog->getType()));
+            }
+            if ($catalog->getName() !== null) {
+                $el->appendChild($this->textElement($dom, 'CtlgName', $catalog->getName()));
+            }
+            if ($catalog->getAssignType() !== null) {
+                $el->appendChild($this->textElement($dom, 'CtlgAssignType', $catalog->getAssignType()));
+            }
+            $boqInfo->appendChild($el);
+        }
         $this->appendTotals($dom, $boqInfo, $boq->getTotals());
         $boqEl->appendChild($boqInfo);
 
@@ -136,10 +159,13 @@ final class GaebDaXmlGenerator {
     private function appendBody(DOMDocument $dom, DOMElement $body, GaebBoq $boq, GaebPhase $phase, ?string $parentReference, string $parentRef): void {
         foreach ($this->sectionsOf($boq, $parentReference) as $section) {
             $ctgy = $dom->createElement('BoQCtgy');
-            $ctgy->setAttribute('ID', $this->identifier('C', $section->getReference()));
+            $ctgy->setAttribute('ID', $section->getExternalId() ?? $this->identifier('C', $section->getReference()));
             $ctgy->setAttribute('RNoPart', $this->localPart($section->getReference(), $parentRef));
             if ($section->getLabel() !== null && $phase->carriesTexts()) {
                 $ctgy->appendChild($this->htmlText($dom, 'LblTx', $section->getLabel()));
+            }
+            if ($phase->carriesTexts()) {
+                $this->appendCatalogAssignments($dom, $ctgy, $section->getCatalogAssignments());
             }
             $childBody = $dom->createElement('BoQBody');
             $this->appendBody($dom, $childBody, $boq, $phase, $section->getReference(), $section->getReference());
@@ -147,7 +173,7 @@ final class GaebDaXmlGenerator {
             // The bid demands a sum on every group; where the document carries
             // none it is added up from the items below.
             if (!$phase->carriesTexts() && $section->getTotals()?->getTotal() === null) {
-                $ctgy->appendChild($this->totalElement($dom, $this->sectionTotal($boq, $section->getReference())));
+                $ctgy->appendChild($this->totalElement($dom, $this->calculator->sectionTotal($boq, $section->getReference())));
             } else {
                 $this->appendTotals($dom, $ctgy, $section->getTotals());
             }
@@ -233,8 +259,22 @@ final class GaebDaXmlGenerator {
         if ($item->getQuantity() !== null && !($item->hasFreeQuantity() && $phase === GaebPhase::RequestForBid)) {
             $el->appendChild($dom->createElement('Qty', $this->num($item->getQuantity())));
         }
+        foreach ($phase->carriesTexts() ? $item->getQuantitySplits() : [] as $split) {
+            $splitEl = $dom->createElement('QtySplit');
+            if ($split->getPercent() !== null) {
+                $splitEl->appendChild($dom->createElement('QtyPcnt', $this->num($split->getPercent())));
+            }
+            if ($split->getQuantity() !== null) {
+                $splitEl->appendChild($dom->createElement('Qty', $this->num($split->getQuantity())));
+            }
+            $this->appendCatalogAssignments($dom, $splitEl, $split->getCatalogAssignments());
+            $el->appendChild($splitEl);
+        }
         if ($item->getUnit() !== null && $phase->carriesQuantities()) {
             $el->appendChild($this->textElement($dom, 'QU', $item->getUnit()));
+        }
+        if ($phase->carriesTexts()) {
+            $this->appendCatalogAssignments($dom, $el, $item->getCatalogAssignments());
         }
 
         // The bid carries no texts of its own: only the complements the bidder
@@ -575,35 +615,30 @@ final class GaebDaXmlGenerator {
         return $prefix . ($slug === '' ? '0' : $slug);
     }
 
+    /**
+     * Catalogue assignments of a node. One mechanism for cost group, work
+     * category, building, cost unit and model identifier alike.
+     *
+     * @param list<GaebCatalogAssignment> $assignments
+     */
+    private function appendCatalogAssignments(DOMDocument $dom, DOMElement $parent, array $assignments): void {
+        foreach ($assignments as $assignment) {
+            $el = $dom->createElement('CtlgAssign');
+            $el->appendChild($this->textElement($dom, 'CtlgID', $assignment->getCatalogId()));
+            $el->appendChild($this->textElement($dom, 'CtlgCode', $assignment->getCode()));
+            if ($assignment->getQuantity() !== null) {
+                $el->appendChild($dom->createElement('Quantity', $this->num($assignment->getQuantity())));
+            }
+            $parent->appendChild($el);
+        }
+    }
+
     /** A `Totals` element that carries nothing but the mandatory sum. */
     private function totalElement(DOMDocument $dom, Money $total): DOMElement {
         $el = $dom->createElement('Totals');
         $el->appendChild($dom->createElement('Total', $this->amount($total)));
 
         return $el;
-    }
-
-    /**
-     * Sum of a group: the total prices of its items plus those of the groups
-     * below it. Only used where the phase demands a sum the document does not
-     * carry - it is added up, never invented.
-     */
-    private function sectionTotal(GaebBoq $boq, string $reference): Money {
-        $sum = Money::zero($boq->getCurrency());
-
-        foreach ($boq->getItems() as $item) {
-            if ($item->getSectionReference() === $reference && $item->getTotalPrice() !== null) {
-                $sum = $sum->plus($item->getTotalPrice());
-            }
-        }
-
-        foreach ($boq->getSections() as $section) {
-            if ($section->getParentReference() === $reference) {
-                $sum = $sum->plus($this->sectionTotal($boq, $section->getReference()));
-            }
-        }
-
-        return $sum;
     }
 
     /**

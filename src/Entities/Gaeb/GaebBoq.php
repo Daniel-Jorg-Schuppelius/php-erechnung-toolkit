@@ -29,6 +29,7 @@ final class GaebBoq {
      * @param list<GaebSection>      $sections
      * @param list<GaebItem>         $items
      * @param list<GaebUpComponent>  $upComponents unit price shares required by the client
+     * @param list<GaebCatalog>      $catalogs catalogues the assignments point to
      */
     public function __construct(
         private readonly ?string $version = null,
@@ -39,7 +40,8 @@ final class GaebBoq {
         private readonly array $items = [],
         private readonly array $upComponents = [],
         private readonly ?GaebTotals $totals = null,
-        private readonly CurrencyCode $currency = CurrencyCode::Euro
+        private readonly CurrencyCode $currency = CurrencyCode::Euro,
+        private readonly array $catalogs = []
     ) {}
 
     /** GAEB DA XML version, e.g. "3.3". */
@@ -91,6 +93,16 @@ final class GaebBoq {
      */
     public function getCurrency(): CurrencyCode {
         return $this->currency;
+    }
+
+    /**
+     * Catalogues declared in the header (`Ctlg`); assignments reference them by
+     * id. The type carries the edition, so a cost group is unambiguous.
+     *
+     * @return list<GaebCatalog>
+     */
+    public function getCatalogs(): array {
+        return $this->catalogs;
     }
 
     public function getTotals(): ?GaebTotals {

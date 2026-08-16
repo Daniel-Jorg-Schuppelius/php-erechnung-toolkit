@@ -18,12 +18,15 @@ namespace ERechnungToolkit\Entities\Gaeb;
  * chain of all ancestors.
  */
 final class GaebSection {
+    /** @param list<GaebCatalogAssignment> $catalogAssignments */
     public function __construct(
         private readonly string $reference,
         private readonly ?string $parentReference = null,
         private readonly ?string $label = null,
         private readonly int $position = 0,
-        private readonly ?GaebTotals $totals = null
+        private readonly ?GaebTotals $totals = null,
+        private readonly ?string $externalId = null,
+        private readonly array $catalogAssignments = []
     ) {}
 
     public function getReference(): string {
@@ -40,6 +43,20 @@ final class GaebSection {
 
     public function getPosition(): int {
         return $this->position;
+    }
+
+    /**
+     * Identifier of the group as it stood in the file (`xs:ID`, mandatory from
+     * 3.3 on). Kept so that a re-export returns the very same identifier - it is
+     * what links the group to a model or to another system.
+     */
+    public function getExternalId(): ?string {
+        return $this->externalId;
+    }
+
+    /** @return list<GaebCatalogAssignment> */
+    public function getCatalogAssignments(): array {
+        return $this->catalogAssignments;
     }
 
     /** Sums of this section, including any discount given on it. */

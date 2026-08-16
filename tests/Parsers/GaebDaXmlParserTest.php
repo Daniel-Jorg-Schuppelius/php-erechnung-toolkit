@@ -52,7 +52,7 @@ class GaebDaXmlParserTest extends BaseTestCase {
         <LblUPComp2 Type="Material">Stoffe</LblUPComp2>
       </BoQInfo>
       <BoQBody>
-        <BoQCtgy RNoPart="001">
+        <BoQCtgy ID="G-001" RNoPart="001">
           <LblTx><p><span>Erdarbeiten</span></p></LblTx>
           <BoQBody>
             <Itemlist>
@@ -266,6 +266,8 @@ XML;
         $original = $this->parser->parse($this->sample());
         $xml = (new GaebDaXmlGenerator)->generate($original, GaebPhase::Award, 'EUR', '2026-01-01', 'WorkDiary');
 
+        // Die Kennung der Gruppe muss unverändert zurückkommen (xs:ID).
+        $this->assertStringContainsString('<BoQCtgy ID="G-001"', $xml);
         $this->assertStringContainsString('<MarkupItem', $xml);
         $this->assertStringContainsString('<Remark', $xml);
         $this->assertStringContainsString('RNoIndex="A"', $xml);

@@ -58,6 +58,16 @@ class GaebSchemaValidatorTest extends BaseTestCase {
         <NoUPComps>2</NoUPComps>
         <LblUPComp1 Type="Wages">Lohn</LblUPComp1>
         <LblUPComp2 Type="Materials">Stoffe</LblUPComp2>
+        <Ctlg>
+          <CtlgID>KG</CtlgID>
+          <CtlgType>cost group DIN 276 2018-12</CtlgType>
+          <CtlgName>Kostengruppen</CtlgName>
+        </Ctlg>
+        <Ctlg>
+          <CtlgID>GEB</CtlgID>
+          <CtlgType>locality</CtlgType>
+          <CtlgName>Gebäude</CtlgName>
+        </Ctlg>
       </BoQInfo>
       <BoQBody>
         <BoQCtgy ID="C1" RNoPart="001">
@@ -67,7 +77,17 @@ class GaebSchemaValidatorTest extends BaseTestCase {
               <Item ID="I1" RNoPart="0010">
                 <UPBkdn>Yes</UPBkdn>
                 <Qty>450.000</Qty>
+                <QtySplit>
+                  <Qty>300.000</Qty>
+                  <CtlgAssign><CtlgID>KG</CtlgID><CtlgCode>310</CtlgCode></CtlgAssign>
+                  <CtlgAssign><CtlgID>GEB</CtlgID><CtlgCode>H1</CtlgCode></CtlgAssign>
+                </QtySplit>
+                <QtySplit>
+                  <Qty>150.000</Qty>
+                  <CtlgAssign><CtlgID>KG</CtlgID><CtlgCode>320</CtlgCode></CtlgAssign>
+                </QtySplit>
                 <QU>m3</QU>
+                <CtlgAssign><CtlgID>KG</CtlgID><CtlgCode>310</CtlgCode></CtlgAssign>
                 <Description>
                   <OutlineText><OutlTxt><TextOutlTxt><p><span>Boden lösen</span></p></TextOutlTxt></OutlTxt></OutlineText>
                 </Description>
@@ -139,6 +159,35 @@ XML;
         $this->assertStringNotContainsString('<LblTx>', $bid);
         $this->assertStringNotContainsString('<QU>', $bid);
         $this->assertStringContainsString('<Totals>', $bid);
+    }
+
+    /**
+     * Katalogzuordnung und Mengensplit sind der Mechanismus für Kostengruppe,
+     * Gebäude und Modellkennung (Feature 109) — sie müssen den Weg durch Leser
+     * und Schreiber unverändert überstehen.
+     */
+    public function test_catalog_assignments_and_splits_survive(): void {
+        $boq = (new GaebDaXmlParser)->parse($this->minimalAward());
+
+        $this->assertCount(2, $boq->getCatalogs());
+        $this->assertSame('cost group DIN 276 2018-12', $boq->getCatalogs()[0]->getType());
+        $this->assertTrue($boq->getCatalogs()[0]->getCatalogType()?->isCostGroup());
+
+        $item = $boq->getItems()[0];
+        $this->assertCount(1, $item->getCatalogAssignments());
+        $this->assertSame('310', $item->getCatalogAssignments()[0]->getCode());
+
+        $splits = $item->getQuantitySplits();
+        $this->assertCount(2, $splits);
+        $this->assertSame('300.000', $splits[0]->getQuantity());
+        $this->assertSame(['310', 'H1'], array_map(
+            static fn ($assignment): string => $assignment->getCode(),
+            $splits[0]->getCatalogAssignments()
+        ));
+
+        $again = (new GaebDaXmlGenerator)->generate($boq, GaebPhase::RequestForBid, 'EUR', '2026-01-01', 'Test', null, '2026-02-01');
+        $this->assertSame([], $this->validator->validate($again), 'Der Export mit Katalogzuordnungen ist nicht schemavalide.');
+        $this->assertCount(2, (new GaebDaXmlParser)->parse($again)->getItems()[0]->getQuantitySplits());
     }
 
     public function test_reports_schema_violations(): void {

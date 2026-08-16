@@ -26,6 +26,8 @@ final class GaebItem {
      * @param list<GaebTextComplement> $textComplements
      * @param list<GaebSubDescription> $subDescriptions
      * @param list<Money>              $unitPriceComponents shares of the unit price, in the order of the header labels
+     * @param list<GaebCatalogAssignment> $catalogAssignments cost group, work category, building, model identifier
+     * @param list<GaebQuantitySplit>  $quantitySplits partial quantities, each with its own assignments
      */
     public function __construct(
         private readonly string $reference,
@@ -55,7 +57,9 @@ final class GaebItem {
         private readonly ?string $bidderComment = null,
         private readonly ?GaebAlternativeBidStatus $alternativeBidStatus = null,
         private readonly ?string $externalId = null,
-        private readonly int $position = 0
+        private readonly int $position = 0,
+        private readonly array $catalogAssignments = [],
+        private readonly array $quantitySplits = []
     ) {}
 
     /** Ordinal number including the index level, e.g. "001.001.0010.A". */
@@ -124,6 +128,26 @@ final class GaebItem {
     /** @return list<GaebSubDescription> */
     public function getSubDescriptions(): array {
         return $this->subDescriptions;
+    }
+
+    /**
+     * Catalogue assignments of the item (`CtlgAssign`): cost group after
+     * DIN 276, work category, building, cost unit, model identifier.
+     *
+     * @return list<GaebCatalogAssignment>
+     */
+    public function getCatalogAssignments(): array {
+        return $this->catalogAssignments;
+    }
+
+    /**
+     * Partial quantities. Where they exist, the assignments of the split beat
+     * those of the item - one item can belong to several cost groups.
+     *
+     * @return list<GaebQuantitySplit>
+     */
+    public function getQuantitySplits(): array {
+        return $this->quantitySplits;
     }
 
     /** @return list<Money> */
