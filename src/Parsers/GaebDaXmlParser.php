@@ -12,9 +12,11 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Parsers;
 
+use CommonToolkit\Enums\CurrencyCode;
 use CommonToolkit\Helper\Data\{NumberHelper, XmlHelper};
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebItem, GaebSection, GaebSubDescription, GaebTextComplement, GaebUpComponent};
-use ERechnungToolkit\Enums\{GaebItemType, GaebPhase};
+use CommonToolkit\ValueObjects\Money;
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebItem, GaebSection, GaebSubDescription, GaebTextComplement, GaebTotals, GaebUpComponent};
+use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderStatus, GaebItemType};
 use InvalidArgumentException;
 use SimpleXMLElement;
 
@@ -34,6 +36,9 @@ final class GaebDaXmlParser {
     /** Ordinal level used for remarks that carry no ordinal number of their own. */
     private const NOTE_LEVEL_PREFIX = 'H';
 
+    /** Scale of every amount: GAEB prices carry a tenth of a cent. */
+    private const PRICE_SCALE = 4;
+
     public function parse(string $xml): GaebBoq {
         // Hardening against XXE and entity expansion: GAEB files have no
         // document type definition, so a DOCTYPE is rejected outright.
@@ -51,6 +56,7 @@ final class GaebDaXmlParser {
         }
 
         $boq = $this->findDeep($root, 'BoQ');
+        $currency = $this->parseCurrency($root);
         $sections = [];
         $items = [];
         $counters = ['section' => 0, 'item' => 0];
@@ -58,19 +64,20 @@ final class GaebDaXmlParser {
         if ($boq !== null) {
             $body = $this->findFirst($boq, 'BoQBody');
             if ($body !== null) {
-                $this->walkBody($body, null, [], $sections, $items, $counters);
+                $this->walkBody($body, null, [], $sections, $items, $counters, $currency);
             }
         }
 
         return new GaebBoq(
             version: $version,
-            phase: GaebPhase::fromCode($phaseCode),
             phaseCode: $phaseCode,
             projectName: $this->extractProjectName($root, $boq),
             externalId: $this->attr($boq, 'ID') ?? $this->attr($boq, 'DBNr'),
             sections: $sections,
             items: $items,
             upComponents: $this->parseUpComponents($boq),
+            totals: $this->parseTotals($this->findFirst($this->findFirst($boq, 'BoQInfo'), 'Totals'), $currency),
+            currency: $currency,
         );
     }
 
@@ -86,7 +93,8 @@ final class GaebDaXmlParser {
         array $ancestorParts,
         array &$sections,
         array &$items,
-        array &$counters
+        array &$counters,
+        CurrencyCode $currency
     ): void {
         foreach ($body->children() as $node) {
             $name = $node->getName();
@@ -104,11 +112,12 @@ final class GaebDaXmlParser {
                     parentReference: $parentRef,
                     label: $this->textOf($this->findFirst($node, 'LblTx')),
                     position: $counters['section']++,
+                    totals: $this->parseTotals($this->findFirst($node, 'Totals'), $currency),
                 );
 
                 $childBody = $this->findFirst($node, 'BoQBody');
                 if ($childBody !== null) {
-                    $this->walkBody($childBody, $ref, $parts, $sections, $items, $counters);
+                    $this->walkBody($childBody, $ref, $parts, $sections, $items, $counters, $currency);
                 }
 
                 continue;
@@ -132,13 +141,13 @@ final class GaebDaXmlParser {
                     $parts[] = sprintf('%s%02d', self::NOTE_LEVEL_PREFIX, ++$noteNo);
                 }
 
-                $items[] = $this->parseItem($entry, $parentRef, $parts, $counters['item']++);
+                $items[] = $this->parseItem($entry, $parentRef, $parts, $counters['item']++, $currency);
             }
         }
     }
 
     /** @param array<int, string> $ancestorParts */
-    private function parseItem(SimpleXMLElement $item, ?string $sectionRef, array $ancestorParts, int $position): GaebItem {
+    private function parseItem(SimpleXMLElement $item, ?string $sectionRef, array $ancestorParts, int $position, CurrencyCode $currency): GaebItem {
         $part = $this->attr($item, 'RNoPart') ?? '';
         $parts = $ancestorParts;
         if ($part !== '') {
@@ -175,8 +184,8 @@ final class GaebDaXmlParser {
             longText: $this->trimOrNull($longText),
             quantity: $qty,
             unit: $unit,
-            unitPrice: $this->cleanNumber($this->textOf($this->findFirst($item, 'UP'))),
-            totalPrice: $this->cleanNumber($this->textOf($this->findFirst($item, 'IT'))),
+            unitPrice: $this->money($this->textOf($this->findFirst($item, 'UP')), $currency),
+            totalPrice: $this->money($this->textOf($this->findFirst($item, 'IT')), $currency),
             // Only the own text node: <Provis>WithTotal</Provis>. Older files
             // carry a ProvisQty below it which names no kind.
             provisionKind: $this->ownText($this->findFirst($item, 'Provis')),
@@ -185,8 +194,17 @@ final class GaebDaXmlParser {
             markupType: $this->trimOrNull($this->textOf($this->findFirst($item, 'MarkupType'))),
             textComplements: $complements,
             subDescriptions: $this->parseSubDescriptions($item),
-            unitPriceComponents: $this->parseUnitPriceComponents($item),
-            addendum: $this->isAddendum($item),
+            unitPriceComponents: $this->parseUnitPriceComponents($item, $currency),
+            changeOrderNo: $this->trimOrNull($this->textOf($this->findFirst($item, 'CONo'))),
+            changeOrderStatus: GaebChangeOrderStatus::tryFrom((string) $this->trimOrNull($this->textOf($this->findFirst($item, 'COStatus')))),
+            notOffered: $this->isYes($item, 'NotOffered'),
+            notApplicable: $this->isYes($item, 'NotAppl'),
+            quantityToBeDetermined: $this->isYes($item, 'QtyTBD'),
+            hourlyItem: $this->isYes($item, 'HourIt'),
+            discountPercent: $this->cleanNumber($this->textOf($this->findFirst($item, 'DiscountPcnt'))),
+            vatRate: $this->cleanNumber($this->textOf($this->findFirst($item, 'VAT'))),
+            bidderComment: $this->trimOrNull($this->textOf($this->findFirst($item, 'BidComm'))),
+            alternativeBidStatus: GaebAlternativeBidStatus::tryFrom((string) $this->trimOrNull($this->textOf($this->findFirst($item, 'AlterBidStatus')))),
             externalId: $this->attr($item, 'ID'),
             position: $position,
         );
@@ -263,6 +281,31 @@ final class GaebDaXmlParser {
         return [$text === '' ? null : $text, $complements];
     }
 
+    /** Yes/No element such as NotOffered, NotAppl, QtyTBD or HourIt. */
+    private function isYes(SimpleXMLElement $item, string $name): bool {
+        return strtolower((string) $this->ownText($this->findFirst($item, $name))) === 'yes';
+    }
+
+    /** Sums of a bill of quantity or a section, including any discount. */
+    private function parseTotals(?SimpleXMLElement $totals, CurrencyCode $currency): ?GaebTotals {
+        if ($totals === null) {
+            return null;
+        }
+
+        $entity = new GaebTotals(
+            total: $this->money($this->textOf($this->findFirst($totals, 'Total')), $currency),
+            discountPercent: $this->cleanNumber($this->textOf($this->findFirst($totals, 'DiscountPcnt'))),
+            discountAmount: $this->money($this->textOf($this->findFirst($totals, 'DiscountAmt')), $currency),
+            totalAfterDiscount: $this->money($this->textOf($this->findFirst($totals, 'TotAfterDisc')), $currency),
+            vatRate: $this->cleanNumber($this->textOf($this->findFirst($totals, 'VAT'))),
+            totalNet: $this->money($this->textOf($this->findFirst($totals, 'TotalNet')), $currency),
+            vatAmount: $this->money($this->textOf($this->findFirst($totals, 'VATAmount')), $currency),
+            totalGross: $this->money($this->textOf($this->findFirst($totals, 'TotalGross')), $currency),
+        );
+
+        return $entity->isEmpty() ? null : $entity;
+    }
+
     /**
      * Sub descriptions of a leading description. They carry their own quantity
      * but never their own price.
@@ -289,15 +332,15 @@ final class GaebDaXmlParser {
      * Shares of the unit price on an item (UPComp1 to UPComp6). Their sum must
      * equal the unit price; the order follows the labels of the bill header.
      *
-     * @return list<string>
+     * @return list<Money>
      */
-    private function parseUnitPriceComponents(SimpleXMLElement $item): array {
+    private function parseUnitPriceComponents(SimpleXMLElement $item, CurrencyCode $currency): array {
         $values = [];
         foreach ($item->children() as $child) {
             if (preg_match('/^UPComp([1-6])$/', $child->getName(), $m) !== 1) {
                 continue;
             }
-            $values[(int) $m[1]] = $this->cleanNumber($this->textOf($child));
+            $values[(int) $m[1]] = $this->money($this->textOf($child), $currency);
         }
 
         if ($values === []) {
@@ -306,7 +349,10 @@ final class GaebDaXmlParser {
 
         ksort($values);
 
-        return array_values(array_map(static fn (?string $v): string => $v ?? '0', $values));
+        return array_values(array_map(
+            static fn (?Money $v): Money => $v ?? Money::zero($currency, self::PRICE_SCALE),
+            $values
+        ));
     }
 
     /**
@@ -337,12 +383,6 @@ final class GaebDaXmlParser {
         ksort($components);
 
         return array_values($components);
-    }
-
-    private function isAddendum(SimpleXMLElement $item): bool {
-        // GAEB marks addenda through STLNo or an addendum flag; checked leniently.
-        return $this->findFirst($item, 'STLNo') !== null
-            || strtolower((string) $this->attr($item, 'Addendum')) === 'yes';
     }
 
     private function extractVersion(string $xml): ?string {
@@ -463,6 +503,28 @@ final class GaebDaXmlParser {
     }
 
     /** GAEB uses the dot as decimal separator; tolerant against comma and grouping. */
+    /**
+     * Currency of the document (GAEB `Cur`). The schema demands it, so an
+     * unreadable value falls back to the euro instead of guessing per amount.
+     */
+    private function parseCurrency(SimpleXMLElement $root): CurrencyCode {
+        $code = $this->trimOrNull($this->textOf($this->findDeep($root, 'Cur')));
+        if ($code === null) {
+            return CurrencyCode::Euro;
+        }
+
+        return CurrencyCode::tryFrom(strtoupper($code)) ?? CurrencyCode::Euro;
+    }
+
+    /**
+     * Amount in the currency of the document. GAEB carries a tenth of a cent in
+     * the unit price (`EPZPF` in the older families), so the scale is four -
+     * rounding to two would silently change a bid.
+     */
+    private function money(?string $value, CurrencyCode $currency): ?Money {
+        return Money::ofNullable($this->cleanNumber($value), $currency, self::PRICE_SCALE);
+    }
+
     private function cleanNumber(?string $value): ?string {
         if ($value === null) {
             return null;

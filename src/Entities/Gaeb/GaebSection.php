@@ -22,7 +22,8 @@ final class GaebSection {
         private readonly string $reference,
         private readonly ?string $parentReference = null,
         private readonly ?string $label = null,
-        private readonly int $position = 0
+        private readonly int $position = 0,
+        private readonly ?GaebTotals $totals = null
     ) {}
 
     public function getReference(): string {
@@ -39,5 +40,10 @@ final class GaebSection {
 
     public function getPosition(): int {
         return $this->position;
+    }
+
+    /** Sums of this section, including any discount given on it. */
+    public function getTotals(): ?GaebTotals {
+        return $this->totals;
     }
 }

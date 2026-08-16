@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Entities\Gaeb;
 
+use CommonToolkit\Enums\CurrencyCode;
 use ERechnungToolkit\Enums\GaebPhase;
 
 /**
@@ -31,13 +32,14 @@ final class GaebBoq {
      */
     public function __construct(
         private readonly ?string $version = null,
-        private readonly ?GaebPhase $phase = null,
         private readonly ?string $phaseCode = null,
         private readonly ?string $projectName = null,
         private readonly ?string $externalId = null,
         private readonly array $sections = [],
         private readonly array $items = [],
-        private readonly array $upComponents = []
+        private readonly array $upComponents = [],
+        private readonly ?GaebTotals $totals = null,
+        private readonly CurrencyCode $currency = CurrencyCode::Euro
     ) {}
 
     /** GAEB DA XML version, e.g. "3.3". */
@@ -45,9 +47,13 @@ final class GaebBoq {
         return $this->version;
     }
 
-    /** Exchange phase, null for phases outside the 80 range (e.g. X31). */
+    /**
+     * Exchange phase, derived from the code. Null means the code is unknown to
+     * this version of the toolkit - the raw value stays available for the
+     * message that says so.
+     */
     public function getPhase(): ?GaebPhase {
-        return $this->phase;
+        return GaebPhase::fromCode($this->phaseCode);
     }
 
     /** Raw DA code as found in the file, e.g. "31" or "84". */
@@ -76,6 +82,19 @@ final class GaebBoq {
     /** @return list<GaebUpComponent> */
     public function getUpComponents(): array {
         return $this->upComponents;
+    }
+
+    /** Sums of the whole bill of quantity, including any discount. */
+    /**
+     * Currency of every amount in this document (GAEB `Cur`). It is mandatory in
+     * the file, so it is never guessed here beyond the euro default.
+     */
+    public function getCurrency(): CurrencyCode {
+        return $this->currency;
+    }
+
+    public function getTotals(): ?GaebTotals {
+        return $this->totals;
     }
 
     public function countSections(): int {

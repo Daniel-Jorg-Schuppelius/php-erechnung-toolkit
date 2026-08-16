@@ -12,7 +12,8 @@ declare(strict_types=1);
 
 namespace Tests\Parsers;
 
-use ERechnungToolkit\Enums\{GaebItemType, GaebPhase};
+use CommonToolkit\ValueObjects\Money;
+use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderStatus, GaebItemType, GaebPhase};
 use ERechnungToolkit\Generators\GaebDaXmlGenerator;
 use ERechnungToolkit\Parsers\GaebDaXmlParser;
 use InvalidArgumentException;
@@ -41,6 +42,11 @@ class GaebDaXmlParserTest extends BaseTestCase {
     <BoQ ID="BOQ-1">
       <BoQInfo>
         <Name>1</Name>
+        <Totals>
+          <Total>10000.00</Total>
+          <DiscountPcnt>3.000000</DiscountPcnt>
+          <TotAfterDisc>9700.00</TotAfterDisc>
+        </Totals>
         <NoUPComps>2</NoUPComps>
         <LblUPComp1 Type="Wages">Lohn</LblUPComp1>
         <LblUPComp2 Type="Material">Stoffe</LblUPComp2>
@@ -102,6 +108,35 @@ class GaebDaXmlParserTest extends BaseTestCase {
                   <OutlineText><OutlTxt><TextOutlTxt><p><span>Zuschlag</span></p></TextOutlTxt></OutlTxt></OutlineText>
                 </CompleteText></Description>
               </MarkupItem>
+              <Item RNoPart="0050">
+                <CONo>N1</CONo>
+                <COStatus>Offered</COStatus>
+                <Qty>5.000</Qty>
+                <QU>m</QU>
+                <Description><CompleteText>
+                  <OutlineText><OutlTxt><TextOutlTxt><p><span>Nachtragsposition</span></p></TextOutlTxt></OutlTxt></OutlineText>
+                </CompleteText></Description>
+              </Item>
+              <Item RNoPart="0060">
+                <NotOffered>Yes</NotOffered>
+                <HourIt>Yes</HourIt>
+                <Qty>3.000</Qty>
+                <QU>h</QU>
+                <Description><CompleteText>
+                  <OutlineText><OutlTxt><TextOutlTxt><p><span>Stundenlohnarbeit, nicht angeboten</span></p></TextOutlTxt></OutlTxt></OutlineText>
+                </CompleteText></Description>
+              </Item>
+              <Item RNoPart="0070">
+                <QtyTBD>Yes</QtyTBD>
+                <QU>m</QU>
+                <VAT>19.00</VAT>
+                <DiscountPcnt>2.500000</DiscountPcnt>
+                <BidComm><p><span>Ausführung nur bei frostfreier Witterung</span></p></BidComm>
+                <AlterBidStatus>Modified</AlterBidStatus>
+                <Description><CompleteText>
+                  <OutlineText><OutlTxt><TextOutlTxt><p><span>Freie Menge mit Bieterkommentar</span></p></TextOutlTxt></OutlTxt></OutlineText>
+                </CompleteText></Description>
+              </Item>
               <Remark>
                 <Description><CompleteText>
                   <OutlineText><OutlTxt><TextOutlTxt><p><span>Hinweis ohne Ordnungszahl</span></p></TextOutlTxt></OutlTxt></OutlineText>
@@ -125,7 +160,7 @@ XML;
         $this->assertSame('83', $boq->getPhaseCode());
         $this->assertSame('Prüffall', $boq->getProjectName());
         $this->assertSame(1, $boq->countSections());
-        $this->assertSame(6, $boq->countItems());
+        $this->assertSame(9, $boq->countItems());
     }
 
     /** The index level lives in RNoIndex; without it ordinal numbers collide. */
@@ -141,6 +176,9 @@ XML;
             '001.0020',
             '001.0030',
             '001.0040',
+            '001.0050',
+            '001.0060',
+            '001.0070',
             '001.H01',
         ], $refs);
         $this->assertSame($refs, array_unique($refs));
@@ -153,7 +191,10 @@ XML;
         }
 
         $this->assertSame(GaebItemType::Standard, $byRef['001.0010']->getType());
-        $this->assertSame(['15.000', '5.000'], $byRef['001.0010']->getUnitPriceComponents());
+        $this->assertSame(
+            ['15.0000', '5.0000'],
+            array_map(static fn (Money $share): string => $share->getAmount(), $byRef['001.0010']->getUnitPriceComponents())
+        );
         $this->assertTrue($byRef['001.0010']->unitPriceComponentsAddUp());
 
         $this->assertSame(GaebItemType::Optional, $byRef['001.0010.A']->getType());
@@ -170,6 +211,26 @@ XML;
         $this->assertSame('AllInCat', $byRef['001.0040']->getMarkupType());
 
         $this->assertSame(GaebItemType::Note, $byRef['001.H01']->getType());
+    }
+
+    /**
+     * Addenda are marked by their number (CONo), never by STLNo - that element
+     * does not even exist in the 3.3 schema.
+     */
+    public function test_reads_addendum_number_and_status(): void {
+        $byRef = [];
+        foreach ($this->parser->parse($this->sample())->getItems() as $item) {
+            $byRef[$item->getReference()] = $item;
+        }
+
+        $addendum = $byRef['001.0050'];
+        $this->assertTrue($addendum->isAddendum());
+        $this->assertSame('N1', $addendum->getChangeOrderNo());
+        $this->assertSame(GaebChangeOrderStatus::Offered, $addendum->getChangeOrderStatus());
+        $this->assertFalse($addendum->getChangeOrderStatus()->isFinal());
+
+        $this->assertFalse($byRef['001.0010']->isAddendum());
+        $this->assertNull($byRef['001.0010']->getChangeOrderNo());
     }
 
     public function test_keeps_text_complements_with_their_marks(): void {
@@ -196,10 +257,14 @@ XML;
         $this->assertFalse($byRef['001.0010']->unitPriceComponentsAddUp());
     }
 
-    /** Writing and reading again must not lose anything. */
+    /**
+     * Writing and reading again must not lose anything. Written as an award
+     * (X86) on purpose: the bid carries prices only, so it drops the texts by
+     * design - see {@see GaebPhase::carriesTexts()}.
+     */
     public function test_round_trip_keeps_structure_and_traits(): void {
         $original = $this->parser->parse($this->sample());
-        $xml = (new GaebDaXmlGenerator)->generate($original, GaebPhase::Bid, 'EUR', '2026-01-01', 'WorkDiary');
+        $xml = (new GaebDaXmlGenerator)->generate($original, GaebPhase::Award, 'EUR', '2026-01-01', 'WorkDiary');
 
         $this->assertStringContainsString('<MarkupItem', $xml);
         $this->assertStringContainsString('<Remark', $xml);
@@ -210,6 +275,12 @@ XML;
         $this->assertStringContainsString('<ComplTSB>Yes</ComplTSB>', $xml);
         $this->assertStringContainsString('<TextComplement MarkLbl="60" Kind="Bidder">', $xml);
         $this->assertStringContainsString('<UPBkdn>Yes</UPBkdn>', $xml);
+        $this->assertStringContainsString('<CONo>N1</CONo>', $xml);
+        $this->assertStringContainsString('<COStatus>Offered</COStatus>', $xml);
+        $this->assertStringContainsString('<NotOffered>Yes</NotOffered>', $xml);
+        $this->assertStringContainsString('<QtyTBD>Yes</QtyTBD>', $xml);
+        $this->assertStringContainsString('<DiscountPcnt>2.5</DiscountPcnt>', $xml);
+        $this->assertStringContainsString('<TotAfterDisc>9700</TotAfterDisc>', $xml);
         $this->assertStringNotContainsString('[[TC:', $xml);
         // GAEBInfo describes the writing program, never the imported one.
         $this->assertStringContainsString('<ProgSystem>WorkDiary</ProgSystem>', $xml);
@@ -224,8 +295,8 @@ XML;
             $refs[] = $item->getReference();
             $types[] = $item->getType()->value;
         }
-        $this->assertSame(['001.0010', '001.0010.A', '001.0020', '001.0030', '001.0040', '001.H01'], $refs);
-        $this->assertSame(['standard', 'optional', 'base', 'standard', 'markup', 'note'], $types);
+        $this->assertSame(['001.0010', '001.0010.A', '001.0020', '001.0030', '001.0040', '001.0050', '001.0060', '001.0070', '001.H01'], $refs);
+        $this->assertSame(['standard', 'optional', 'base', 'standard', 'markup', 'standard', 'standard', 'note', 'note'], $types);
         $this->assertCount(2, $again->getUpComponents());
     }
 
@@ -238,6 +309,37 @@ XML;
             $generator->generate($boq, GaebPhase::Bid, 'EUR', '2026-01-01'),
             $generator->generate($boq, GaebPhase::Bid, 'EUR', '2026-01-01')
         );
+    }
+
+    /**
+     * Angebotsmerkmale: „nicht angeboten" ist etwas anderes als der Preis 0,00,
+     * freie Menge, Stundenlohn, Nachlass, USt und Bieterkommentar.
+     */
+    public function test_reads_bid_traits_and_totals(): void {
+        $boq = $this->parser->parse($this->sample());
+        $byRef = [];
+        foreach ($boq->getItems() as $item) {
+            $byRef[$item->getReference()] = $item;
+        }
+
+        $declined = $byRef['001.0060'];
+        $this->assertTrue($declined->isNotOffered());
+        $this->assertTrue($declined->isHourlyItem());
+        $this->assertFalse($declined->expectsUnitPrice());
+
+        $free = $byRef['001.0070'];
+        $this->assertTrue($free->hasFreeQuantity());
+        $this->assertSame('19.00', $free->getVatRate());
+        $this->assertSame('2.500000', $free->getDiscountPercent());
+        $this->assertSame('Ausführung nur bei frostfreier Witterung', $free->getBidderComment());
+        $this->assertSame(GaebAlternativeBidStatus::Modified, $free->getAlternativeBidStatus());
+
+        $this->assertTrue($byRef['001.0010']->expectsUnitPrice());
+
+        $totals = $boq->getTotals();
+        $this->assertNotNull($totals);
+        $this->assertTrue($totals->hasDiscount());
+        $this->assertSame('9700.0000', $totals->getTotalAfterDiscount()?->getAmount());
     }
 
     public function test_rejects_non_gaeb_xml(): void {
