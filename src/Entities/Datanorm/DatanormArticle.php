@@ -27,6 +27,12 @@ final class DatanormArticle {
     /** @var list<DatanormScalePrice> */
     private array $scalePrices = [];
 
+    /** @var list<DatanormRawMaterialSurcharge> */
+    private array $rawMaterialSurcharges = [];
+
+    /** @var list<DatanormWorkTime> */
+    private array $workTimes = [];
+
     /** @var list<string> resolved long/dimension text lines */
     private array $textLines = [];
 
@@ -316,6 +322,24 @@ final class DatanormArticle {
     /** @return list<DatanormScalePrice> */
     public function getScalePrices(): array {
         return $this->scalePrices;
+    }
+
+    public function addRawMaterialSurcharge(DatanormRawMaterialSurcharge $surcharge): void {
+        $this->rawMaterialSurcharges[] = $surcharge;
+    }
+
+    /** @return list<DatanormRawMaterialSurcharge> copper/… surcharges (Z-records) */
+    public function getRawMaterialSurcharges(): array {
+        return $this->rawMaterialSurcharges;
+    }
+
+    public function addWorkTime(DatanormWorkTime $workTime): void {
+        $this->workTimes[] = $workTime;
+    }
+
+    /** @return list<DatanormWorkTime> labour times (C-ARBA records), in minutes */
+    public function getWorkTimes(): array {
+        return $this->workTimes;
     }
 
     public function addTextLine(string $line): void {
