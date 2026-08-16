@@ -25,8 +25,10 @@ use ERechnungToolkit\Entities\Datanorm\{
     DatanormGraphicReference,
     DatanormPriceChange,
     DatanormProductGroup,
+    DatanormRawMaterialSurcharge,
     DatanormScalePrice,
-    DatanormTextBlock
+    DatanormTextBlock,
+    DatanormWorkTime
 };
 use ERechnungToolkit\Enums\{DatanormDataMark, DatanormDiscountKind, DatanormPriceIndicator, DatanormProcessingFlag, DatanormVersion};
 use ERechnungToolkit\Helper\{DatanormCharset, DatanormPriceCalculator};
@@ -53,8 +55,8 @@ use Throwable;
 final class DatanormParser {
     use ErrorLog;
 
-    /** DATANORM raw material and special surcharge Z-flags that are collected as warnings. */
-    private const UNSUPPORTED_RECORDS = ['C', 'J'];
+    /** Record types that are collected as warnings (part lists / sets). */
+    private const UNSUPPORTED_RECORDS = ['J'];
 
     /** @var array<string, DatanormArticle> */
     private array $articles = [];
@@ -233,6 +235,7 @@ final class DatanormParser {
             $type === 'K' => $this->parseCustomer($catalog, $version, $fields),
             $type === 'G' && $version === DatanormVersion::V5 => $this->parseGraphicReference($catalog, $fields),
             $type === 'Z' => $this->parseSurcharge($catalog, $version, $fields, $lineNumber),
+            $type === 'C' => $this->parseServiceRecord($catalog, $version, $fields, $lineNumber),
             default => $catalog->addWarning(sprintf('line %d: unknown record type "%s" skipped.', $lineNumber, $type)),
         };
     }
@@ -734,6 +737,12 @@ final class DatanormParser {
             throw new RuntimeException('Z-record without article number.');
         }
         $workingFlag = (int) ($this->field($fields, 4) ?? '0');
+        $article = $this->articles[$articleNumber] ?? null;
+        if ($article === null) {
+            $catalog->addWarning(sprintf('line %d: Z-record for unknown article "%s" skipped.', $lineNumber, $articleNumber));
+
+            return;
+        }
 
         $scalePrice = match (true) {
             $version === DatanormVersion::V5 && $workingFlag === 1 => $this->scalePriceV5($catalog, $articleNumber, $fields),
@@ -741,19 +750,153 @@ final class DatanormParser {
             $version === DatanormVersion::V4 && $workingFlag === 2 => $this->scalePriceV4Flag2($catalog, $articleNumber, $fields),
             default => null,
         };
-
-        if ($scalePrice === null) {
-            $catalog->addWarning(sprintf('line %d: Z-record working flag %d (raw material/special surcharge) skipped.', $lineNumber, $workingFlag));
+        if ($scalePrice !== null) {
+            $article->addScalePrice($scalePrice);
 
             return;
         }
 
-        $article = $this->articles[$articleNumber] ?? null;
-        if ($article !== null) {
-            $article->addScalePrice($scalePrice);
-        } else {
-            $catalog->addWarning(sprintf('line %d: Z-record for unknown article "%s" skipped.', $lineNumber, $articleNumber));
+        // Rohstoffzuschläge (Kupfer & Co., Elektro-Branche): V5-Flags 2/3,
+        // V4-Flags 3/4 — international (Tagespreis-Fenster) bzw. deutsch
+        // (DEL-Notiz × Gewichtsanteil).
+        $surcharge = match (true) {
+            $version === DatanormVersion::V5 && $workingFlag === 2 => $this->rawMaterialV5International($catalog, $articleNumber, $fields),
+            $version === DatanormVersion::V5 && $workingFlag === 3 => $this->rawMaterialV5German($catalog, $articleNumber, $fields),
+            $version === DatanormVersion::V4 && $workingFlag === 3 => $this->rawMaterialV4International($catalog, $articleNumber, $fields),
+            $version === DatanormVersion::V4 && $workingFlag === 4 => $this->rawMaterialV4German($catalog, $articleNumber, $fields),
+            default => null,
+        };
+        if ($surcharge !== null) {
+            $article->addRawMaterialSurcharge($surcharge);
+
+            return;
         }
+
+        $catalog->addWarning(sprintf('line %d: Z-record working flag %d (special surcharge) skipped.', $lineNumber, $workingFlag));
+    }
+
+    /** DATANORM 5 working flag 2: international raw material surcharge (day price window). */
+    /** @param list<string> $fields */
+    private function rawMaterialV5International(DatanormCatalog $catalog, string $articleNumber, array $fields): DatanormRawMaterialSurcharge {
+        $isPercent = (int) ($this->field($fields, 6) ?? '2') === 3;
+        $valueRaw = $this->field($fields, 10) ?? '0';
+
+        return new DatanormRawMaterialSurcharge(
+            articleNumber: $articleNumber,
+            rawMaterial: $this->field($fields, 5) ?? '',
+            method: DatanormRawMaterialSurcharge::METHOD_INTERNATIONAL,
+            isDiscount: ($this->field($fields, 7) ?? '+') === '-',
+            isPercent: $isPercent,
+            amount: $isPercent ? null : $this->moneyFromMinor($catalog, $valueRaw),
+            percent: $isPercent ? ((int) $valueRaw) / 100 : null,
+            fromDayPrice: $this->moneyFromMinor($catalog, $this->field($fields, 11)),
+            toDayPrice: $this->moneyFromMinor($catalog, $this->field($fields, 12)),
+            priceIndicator: DatanormPriceIndicator::tryFrom((int) ($this->field($fields, 8) ?? '0')),
+            priceUnitAmount: DatanormPriceCalculator::resolvePriceUnitAmount((int) ($this->field($fields, 9) ?? '1'), DatanormVersion::V5)
+        );
+    }
+
+    /** DATANORM 5 working flag 3: german raw material surcharge (DEL quotation × weight). */
+    /** @param list<string> $fields */
+    private function rawMaterialV5German(DatanormCatalog $catalog, string $articleNumber, array $fields): DatanormRawMaterialSurcharge {
+        return new DatanormRawMaterialSurcharge(
+            articleNumber: $articleNumber,
+            rawMaterial: $this->field($fields, 5) ?? '',
+            method: DatanormRawMaterialSurcharge::METHOD_GERMAN,
+            includedBasePrice: $this->moneyFromMinor($catalog, $this->field($fields, 8)),
+            baseFactor: ((int) ($this->field($fields, 9) ?? '0')) / 1000,
+            weight: ((int) ($this->field($fields, 10) ?? '0')) / 100,
+            weightFactor: ((int) ($this->field($fields, 11) ?? '1000')) / 1000,
+            priceIndicator: DatanormPriceIndicator::tryFrom((int) ($this->field($fields, 6) ?? '0')),
+            priceUnitAmount: DatanormPriceCalculator::resolvePriceUnitAmount((int) ($this->field($fields, 7) ?? '1'), DatanormVersion::V5)
+        );
+    }
+
+    /** DATANORM 4 working flag 3: international raw material surcharge. */
+    /** @param list<string> $fields */
+    private function rawMaterialV4International(DatanormCatalog $catalog, string $articleNumber, array $fields): DatanormRawMaterialSurcharge {
+        $kind = (int) ($this->field($fields, 6) ?? '1');
+        $isPercent = in_array($kind, [1, 2], true);
+        $valueRaw = $this->field($fields, 7) ?? '0';
+
+        return new DatanormRawMaterialSurcharge(
+            articleNumber: $articleNumber,
+            rawMaterial: $this->field($fields, 5) ?? '',
+            method: DatanormRawMaterialSurcharge::METHOD_INTERNATIONAL,
+            isDiscount: in_array($kind, [2, 4], true),
+            isPercent: $isPercent,
+            amount: $isPercent ? null : $this->moneyFromMinor($catalog, $valueRaw),
+            percent: $isPercent ? ((int) $valueRaw) / 100 : null,
+            fromDayPrice: $this->wholeMoney($catalog, $this->field($fields, 8)),
+            toDayPrice: $this->wholeMoney($catalog, $this->field($fields, 9))
+        );
+    }
+
+    /** DATANORM 4 working flag 4: german raw material surcharge. */
+    /** @param list<string> $fields */
+    private function rawMaterialV4German(DatanormCatalog $catalog, string $articleNumber, array $fields): DatanormRawMaterialSurcharge {
+        return new DatanormRawMaterialSurcharge(
+            articleNumber: $articleNumber,
+            rawMaterial: $this->field($fields, 5) ?? '',
+            method: DatanormRawMaterialSurcharge::METHOD_GERMAN,
+            includedBasePrice: $this->wholeMoney($catalog, $this->field($fields, 6)),
+            baseFactor: ((int) ($this->field($fields, 7) ?? '0')) / 1000,
+            weight: ((int) ($this->field($fields, 8) ?? '0')) / 100,
+            weightFactor: ((int) ($this->field($fields, 9) ?? '1000')) / 1000
+        );
+    }
+
+    /**
+     * DATANORM working times: C-record with indicator `ARBA` (DATANORM 5)
+     * respectively `ARBEIT-1` (DATANORM 4); the field layout is identical.
+     * Other C-indicators (materials, tiles, dangerous goods, DIN 4000, …)
+     * remain warnings.
+     *
+     * @param  list<string>  $fields
+     */
+    private function parseServiceRecord(DatanormCatalog $catalog, DatanormVersion $version, array $fields, int $lineNumber): void {
+        $indicator = strtoupper($this->field($fields, 2) ?? '');
+        if (!in_array($indicator, ['ARBA', 'ARBEIT-1'], true)) {
+            $catalog->addWarning(sprintf('line %d: C-record indicator "%s" is not supported yet and was skipped.', $lineNumber, $indicator));
+
+            return;
+        }
+
+        $articleNumber = $this->field($fields, 3);
+        if ($articleNumber === null) {
+            throw new RuntimeException('C-record without article number.');
+        }
+        $article = $this->articles[$articleNumber] ?? null;
+        if ($article === null) {
+            $catalog->addWarning(sprintf('line %d: C-record for unknown article "%s" skipped.', $lineNumber, $articleNumber));
+
+            return;
+        }
+
+        $unit = (int) ($this->field($fields, 5) ?? '2');
+        $raw = (int) ($this->field($fields, 6) ?? '0');
+        // Zeitwerte: AW (1/100 h) und Minuten als N7/1, Stunden als N5/3.
+        $minutes = match ($unit) {
+            1 => ($raw / 10) * 0.6,
+            3 => ($raw / 1000) * 60,
+            default => $raw / 10,
+        };
+
+        $article->addWorkTime(new DatanormWorkTime(
+            $articleNumber,
+            max(1, min(4, (int) ($this->field($fields, 4) ?? '2'))),
+            $minutes
+        ));
+    }
+
+    /** Ganzzahliges Preisfeld (DATANORM-4-Tagespreise) → Money, scale 2. */
+    private function wholeMoney(DatanormCatalog $catalog, ?string $raw): ?Money {
+        $raw = $raw !== null ? trim($raw) : '';
+        if ($raw === '' || !ctype_digit($raw) || (int) $raw === 0) {
+            return null;
+        }
+
+        return Money::of((int) $raw, $catalog->getCurrency(), 2);
     }
 
     /** @param list<string> $fields */
