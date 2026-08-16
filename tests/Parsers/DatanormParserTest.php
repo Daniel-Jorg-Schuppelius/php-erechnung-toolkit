@@ -334,6 +334,25 @@ class DatanormParserTest extends BaseTestCase {
         $this->parser->parse("KOP123\r\nPOA456\r\n", 'UTF-8');
     }
 
+    public function test_packaging_amount_tracks_explicit_transfer(): void {
+        $content = implode("\r\n", [
+            'V;050;A;20260816;EUR;Test;;TESTCO;;;;;;;;',
+            // Feld 21 (Mindestverpackungsmenge) übertragen:
+            'A;N;VOLL-1;Mit Verpackung;;PCE;2;1;1000;;;;;;;;;;;;5;',
+            // Änderungssatz endet vor Feld 21 — Verpackungsmenge unverändert:
+            'A;A;DELTA-1;;;;2;1;2000;;;;',
+            'E;4;;',
+        ]) . "\r\n";
+
+        $catalog = $this->parser->parse($content, 'UTF-8');
+
+        [$full, $delta] = $catalog->getArticles();
+        self::assertTrue($full->hasPackagingAmount());
+        self::assertSame(5, $full->getMinPackagingAmount());
+        self::assertFalse($delta->hasPackagingAmount());
+        self::assertSame(1, $delta->getMinPackagingAmount());
+    }
+
     public function test_v4_duplicate_article_record_is_skipped_with_warning(): void {
         $content = implode("\r\n", [
             $this->v4Header(),

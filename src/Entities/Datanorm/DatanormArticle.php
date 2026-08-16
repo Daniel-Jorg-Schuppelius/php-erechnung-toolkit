@@ -39,6 +39,7 @@ final class DatanormArticle {
     private ?string $ean = null;
     private ?string $graphicNumber = null;
     private int $minPackagingAmount = 1;
+    private bool $hasPackagingAmount = false;
     private ?string $cataloguePage = null;
     private int $textFlag = 0;
     private ?string $longTextNumber = null;
@@ -194,8 +195,19 @@ final class DatanormArticle {
         return $this->minPackagingAmount;
     }
 
+    /**
+     * Whether the packaging amount was explicitly transferred. Change records
+     * omit unchanged fields, and an absent field is indistinguishable from the
+     * default `1` by value — consumers applying delta semantics must only
+     * touch stored packaging data when this returns true.
+     */
+    public function hasPackagingAmount(): bool {
+        return $this->hasPackagingAmount;
+    }
+
     public function setMinPackagingAmount(int $amount): self {
         $this->minPackagingAmount = max(1, $amount);
+        $this->hasPackagingAmount = true;
 
         return $this;
     }
