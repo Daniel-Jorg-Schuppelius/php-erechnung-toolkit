@@ -339,7 +339,11 @@ final class DatanormParser {
         $article->setManufacturerType($this->field($fields, 17));
         $article->setEan($this->field($fields, 18));
         $article->setGraphicNumber($this->field($fields, 19));
-        $article->setMinPackagingAmount((int) ($this->field($fields, 20) ?? '1'));
+        if (($packaging = $this->field($fields, 20)) !== null) {
+            // Nur explizit übertragene Verpackungsmengen setzen — Änderungssätze
+            // lassen das Feld leer und meinen damit „unverändert".
+            $article->setMinPackagingAmount((int) $packaging);
+        }
         $article->setCataloguePage($this->field($fields, 21));
         $article->setTextFlag((int) ($this->field($fields, 22) ?? '0'));
         $article->setLongTextNumber($this->field($fields, 23));
@@ -381,7 +385,9 @@ final class DatanormParser {
             $this->articles[$articleNumber] = $this->withProductGroup($article, $group);
         }
         $this->articles[$articleNumber]->setCostIndicator($this->field($fields, 12));
-        $this->articles[$articleNumber]->setMinPackagingAmount((int) ($this->field($fields, 13) ?? '1'));
+        if (($packaging = $this->field($fields, 13)) !== null) {
+            $this->articles[$articleNumber]->setMinPackagingAmount((int) $packaging);
+        }
         $this->articles[$articleNumber]->setReferenceNumber($this->field($fields, 15), $this->field($fields, 14));
     }
 
