@@ -313,6 +313,75 @@ class DatanormParserTest extends BaseTestCase {
         self::assertSame('Kupferrohr für Heißwasser Größe 15', $catalog->getArticles()[0]->getName());
     }
 
+    public function test_v5_raw_material_surcharges_and_work_times(): void {
+        $content = implode("\r\n", [
+            'V;050;A;20260816;EUR;Kabelkatalog;;TESTCO;;;;;;;;',
+            'A;N;NYM-315;Kabel NYM-J 3x1,5;;MTR;2;100;18950;;CAB;;',
+            'Z;N;NYM-315;01;2;CU;3;+;1;1;200;15000;20000;10;',
+            'Z;N;NYM-315;02;3;CU;1;1;15000;10;430;10;',
+            'C;N;ARBA;NYM-315;2;2;300;',
+            'E;6;;',
+        ]) . "\r\n";
+
+        $catalog = $this->parser->parse($content, 'UTF-8');
+
+        self::assertSame([], $catalog->getWarnings());
+        $article = $catalog->getArticles()[0];
+
+        $surcharges = $article->getRawMaterialSurcharges();
+        self::assertCount(2, $surcharges);
+
+        $international = $surcharges[0];
+        self::assertSame('CU', $international->getRawMaterial());
+        self::assertSame('international', $international->getMethod());
+        self::assertTrue($international->isPercent());
+        self::assertSame(2.0, $international->getPercent());
+        self::assertSame('150.00', $international->getFromDayPrice()?->getAmount());
+        self::assertSame('200.00', $international->getToDayPrice()?->getAmount());
+        self::assertTrue($international->appliesToDayPrice(\CommonToolkit\ValueObjects\Money::of('175', \CommonToolkit\Enums\CurrencyCode::Euro, 2)));
+        self::assertFalse($international->appliesToDayPrice(\CommonToolkit\ValueObjects\Money::of('149', \CommonToolkit\Enums\CurrencyCode::Euro, 2)));
+
+        $german = $surcharges[1];
+        self::assertSame('german', $german->getMethod());
+        // Basis 150,00 × 0,010 = 1,50 €/kg enthalten; DEL 2,00 €/kg →
+        // 0,50 € Differenz × (4,30 × 0,010 = 0,043 kg) = 0,0215 €/Einheit.
+        $surcharge = $german->germanSurchargePerPriceUnit(\CommonToolkit\ValueObjects\Money::of('2', \CommonToolkit\Enums\CurrencyCode::Euro, 2));
+        self::assertSame('0.0215', $surcharge?->getAmount());
+        // DEL unter der Basis → kein Abschlag, Zuschlag 0.
+        self::assertSame('0.0000', $german->germanSurchargePerPriceUnit(\CommonToolkit\ValueObjects\Money::of('1', \CommonToolkit\Enums\CurrencyCode::Euro, 2))?->getAmount());
+
+        $workTimes = $article->getWorkTimes();
+        self::assertCount(1, $workTimes);
+        self::assertSame(2, $workTimes[0]->getPurpose()); // Montage
+        self::assertSame(30.0, $workTimes[0]->getMinutes());
+    }
+
+    public function test_v4_raw_material_surcharges_and_work_times(): void {
+        $content = implode("\r\n", [
+            $this->v4Header('Kabelkatalog'),
+            'A;N;NYM-515;00;Kabel NYM-J 5x1,5;;2;2;m;28950;;CAB;;',
+            'Z;N;NYM-515;1;3;CU;1;200;150;200;10;',
+            'Z;N;NYM-515;2;4;CU;150;10;720;10;',
+            'C;N;ARBEIT-1;NYM-515;2;1;500;',
+        ]) . "\r\n";
+
+        $catalog = $this->parser->parse($content, 'UTF-8');
+
+        self::assertSame([], $catalog->getWarnings());
+        $article = $catalog->getArticles()[0];
+
+        $surcharges = $article->getRawMaterialSurcharges();
+        self::assertCount(2, $surcharges);
+        self::assertSame('international', $surcharges[0]->getMethod());
+        self::assertSame(2.0, $surcharges[0]->getPercent());
+        self::assertSame('150.00', $surcharges[0]->getFromDayPrice()?->getAmount());
+        self::assertSame('german', $surcharges[1]->getMethod());
+        self::assertSame(7.2, $surcharges[1]->getWeight());
+
+        // 50 AW × 0,6 = 30 Minuten (N5/1: 500 → 50,0 AW).
+        self::assertSame(30.0, $article->getWorkTimes()[0]->getMinutes());
+    }
+
     public function test_unknown_record_types_produce_warnings_not_failures(): void {
         $content = implode("\r\n", [
             'V;050;A;20260816;EUR;Test;;TESTCO;;;;;;;;',
