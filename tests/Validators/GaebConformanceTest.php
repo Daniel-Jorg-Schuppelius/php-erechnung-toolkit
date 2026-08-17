@@ -26,7 +26,8 @@ use Tests\Contracts\BaseTestCase;
  * failing, so the suite stays green for anyone without the material, while a
  * developer who has it gets the real check.
  *
- * Set `GAEB_REFERENCE_DIR` to point at the directory holding them.
+ * Set `GAEB_REFERENCE_DIR` to point at the directory holding them; how to get
+ * the material is described in `docs/GAEB/referenzmaterial.md`.
  */
 class GaebConformanceTest extends BaseTestCase {
     private string $referenceDir;
@@ -46,7 +47,10 @@ class GaebConformanceTest extends BaseTestCase {
     /** @param list<string> $files */
     private function skipWithout(array $files, string $what): void {
         if ($files === []) {
-            $this->markTestSkipped("Kein Referenzmaterial für {$what} unter {$this->referenceDir}.");
+            $this->markTestSkipped(
+                "Kein Referenzmaterial für {$what} unter {$this->referenceDir}. "
+                . 'Beschaffung: docs/GAEB/referenzmaterial.md bzw. scripts/fetch-gaeb-reference.sh.'
+            );
         }
     }
 

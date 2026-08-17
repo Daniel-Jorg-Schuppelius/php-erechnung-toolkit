@@ -345,10 +345,18 @@ foreach ($writer->getLosses() as $loss) {
 ## Referenzdateien
 
 Die Konformitätstests laufen gegen echte Dateien (GAEB-Musterdateien,
-`gaeb-online.de`, BVBS-Prüfdatei zur REB). Sie liegen **außerhalb** des Repos
-unter `~/gaeb-referenz/`, weil ihre Weitergabe lizenzrechtlich nicht geklärt
-ist. Fehlen sie, **überspringt** `GaebConformanceTest` die betroffenen Fälle,
-statt zu scheitern — die Suite bleibt ohne die Dateien lauffähig.
+`gaeb-online.de`, BVBS-Prüfdateien). Sie liegen **außerhalb** des Repos unter
+`~/gaeb-referenz/` (überschreibbar per `GAEB_REFERENCE_DIR`), weil ihre
+Weitergabe lizenzrechtlich nicht geklärt ist: kostenfrei beziehbar heißt nicht
+weiterverteilbar. Fehlen sie, **überspringt** `GaebConformanceTest` die
+betroffenen Fälle, statt zu scheitern — die Suite bleibt ohne die Dateien
+lauffähig.
+
+**Woher man sie bekommt, steht in [referenzmaterial.md](referenzmaterial.md)**:
+Bezugsquellen je Datei, erwartete Ordnerstruktur und
+`scripts/fetch-gaeb-reference.sh` für die stabil verlinkbaren Teile. Die
+Schemata sind der einzige mitgelieferte Teil — ohne sie könnte das Toolkit
+nichts validieren.
 
 ## Status / offen
 
