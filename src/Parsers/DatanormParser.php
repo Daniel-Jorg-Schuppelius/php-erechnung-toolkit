@@ -791,8 +791,11 @@ final class DatanormParser {
             percent: $isPercent ? ((int) $valueRaw) / 100 : null,
             fromDayPrice: $this->moneyFromMinor($catalog, $this->field($fields, 11)),
             toDayPrice: $this->moneyFromMinor($catalog, $this->field($fields, 12)),
+            weight: ($w = $this->field($fields, 14)) !== null && (int) $w > 0 ? ((int) $w) / 100 : null,
+            weightFactor: ($wf = $this->field($fields, 15)) !== null && (int) $wf > 0 ? ((int) $wf) / 1000000 : null,
             priceIndicator: DatanormPriceIndicator::tryFrom((int) ($this->field($fields, 8) ?? '0')),
-            priceUnitAmount: DatanormPriceCalculator::resolvePriceUnitAmount((int) ($this->field($fields, 9) ?? '1'), DatanormVersion::V5)
+            priceUnitAmount: DatanormPriceCalculator::resolvePriceUnitAmount((int) ($this->field($fields, 9) ?? '1'), DatanormVersion::V5),
+            dayPriceFactor: ($f = $this->field($fields, 13)) !== null && (int) $f > 0 ? ((int) $f) / 1000 : null
         );
     }
 
@@ -828,7 +831,8 @@ final class DatanormParser {
             amount: $isPercent ? null : $this->moneyFromMinor($catalog, $valueRaw),
             percent: $isPercent ? ((int) $valueRaw) / 100 : null,
             fromDayPrice: $this->wholeMoney($catalog, $this->field($fields, 8)),
-            toDayPrice: $this->wholeMoney($catalog, $this->field($fields, 9))
+            toDayPrice: $this->wholeMoney($catalog, $this->field($fields, 9)),
+            dayPriceFactor: ($f = $this->field($fields, 10)) !== null && (int) $f > 0 ? ((int) $f) / 1000 : null
         );
     }
 

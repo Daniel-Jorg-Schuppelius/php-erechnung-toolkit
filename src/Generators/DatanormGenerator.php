@@ -13,7 +13,7 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Generators;
 
 use CommonToolkit\ValueObjects\Money;
-use ERechnungToolkit\Entities\Datanorm\{DatanormArticle, DatanormCatalog, DatanormPriceChange, DatanormTextBlock};
+use ERechnungToolkit\Entities\Datanorm\{DatanormArticle, DatanormCatalog, DatanormPriceChange, DatanormRawMaterialSurcharge, DatanormScalePrice, DatanormTextBlock};
 use ERechnungToolkit\Enums\{DatanormDiscountKind, DatanormVersion};
 use ERechnungToolkit\Helper\DatanormCharset;
 use ERRORToolkit\Traits\ErrorLog;
@@ -32,7 +32,9 @@ use InvalidArgumentException;
  * fixed-width 128-character header and codes the price unit (only 1/10/100/
  * 1000 are possible — other unit amounts raise an exception). Long texts are
  * emitted as text blocks (T-records; insert blocks become E-records in
- * DATANORM 4). Z- and G-records are not generated.
+ * DATANORM 4). Per article, scale prices and raw material surcharges become
+ * Z-records and working times C-records (ARBA/ARBEIT-1); G-records are not
+ * generated.
  */
 final class DatanormGenerator {
     use ErrorLog;
@@ -84,6 +86,12 @@ final class DatanormGenerator {
             $lines[] = $this->articleRecord($article, $catalog, $version);
             if ($version === DatanormVersion::V4) {
                 $lines[] = $this->articleSupplementRecordV4($article);
+            }
+            foreach ($this->surchargeRecords($article, $version) as $record) {
+                $lines[] = $record;
+            }
+            foreach ($this->workTimeRecords($article, $version) as $record) {
+                $lines[] = $record;
             }
         }
 
@@ -391,6 +399,157 @@ final class DatanormGenerator {
     // ------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------
+
+    /**
+     * Z-records of one article: scale prices (DATANORM 5 working flag 1,
+     * DATANORM 4 flags 1/2) followed by raw material surcharges (DATANORM 5
+     * flags 2/3, DATANORM 4 flags 3/4). Line/set numbers count per article.
+     *
+     * @return list<string>
+     */
+    private function surchargeRecords(DatanormArticle $article, DatanormVersion $version): array {
+        $records = [];
+        $no = 0;
+        foreach ($article->getScalePrices() as $scale) {
+            $records[] = $this->scalePriceRecord($article->getArticleNumber(), $scale, $version, ++$no);
+        }
+        foreach ($article->getRawMaterialSurcharges() as $surcharge) {
+            $records[] = $this->rawMaterialRecord($article->getArticleNumber(), $surcharge, $version, ++$no);
+        }
+
+        return $records;
+    }
+
+    private function scalePriceRecord(string $articleNumber, DatanormScalePrice $scale, DatanormVersion $version, int $no): string {
+        $isPercent = $scale->getIndicator() === DatanormScalePrice::INDICATOR_PERCENT;
+        $value = $isPercent
+            ? (string) (int) round(($scale->getPercent() ?? 0.0) * 100)
+            : $this->minor($scale->getAmount());
+
+        if ($version === DatanormVersion::V4) {
+            // Plain scale prices travel as working flag 1, surcharges/discounts
+            // as flag 2 with the four-valued kind code.
+            return $scale->getIndicator() === DatanormScalePrice::INDICATOR_SCALE_PRICE
+                ? $this->record([
+                    'Z', 'N', $articleNumber, (string) $no, '1',
+                    (string) ($scale->getBasis() ?? DatanormScalePrice::BASIS_QUANTITY),
+                    $scale->getDescription() ?? '',
+                    (string) ($scale->getPriceIndicator()->value ?? ''),
+                    $value,
+                    $scale->getFrom() ?? '',
+                    $scale->getTo() ?? '',
+                ], $version, [6 => 28])
+                : $this->record([
+                    'Z', 'N', $articleNumber, (string) $no, '2',
+                    (string) ($scale->getBasis() ?? DatanormScalePrice::BASIS_QUANTITY),
+                    $scale->getDescription() ?? '',
+                    (string) (($isPercent ? 1 : 3) + ($scale->isDiscount() ? 1 : 0)),
+                    $value,
+                    $scale->getFrom() ?? '',
+                    $scale->getTo() ?? '',
+                ], $version, [6 => 28]);
+        }
+
+        return $this->record([
+            'Z', 'N', $articleNumber, sprintf('%02d', $no), '1',
+            $scale->getDescription() ?? '',
+            '',
+            (string) $scale->getIndicator(),
+            $scale->getIndicator() === DatanormScalePrice::INDICATOR_SCALE_PRICE ? '' : ($scale->isDiscount() ? '-' : '+'),
+            $isPercent ? '' : (string) ($scale->getPriceIndicator()->value ?? ''),
+            $isPercent ? '' : (string) $scale->getPriceUnitAmount(),
+            $value,
+            '',
+            (string) ($scale->getBasis() ?? ''),
+            $scale->getFrom() ?? '',
+            $scale->getTo() ?? '',
+        ], $version, [5 => 40]);
+    }
+
+    private function rawMaterialRecord(string $articleNumber, DatanormRawMaterialSurcharge $surcharge, DatanormVersion $version, int $no): string {
+        $german = $surcharge->getMethod() === DatanormRawMaterialSurcharge::METHOD_GERMAN;
+        if ($version === DatanormVersion::V4) {
+            return $german
+                ? $this->record([
+                    'Z', 'N', $articleNumber, (string) $no, '4',
+                    $surcharge->getRawMaterial(),
+                    $this->whole($surcharge->getIncludedBasePrice()),
+                    (string) (int) round(($surcharge->getBaseFactor() ?? 0.0) * 1000),
+                    (string) (int) round(($surcharge->getWeight() ?? 0.0) * 100),
+                    (string) (int) round(($surcharge->getWeightFactor() ?? 1.0) * 1000),
+                ], $version)
+                : $this->record([
+                    'Z', 'N', $articleNumber, (string) $no, '3',
+                    $surcharge->getRawMaterial(),
+                    (string) (($surcharge->isPercent() === true ? 1 : 3) + ($surcharge->isDiscount() === true ? 1 : 0)),
+                    $surcharge->isPercent() === true
+                        ? (string) (int) round(($surcharge->getPercent() ?? 0.0) * 100)
+                        : $this->minor($surcharge->getAmount()),
+                    $this->whole($surcharge->getFromDayPrice()),
+                    $this->whole($surcharge->getToDayPrice()),
+                    $surcharge->getDayPriceFactor() !== null ? (string) (int) round($surcharge->getDayPriceFactor() * 1000) : '',
+                ], $version);
+        }
+
+        return $german
+            ? $this->record([
+                'Z', 'N', $articleNumber, sprintf('%02d', $no), '3',
+                $surcharge->getRawMaterial(),
+                (string) ($surcharge->getPriceIndicator()->value ?? ''),
+                (string) $surcharge->getPriceUnitAmount(),
+                $this->minor($surcharge->getIncludedBasePrice()),
+                (string) (int) round(($surcharge->getBaseFactor() ?? 0.0) * 1000),
+                (string) (int) round(($surcharge->getWeight() ?? 0.0) * 100),
+                (string) (int) round(($surcharge->getWeightFactor() ?? 1.0) * 1000),
+            ], $version)
+            : $this->record([
+                'Z', 'N', $articleNumber, sprintf('%02d', $no), '2',
+                $surcharge->getRawMaterial(),
+                $surcharge->isPercent() === true ? '3' : '2',
+                $surcharge->isDiscount() === true ? '-' : '+',
+                $surcharge->isPercent() === true ? '' : (string) ($surcharge->getPriceIndicator()->value ?? ''),
+                $surcharge->isPercent() === true ? '' : (string) $surcharge->getPriceUnitAmount(),
+                $surcharge->isPercent() === true
+                    ? (string) (int) round(($surcharge->getPercent() ?? 0.0) * 100)
+                    : $this->minor($surcharge->getAmount()),
+                $this->minor($surcharge->getFromDayPrice()),
+                $this->minor($surcharge->getToDayPrice()),
+                $surcharge->getDayPriceFactor() !== null ? (string) (int) round($surcharge->getDayPriceFactor() * 1000) : '',
+                $surcharge->getWeight() !== null ? (string) (int) round($surcharge->getWeight() * 100) : '',
+                $surcharge->getWeightFactor() !== null ? (string) (int) round($surcharge->getWeightFactor() * 1000000) : '',
+            ], $version);
+    }
+
+    /**
+     * C-records (working times) of one article: indicator ARBA (DATANORM 5)
+     * respectively ARBEIT-1 (DATANORM 4), always transferred in minutes.
+     *
+     * @return list<string>
+     */
+    private function workTimeRecords(DatanormArticle $article, DatanormVersion $version): array {
+        $records = [];
+        foreach ($article->getWorkTimes() as $workTime) {
+            $records[] = $this->record([
+                'C', 'N',
+                $version === DatanormVersion::V4 ? 'ARBEIT-1' : 'ARBA',
+                $article->getArticleNumber(),
+                (string) $workTime->getPurpose(),
+                '2',
+                (string) (int) round($workTime->getMinutes() * 10),
+            ], $version);
+        }
+
+        return $records;
+    }
+
+    /** Money → whole-currency-unit field (DATANORM 4 day prices), empty when unset. */
+    private function whole(?Money $price): string {
+        if ($price === null) {
+            return '';
+        }
+
+        return (string) $price->withScale(0)->getMinorAmount();
+    }
 
     /**
      * Builds one record: encodes every field to the DATANORM charset, applies
