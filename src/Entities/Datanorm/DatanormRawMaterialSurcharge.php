@@ -49,7 +49,8 @@ final class DatanormRawMaterialSurcharge {
         private readonly ?float $weight = null,
         private readonly ?float $weightFactor = null,
         private readonly ?DatanormPriceIndicator $priceIndicator = null,
-        private readonly int $priceUnitAmount = 1
+        private readonly int $priceUnitAmount = 1,
+        private readonly ?float $dayPriceFactor = null
     ) {}
 
     public function getArticleNumber(): string {
@@ -120,15 +121,29 @@ final class DatanormRawMaterialSurcharge {
         return $this->priceUnitAmount;
     }
 
-    /** Whether an international surcharge applies at the given day price. */
+    /**
+     * Factor converting the day-price window bounds (from/to) to one kg
+     * (international method, e.g. 0.01 for a per-100-kg quotation window).
+     */
+    public function getDayPriceFactor(): ?float {
+        return $this->dayPriceFactor;
+    }
+
+    /**
+     * Whether an international surcharge applies at the given day price
+     * (per kg). Window bounds are converted to per-kg via
+     * {@see getDayPriceFactor()} before comparing.
+     */
     public function appliesToDayPrice(Money $dayPrice): bool {
         if ($this->method !== self::METHOD_INTERNATIONAL) {
             return false;
         }
-        if ($this->fromDayPrice !== null && $dayPrice->compareTo($this->fromDayPrice->withScale($dayPrice->getScale())) < 0) {
+        $factor = $this->dayPriceFactor ?? 1.0;
+        $dayPrice = $dayPrice->withScale(6);
+        if ($this->fromDayPrice !== null && $dayPrice->compareTo($this->fromDayPrice->withScale(6)->times($factor)) < 0) {
             return false;
         }
-        if ($this->toDayPrice !== null && $dayPrice->compareTo($this->toDayPrice->withScale($dayPrice->getScale())) > 0) {
+        if ($this->toDayPrice !== null && $dayPrice->compareTo($this->toDayPrice->withScale(6)->times($factor)) > 0) {
             return false;
         }
 

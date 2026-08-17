@@ -24,7 +24,10 @@ use ERechnungToolkit\Entities\Datanorm\{
     DatanormDiscountGroup,
     DatanormPriceChange,
     DatanormProductGroup,
-    DatanormTextBlock
+    DatanormRawMaterialSurcharge,
+    DatanormScalePrice,
+    DatanormTextBlock,
+    DatanormWorkTime
 };
 use ERechnungToolkit\Enums\{DatanormDataMark, DatanormDiscountKind, DatanormPriceIndicator, DatanormVersion};
 use ERechnungToolkit\Generators\DatanormGenerator;
@@ -163,6 +166,91 @@ class DatanormGeneratorTest extends BaseTestCase {
         self::assertCount(2, $changes);
         self::assertSame('2026-12-31', $changes[0]->getExpirationDate()?->format('Y-m-d'));
         self::assertSame('NEW-1', $changes[1]->getNewArticleNumber());
+    }
+
+    public function test_z_and_c_records_round_trip_both_versions(): void {
+        foreach ([DatanormVersion::V5, DatanormVersion::V4] as $version) {
+            $source = $this->catalog($version);
+            $article = $source->getArticles()[0];
+            $article->addScalePrice(new DatanormScalePrice(
+                articleNumber: 'ROHR-15',
+                indicator: DatanormScalePrice::INDICATOR_SCALE_PRICE,
+                amount: Money::ofMinor(17995, CurrencyCode::Euro, 2),
+                percent: null,
+                isDiscount: false,
+                priceIndicator: DatanormPriceIndicator::ListPrice,
+                basis: DatanormScalePrice::BASIS_QUANTITY,
+                from: '100',
+                to: '499',
+                description: 'Staffel ab 100 m'
+            ));
+            $article->addScalePrice(new DatanormScalePrice(
+                articleNumber: 'ROHR-15',
+                indicator: DatanormScalePrice::INDICATOR_PERCENT,
+                amount: null,
+                percent: 5.0,
+                isDiscount: true,
+                basis: DatanormScalePrice::BASIS_QUANTITY,
+                from: '500',
+                to: '',
+                description: 'Mengenrabatt ab 500 m'
+            ));
+            $article->addRawMaterialSurcharge(new DatanormRawMaterialSurcharge(
+                articleNumber: 'ROHR-15',
+                rawMaterial: 'CU',
+                method: DatanormRawMaterialSurcharge::METHOD_INTERNATIONAL,
+                isDiscount: false,
+                isPercent: true,
+                percent: 2.0,
+                fromDayPrice: Money::of('150', CurrencyCode::Euro, 2),
+                toDayPrice: Money::of('200', CurrencyCode::Euro, 2),
+                dayPriceFactor: 0.01
+            ));
+            $article->addRawMaterialSurcharge(new DatanormRawMaterialSurcharge(
+                articleNumber: 'ROHR-15',
+                rawMaterial: 'CU',
+                method: DatanormRawMaterialSurcharge::METHOD_GERMAN,
+                includedBasePrice: Money::of('150', CurrencyCode::Euro, 2),
+                baseFactor: 0.01,
+                weight: 4.30,
+                weightFactor: 0.01,
+                priceIndicator: DatanormPriceIndicator::NetPrice,
+                priceUnitAmount: 1
+            ));
+            $article->addWorkTime(new DatanormWorkTime('ROHR-15', DatanormWorkTime::PURPOSE_INSTALLATION, 30.0));
+
+            $parsed = $this->parser->parse($this->generator->generateArticleFile($source, $version));
+            self::assertSame([], $parsed->getWarnings(), $version->name);
+            $roundTripped = $parsed->getArticles()[0];
+
+            $scales = $roundTripped->getScalePrices();
+            self::assertCount(2, $scales, $version->name);
+            self::assertSame(DatanormScalePrice::INDICATOR_SCALE_PRICE, $scales[0]->getIndicator(), $version->name);
+            self::assertSame('179.95', $scales[0]->getAmount()?->getAmount(), $version->name);
+            self::assertSame(DatanormScalePrice::BASIS_QUANTITY, $scales[0]->getBasis(), $version->name);
+            self::assertSame('100', $scales[0]->getFrom(), $version->name);
+            self::assertSame('499', $scales[0]->getTo(), $version->name);
+            self::assertSame('Staffel ab 100 m', $scales[0]->getDescription(), $version->name);
+            self::assertSame(DatanormScalePrice::INDICATOR_PERCENT, $scales[1]->getIndicator(), $version->name);
+            self::assertSame(5.0, $scales[1]->getPercent(), $version->name);
+            self::assertTrue($scales[1]->isDiscount(), $version->name);
+
+            $surcharges = $roundTripped->getRawMaterialSurcharges();
+            self::assertCount(2, $surcharges, $version->name);
+            self::assertSame(DatanormRawMaterialSurcharge::METHOD_INTERNATIONAL, $surcharges[0]->getMethod(), $version->name);
+            self::assertSame(2.0, $surcharges[0]->getPercent(), $version->name);
+            self::assertSame('150.00', $surcharges[0]->getFromDayPrice()?->getAmount(), $version->name);
+            self::assertSame(0.01, $surcharges[0]->getDayPriceFactor(), $version->name);
+            self::assertTrue($surcharges[0]->appliesToDayPrice(Money::of('1.75', CurrencyCode::Euro, 2)), $version->name);
+            self::assertSame(DatanormRawMaterialSurcharge::METHOD_GERMAN, $surcharges[1]->getMethod(), $version->name);
+            // DEL 2,00 €/kg: (2,00 − 1,50) × 0,043 kg = 0,0215 €/Einheit.
+            self::assertSame('0.0215', $surcharges[1]->germanSurchargePerPriceUnit(Money::of('2', CurrencyCode::Euro, 2))?->getAmount(), $version->name);
+
+            $workTimes = $roundTripped->getWorkTimes();
+            self::assertCount(1, $workTimes, $version->name);
+            self::assertSame(DatanormWorkTime::PURPOSE_INSTALLATION, $workTimes[0]->getPurpose(), $version->name);
+            self::assertSame(30.0, $workTimes[0]->getMinutes(), $version->name);
+        }
     }
 
     public function test_v4_round_trip_preserves_price_semantics(): void {

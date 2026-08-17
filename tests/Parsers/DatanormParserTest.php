@@ -338,8 +338,11 @@ class DatanormParserTest extends BaseTestCase {
         self::assertSame(2.0, $international->getPercent());
         self::assertSame('150.00', $international->getFromDayPrice()?->getAmount());
         self::assertSame('200.00', $international->getToDayPrice()?->getAmount());
-        self::assertTrue($international->appliesToDayPrice(\CommonToolkit\ValueObjects\Money::of('175', \CommonToolkit\Enums\CurrencyCode::Euro, 2)));
-        self::assertFalse($international->appliesToDayPrice(\CommonToolkit\ValueObjects\Money::of('149', \CommonToolkit\Enums\CurrencyCode::Euro, 2)));
+        // Faktor1 0,010: Fenster 150,00–200,00 je 100 kg ≙ 1,50–2,00 €/kg.
+        self::assertSame(0.01, $international->getDayPriceFactor());
+        self::assertTrue($international->appliesToDayPrice(\CommonToolkit\ValueObjects\Money::of('1.75', \CommonToolkit\Enums\CurrencyCode::Euro, 2)));
+        self::assertFalse($international->appliesToDayPrice(\CommonToolkit\ValueObjects\Money::of('1.49', \CommonToolkit\Enums\CurrencyCode::Euro, 2)));
+        self::assertFalse($international->appliesToDayPrice(\CommonToolkit\ValueObjects\Money::of('2.01', \CommonToolkit\Enums\CurrencyCode::Euro, 2)));
 
         $german = $surcharges[1];
         self::assertSame('german', $german->getMethod());
@@ -375,6 +378,7 @@ class DatanormParserTest extends BaseTestCase {
         self::assertSame('international', $surcharges[0]->getMethod());
         self::assertSame(2.0, $surcharges[0]->getPercent());
         self::assertSame('150.00', $surcharges[0]->getFromDayPrice()?->getAmount());
+        self::assertSame(0.01, $surcharges[0]->getDayPriceFactor());
         self::assertSame('german', $surcharges[1]->getMethod());
         self::assertSame(7.2, $surcharges[1]->getWeight());
 
