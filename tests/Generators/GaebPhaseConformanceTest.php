@@ -15,7 +15,7 @@ namespace Tests\Generators;
 use CommonToolkit\Enums\CurrencyCode;
 use CommonToolkit\ValueObjects\Money;
 use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebChangeOrder, GaebItem, GaebParty, GaebSection};
-use ERechnungToolkit\Enums\{GaebChangeOrderInitiator, GaebChangeOrderPhase, GaebChangeOrderStatus, GaebItemType, GaebMarkupType, GaebPhase};
+use ERechnungToolkit\Enums\{GaebAwardCategory, GaebChangeOrderInitiator, GaebChangeOrderPhase, GaebChangeOrderStatus, GaebItemType, GaebMarkupType, GaebPhase};
 use ERechnungToolkit\Generators\GaebDaXmlGenerator;
 use ERechnungToolkit\Helper\Gaeb\GaebCalculator;
 use ERechnungToolkit\Parsers\GaebDaXmlParser;
@@ -159,6 +159,50 @@ class GaebPhaseConformanceTest extends BaseTestCase {
         $this->assertStringContainsString('<ITMarkup>125</ITMarkup>', $xml);
         $this->assertStringContainsString('<Markup>5</Markup>', $xml);
         $this->assertStringContainsString('<IT>6.25</IT>', $xml);
+    }
+
+    /**
+     * Die Vergabeart trennt Verfahren, die gleich klingen: „mit" und „ohne
+     * Teilnahmewettbewerb" sind eigene Werte, weil sie Fristen und Bieterkreis
+     * ändern. Sie zusammenzulegen wäre ein Rechtsfehler.
+     */
+    public function test_award_categories_keep_the_call_for_participation_apart(): void {
+        $this->assertFalse(GaebAwardCategory::RestrictedInvitation->hasCallForParticipation());
+        $this->assertTrue(GaebAwardCategory::RestrictedInvitationWithCall->hasCallForParticipation());
+        $this->assertFalse(GaebAwardCategory::NegotiatedProcedure->hasCallForParticipation());
+        $this->assertTrue(GaebAwardCategory::NegotiatedProcedureWithCall->hasCallForParticipation());
+
+        // Die Innovationspartnerschaft kam erst mit 3.3.
+        $this->assertFalse(GaebAwardCategory::InnovationPartnership->existsIn('3.2'));
+        $this->assertTrue(GaebAwardCategory::InnovationPartnership->existsIn('3.3'));
+        $this->assertTrue(GaebAwardCategory::OpenProcedure->existsIn('3.2'));
+
+        // Ein Zeitvertrag wird nicht im offenen Verfahren vergeben.
+        $this->assertFalse(GaebAwardCategory::OpenProcedure->allowedInFrameworkAgreement());
+        $this->assertTrue(GaebAwardCategory::PublicInvitation->allowedInFrameworkAgreement());
+    }
+
+    /**
+     * Gelesen wird jede Phase, geschrieben nicht: Zeitvertrag, Rechnung und
+     * Handel hängen unter eigenen Wurzelblöcken mit eigener Struktur. Das sagt
+     * der Schreiber deutlich, statt eine halb richtige Vergabedatei abzuliefern.
+     */
+    public function test_framework_phases_refuse_to_be_written(): void {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessageMatches('/Phase X83Z/');
+
+        (new GaebDaXmlGenerator)->generate($this->document(), GaebPhase::FrameworkRequestForBid);
+    }
+
+    /** Was geschrieben werden kann, ist im Enum festgehalten - nicht im Generator. */
+    public function test_enum_states_which_phases_can_be_written(): void {
+        $this->assertTrue(GaebPhase::Lv->isWritableAsDaXml());
+        $this->assertTrue(GaebPhase::Award->isWritableAsDaXml());
+        $this->assertTrue(GaebPhase::QuantitySurvey->isWritableAsDaXml());
+
+        $this->assertFalse(GaebPhase::FrameworkBid->isWritableAsDaXml());
+        $this->assertFalse(GaebPhase::Invoice->isWritableAsDaXml());
+        $this->assertFalse(GaebPhase::Order->isWritableAsDaXml());
     }
 
     /** Ein Zuschlag auf einen Zuschlag würde sich aufschaukeln - er zählt nicht mit. */

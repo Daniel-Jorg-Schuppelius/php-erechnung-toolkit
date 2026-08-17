@@ -85,6 +85,47 @@ statt es über den Generator zu verteilen:
 die Schemata von X81 bis X83 den `CTR` nicht einmal; umgekehrt ist eine
 Auftragserteilung ohne Auftraggeber keine.
 
+Die **Vergabeart** (`Cat`, `GaebAwardCategory`) steht in X83, X86, X87 und den
+Zeitvertragsphasen. Elf Werte in 3.3, zehn in 3.2 — die Innovationspartnerschaft
+kam später (`existsIn()`). Zwei Paare sehen sich ähnlich und sind es nicht:
+`SelectCall`/`SelectCallPostOpen` und `NegProc`/`NegProcOpen` unterscheiden sich
+darin, ob ein **Teilnahmewettbewerb** vorausging — das ändert Fristen und
+Bieterkreis, ein Zusammenlegen wäre ein Rechtsfehler, keine Vereinfachung. Das
+Vokabular ist VOB-zentriert: Verfahren, die die UVgO kennt (Verhandlungsvergabe,
+Direktauftrag), haben hier keinen Wert.
+
+**Andere Wurzelblöcke, anderer Aufbau.** Nicht jede Phase hängt unter `Award`:
+
+| Phasen | Wurzelblock | Stand |
+| ------ | ----------- | ----- |
+| X80–X87, X52 | `Award` | lesen + schreiben |
+| X31 | `QtyDeterm` | lesen + schreiben |
+| X83Z–X86ZR (Zeitvertrag) | `Award`, **ohne** `PrjInfo` | nur lesen |
+| X89/X89B (Rechnung) | `Invoice` | nur lesen |
+| X93–X97 (Handel) | `Order` | nur lesen |
+
+Was geschrieben werden kann, beantwortet `GaebPhase::isWritableAsDaXml()`. Wo
+es nicht geht, wirft der Schreiber eine Ausnahme mit Begründung, statt eine halb
+richtige Vergabedatei abzuliefern — bei einer Ausschreibung ist eine klare
+Absage besser als eine Datei, die die Vergabestelle zurückweist.
+
+**Zeitvertrag:** Kopf und Parteien sind vermessen und umgesetzt
+(`GaebAwardCategory`, `GaebFrameworkAgreement` mit Laufzeit, Auf-/Abgebot und
+Mindestwerten, je Phase eigene `AwardInfo`: 84Z trägt nur ein Datum, 86ZE die
+Vertragsnummer). Offen ist die **Positionsebene** — der Zeitvertrag preist
+Leistungen *ohne Menge*, sie entsteht erst beim Einzelabruf, und welche Phase
+Preise trägt, unterscheidet sich. Der Einzelauftrag (86ZE) verlangt zusätzlich
+Stundenlohn-, Material- und Zuschlagssätze aus `IndivAgrInfo`.
+
+**Rechnung (X89/X89B):** `tgInvoice` verlangt `InvoiceHeader` (Nummer, Datum,
+Art, Leistungszeitraum), `InvoiceCreator` und `InvoiceRecipient` (je Anschrift +
+Steuernummer), `InvoiceShare` (Anteile mit Art, Betrag, Prozentsatz,
+Gegenforderung) und `TotalGross` — durchweg Pflicht.
+
+**Handel (X93–X97):** `tgOrder` mit `OrderInfo`, `SupplierInfo`, `CustomerInfo`,
+`DeliveryPlaceInfo`, `PlannerInfo`, `InvoiceInfo` und `OrderItem`:
+Bestellpositionen statt Gliederung.
+
 Zwei Fallen stecken in den Sequenzen selbst: **Nummer und Status eines
 Nachtrags sind eine Pflichtgruppe** (`<xs:sequence minOccurs="0">` mit beiden
 Kindern erforderlich) — eine Nachtragsnummer ohne Status ist nicht darstellbar,
@@ -375,5 +416,9 @@ nichts validieren.
 - [x] Phasengetreues Schreiben X80–X87 (alle acht schemavalide, je Phase geprüft)
 - [x] Nachtragskopf `COInfo` (Phase, Ersteller, Begründung, Datum)
 - [x] Zuschlagsarten mit Bemessungsgrundlage und Zuschlagsrechnung
+- [x] Vergabeart `Cat` als Enum (11 Werte, versionsabhängig, Zeitvertragsfilter)
+- [ ] Zeitvertrag **schreiben** (`CnstSite`/`IndivAgrInfo` fehlen im Modell)
+- [ ] Rechnung X89/X89B schreiben (`Invoice`: Kopf, Ersteller, Empfänger, Anteile)
+- [ ] Handel X93–X97 schreiben (`Order`: Bestellpositionen statt Gliederung)
 - [ ] GAEB-90-Feinwerk: Zeilenart 24, Zuschläge, Lose, T0/T1/T9
 - [ ] `MarkupType`-Semantiken, `COPhase`/`COInfo` auf Kopfebene

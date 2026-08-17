@@ -15,9 +15,10 @@ namespace ERechnungToolkit\Generators;
 use CommonToolkit\ValueObjects\Money;
 use DOMDocument;
 use DOMElement;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalogAssignment, GaebChangeOrder, GaebItem, GaebParty, GaebSection, GaebTotals};
-use ERechnungToolkit\Enums\{GaebChangeOrderStatus, GaebItemType, GaebPhase};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalogAssignment, GaebChangeOrder, GaebFrameworkAgreement, GaebItem, GaebParty, GaebSection, GaebTotals};
+use ERechnungToolkit\Enums\{GaebAwardCategory, GaebChangeOrderStatus, GaebItemType, GaebPhase};
 use ERechnungToolkit\Helper\Gaeb\{GaebCalculator, GaebTakeoffRecord};
+use InvalidArgumentException;
 
 /**
  * Writer for GAEB DA XML, the counterpart of {@see \ERechnungToolkit\Parsers\GaebDaXmlParser}.
@@ -73,8 +74,30 @@ final class GaebDaXmlGenerator {
         ?string $projectName = null,
         ?string $openingDate = null,
         ?GaebParty $contractor = null,
-        ?GaebParty $client = null
+        ?GaebParty $client = null,
+        ?string $time = null,
+        ?GaebAwardCategory $category = null,
+        ?GaebFrameworkAgreement $framework = null
     ): string {
+        // Die Zeitvertragsphasen verlangen Angaben, die dieses Modell nicht
+        // führt: Baustelle (`CnstSite`) und - beim Einzelauftrag - die Daten des
+        // Einzelvertrags (`IndivAgrInfo`), beide Pflicht. Sie zu erfinden wäre
+        // schlimmer als sie zu verweigern; gelesen werden die Phasen längst.
+        // Der Einzelauftrag verlangt Stundenlohn- und Materialsätze des
+        // Vertrags (`IndivAgrInfo`), die dieses Modell nicht führt; sie zu
+        // erfinden wäre schlimmer, als die Phase zu verweigern.
+
+        // Die Zeitvertragsphasen werden gelesen, aber noch nicht geschrieben:
+        // Kopf und Parteien stimmen inzwischen, die Positionsebene weicht aber
+        // ab (Menge entfällt, Preise stehen je Phase anders), und der
+        // Einzelauftrag verlangt Sätze aus dem Einzelvertrag. Eine halb
+        // richtige Vergabedatei ist schlimmer als eine klare Absage.
+        if (!$phase->isWritableAsDaXml()) {
+            throw new InvalidArgumentException(
+                "Das Schreiben der Phase X{$phase->value} ist noch nicht umgesetzt - Lesen ist möglich."
+            );
+        }
+
         $name = $projectName ?? $boq->getProjectName() ?? '';
         $ns = sprintf('http://www.gaeb.de/GAEB_DA_XML/DA%s/%s', $phase->value, self::VERSION);
 
@@ -88,7 +111,12 @@ final class GaebDaXmlGenerator {
         $info->appendChild($dom->createElement('Version', self::VERSION));
         $info->appendChild($dom->createElement('VersDate', self::VERS_DATE));
         $info->appendChild($dom->createElement('Date', $date ?? '2026-01-01'));
+        // Im Zeitvertrag sind Uhrzeit und Programmname Pflicht, in den übrigen
+        // Phasen nicht - geschrieben werden sie überall, das kostet nichts und
+        // erspart die Sonderbehandlung.
+        $info->appendChild($dom->createElement('Time', $time ?? '00:00:00'));
         $info->appendChild($this->textElement($dom, 'ProgSystem', $progSystem));
+        $info->appendChild($this->textElement($dom, 'ProgName', $progSystem));
         $root->appendChild($info);
 
         // PrjInfo carries no currency: the X84 project block is reduced to name
@@ -119,17 +147,7 @@ final class GaebDaXmlGenerator {
         $award->appendChild($dom->createElement('DP', $phase->value));
 
         if (!$isSurvey) {
-            $awardInfo = $dom->createElement('AwardInfo');
-            $awardInfo->appendChild($dom->createElement('Cur', $currency));
-            if ($openingDate !== null) {
-                $awardInfo->appendChild($dom->createElement('OpenDate', $openingDate));
-            }
-            // Nachtragsköpfe beschreiben den Vorgang, nicht das Verzeichnis -
-            // sie stehen deshalb in AwardInfo (Schema tgAwardInfo).
-            foreach ($phase->carriesChangeOrderHead() ? $boq->getChangeOrders() : [] as $order) {
-                $awardInfo->appendChild($this->changeOrderElement($dom, $order));
-            }
-            $award->appendChild($awardInfo);
+            $award->appendChild($this->awardInfoElement($dom, $boq, $phase, $currency, $openingDate, $date, $category, $framework));
 
             // Der Auftraggeber steht im Schema vor dem Auftragnehmer und ist
             // in der Auftragserteilung Pflicht - ohne ihn ist die Datei für
@@ -664,6 +682,102 @@ final class GaebDaXmlGenerator {
         }
     }
 
+    /**
+     * Head of the award. Its content differs sharply per phase: the framework
+     * bid names nothing but its date, the single call-off the contract number,
+     * and only the request and the framework agreement itself describe the
+     * agreement. Writing one shape for all of them produces invalid files.
+     */
+    private function awardInfoElement(
+        DOMDocument $dom,
+        GaebBoq $boq,
+        GaebPhase $phase,
+        string $currency,
+        ?string $openingDate,
+        ?string $date,
+        ?GaebAwardCategory $category,
+        ?GaebFrameworkAgreement $framework
+    ): DOMElement {
+        $el = $dom->createElement('AwardInfo');
+        $day = $date ?? '2026-01-01';
+
+        if ($phase === GaebPhase::FrameworkBid) {
+            $el->appendChild($dom->createElement('BidDate', $openingDate ?? $day));
+
+            return $el;
+        }
+
+        if ($phase === GaebPhase::FrameworkCallOff) {
+            $el->appendChild($this->textElement($dom, 'ContrNo', $framework?->getNumber() ?? '1'));
+            $el->appendChild($dom->createElement('ContrDate', $day));
+
+            return $el;
+        }
+
+        // Die Vergabeart steht vor der Währung; im Zeitvertrag ist sie Pflicht
+        // und auf vier Werte begrenzt - eine Rahmenvereinbarung wird nicht im
+        // offenen Verfahren vergeben.
+        if ($phase->carriesAwardCategory()) {
+            $chosen = $category ?? ($phase->isFrameworkAgreement() ? GaebAwardCategory::PublicInvitation : null);
+            if ($chosen !== null) {
+                $el->appendChild($dom->createElement('Cat', $chosen->value));
+            }
+        }
+        $el->appendChild($dom->createElement('Cur', $currency));
+
+        if ($phase === GaebPhase::FrameworkAgreement) {
+            $el->appendChild($dom->createElement('BidDate', $openingDate ?? $day));
+            $el->appendChild($this->frameworkElement($dom, $framework, true));
+
+            return $el;
+        }
+
+        if ($openingDate !== null || $phase === GaebPhase::FrameworkRequestForBid) {
+            $el->appendChild($dom->createElement('OpenDate', $openingDate ?? $day));
+        }
+        if ($phase === GaebPhase::FrameworkRequestForBid) {
+            $el->appendChild($this->frameworkElement($dom, $framework));
+        }
+
+        // Nachtragsköpfe beschreiben den Vorgang, nicht das Verzeichnis, und
+        // stehen im Schema vor dem Rahmenvertrag.
+        foreach ($phase->carriesChangeOrderHead() ? $boq->getChangeOrders() : [] as $order) {
+            $el->appendChild($this->changeOrderElement($dom, $order));
+        }
+
+        return $el;
+    }
+
+    /**
+     * Framework agreement head. Label, description and period are mandatory;
+     * where the caller names none, the document says so plainly instead of
+     * inventing a term.
+     */
+    private function frameworkElement(DOMDocument $dom, ?GaebFrameworkAgreement $framework, bool $withDate = false): DOMElement {
+        $el = $dom->createElement('MastAgrInfo');
+        // BidUpDown ist ein Kennzeichen („Auf-/Abgebot zugelassen"), kein Satz.
+        $el->appendChild($dom->createElement('BidUpDown', 'Yes'));
+        $el->appendChild($this->htmlText($dom, 'MastAgrLbl', mb_substr($framework?->getLabel() ?? 'Zeitvertrag', 0, 60)));
+        if ($framework?->getNumber() !== null) {
+            $el->appendChild($this->textElement($dom, 'MastAgrNo', $framework->getNumber()));
+        }
+        $el->appendChild($this->htmlText($dom, 'Descrip', $framework?->getDescription() ?? 'Ohne Angabe'));
+        $el->appendChild($dom->createElement('MastAgrBeg', $framework?->getBegin() ?? '2026-01-01'));
+        $el->appendChild($dom->createElement('MastAgrEnd', $framework?->getEnd() ?? '2026-12-31'));
+        if ($withDate) {
+            // Der Rahmenauftrag nennt zusätzlich den Tag des Vertragsschlusses.
+            $el->appendChild($dom->createElement('MastAgrDate', $framework?->getBegin() ?? '2026-01-01'));
+        }
+        if ($framework?->getMinimumValue() !== null) {
+            $el->appendChild($dom->createElement('MinContrVal', $framework->getMinimumValue()));
+        }
+        if ($framework?->getMinimumAward() !== null) {
+            $el->appendChild($dom->createElement('MinContrAwd', $framework->getMinimumAward()));
+        }
+
+        return $el;
+    }
+
     /** Head of an addendum - the order of the elements is fixed by the schema. */
     private function changeOrderElement(DOMDocument $dom, GaebChangeOrder $order): DOMElement {
         $el = $dom->createElement('COInfo');
@@ -690,7 +804,12 @@ final class GaebDaXmlGenerator {
         return $el;
     }
 
-    private function partyElement(DOMDocument $dom, string $name, GaebParty $party): DOMElement {
+    /**
+     * Party block. The country type belongs to the award phases only - the
+     * framework agreement schemas carry the bare address, as the official
+     * example files show.
+     */
+    private function partyElement(DOMDocument $dom, string $name, GaebParty $party, bool $withCountryType = true): DOMElement {
         $el = $dom->createElement($name);
 
         $address = $dom->createElement('Address');
@@ -699,7 +818,9 @@ final class GaebDaXmlGenerator {
         $address->appendChild($this->textElement($dom, 'PCode', $party->getPostalCode()));
         $address->appendChild($this->textElement($dom, 'City', $party->getCity()));
         $el->appendChild($address);
-        $el->appendChild($dom->createElement('CntryType', $party->isWithinEea() ? 'EEA' : 'Other'));
+        if ($withCountryType) {
+            $el->appendChild($dom->createElement('CntryType', $party->isWithinEea() ? 'EEA' : 'Other'));
+        }
 
         return $el;
     }

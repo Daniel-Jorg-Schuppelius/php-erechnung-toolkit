@@ -74,6 +74,47 @@ enum GaebPhase: string {
         };
     }
 
+    /**
+     * Can this phase be written as DA XML today?
+     *
+     * Reading covers every phase. Writing does not: the framework agreement
+     * (Zeitvertrag), the invoice (X89/X89B) and the trade phases (X93-X97) hang
+     * under their own root blocks with structures of their own - `Invoice` and
+     * `Order` are not variants of the bill of quantity but separate documents.
+     */
+    public function isWritableAsDaXml(): bool {
+        return !$this->isFrameworkAgreement() && match ($this) {
+            self::Invoice, self::InvoiceAttachment, self::PriceInquiry,
+            self::PriceOffer, self::Order, self::OrderConfirmation => false,
+            default => true,
+        };
+    }
+
+    /**
+     * Is this a framework agreement phase (Zeitvertrag)? Their schemas hang the
+     * award directly under the root - a project block does not exist there.
+     */
+    public function isFrameworkAgreement(): bool {
+        return match ($this) {
+            self::FrameworkRequestForBid, self::FrameworkBid,
+            self::FrameworkCallOff, self::FrameworkAgreement => true,
+            default => false,
+        };
+    }
+
+    /**
+     * Does this phase name the award procedure (`Cat`)? It describes how the
+     * contract came about, which the bid does not restate.
+     */
+    public function carriesAwardCategory(): bool {
+        return match ($this) {
+            self::RequestForBid, self::Award, self::AwardConfirmation,
+            self::FrameworkRequestForBid, self::FrameworkBid,
+            self::FrameworkCallOff, self::FrameworkAgreement => true,
+            default => false,
+        };
+    }
+
     /** Is this one of the bill of quantity phases (X80 to X87)? */
     public function isBillOfQuantity(): bool {
         return match ($this) {
@@ -84,6 +125,13 @@ enum GaebPhase: string {
     }
 
     /** Does this phase carry binding unit and total prices? */
+    /**
+     * Does this phase carry binding unit and total prices?
+     *
+     * The framework agreement follows the same rhythm as the award: the
+     * request lists the services, the bid prices them. What differs is the
+     * quantity - it stays open until a single call-off names it.
+     */
     public function carriesPrices(): bool {
         return match ($this) {
             self::Lv, self::RequestForBid, self::FrameworkRequestForBid,
@@ -119,7 +167,11 @@ enum GaebPhase: string {
             // Die Angebotsabgabe antwortet auf ein bekanntes LV, und die
             // Mengenermittlung trägt Aufmaßansätze statt LV-Mengen - in beiden
             // Fällen eine Menge zu fordern hieße, die Phase misszuverstehen.
-            self::Bid, self::FrameworkBid, self::QuantitySurvey => false,
+            // Der Zeitvertrag preist Leistungen ohne Menge: Sie entsteht erst
+            // beim Einzelabruf (belegt an den amtlichen Beispieldateien).
+            self::Bid, self::QuantitySurvey,
+            self::FrameworkRequestForBid, self::FrameworkBid,
+            self::FrameworkCallOff, self::FrameworkAgreement => false,
             default => true,
         };
     }
@@ -132,7 +184,7 @@ enum GaebPhase: string {
     public function carriesContractor(): bool {
         return match ($this) {
             self::Bid, self::SideBid, self::Award, self::AwardConfirmation,
-            self::FrameworkBid, self::FrameworkCallOff, self::FrameworkAgreement => true,
+            self::FrameworkBid, self::FrameworkAgreement => true,
             default => false,
         };
     }
@@ -143,8 +195,11 @@ enum GaebPhase: string {
      */
     public function carriesClient(): bool {
         return match ($this) {
+            // Im Zeitvertrag steht der Auftraggeber in jeder Phase - auch im
+            // Angebot, das sonst ohne ihn auskommt.
             self::RequestForBid, self::Award, self::AwardConfirmation,
-            self::FrameworkRequestForBid, self::FrameworkCallOff, self::FrameworkAgreement => true,
+            self::FrameworkRequestForBid, self::FrameworkBid,
+            self::FrameworkCallOff, self::FrameworkAgreement => true,
             default => false,
         };
     }
