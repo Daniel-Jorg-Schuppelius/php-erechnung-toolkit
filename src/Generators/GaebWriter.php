@@ -55,7 +55,7 @@ final class GaebWriter {
         return match ($format) {
             GaebFormat::DaXml => [
                 'content' => $this->xml->generate($boq, $phase, $boq->getCurrency()->value, $date, 'php-erechnung-toolkit', null, null, $contractor, $client),
-                'losses' => [],
+                'losses' => $this->lossesForDaXml($boq),
             ],
             GaebFormat::Gaeb2000 => [
                 'content' => $this->gaeb2000->generate($boq, $phase),
@@ -72,6 +72,46 @@ final class GaebWriter {
                 'losses' => $this->lossesForGrid($boq),
             ],
         };
+    }
+
+    /**
+     * What DA XML rejects even though the model holds it.
+     *
+     * The addendum number is the case in point: GAEB defines it as a number up
+     * to 999 (`tgCONo`), while the application may well carry a speaking one.
+     * Writing it anyway produces a file the other side refuses - naming it here
+     * puts the problem where it can be fixed.
+     *
+     * @return list<string>
+     */
+    public function lossesForDaXml(GaebBoq $boq): array {
+        $offending = [];
+        foreach ($boq->getItems() as $item) {
+            $number = $item->getChangeOrderNo();
+            if ($number === null) {
+                continue;
+            }
+            if (preg_match('/^\d{1,3}$/', $number) !== 1) {
+                $offending[$item->getReference()] = $number;
+            }
+        }
+
+        if ($offending === []) {
+            return [];
+        }
+
+        $sample = array_slice($offending, 0, 3, true);
+        $named = [];
+        foreach ($sample as $reference => $number) {
+            $named[] = "{$reference}: \"{$number}\"";
+        }
+
+        return [sprintf(
+            '%d Nachtragsnummer(n) sind für GAEB unzulässig (erlaubt sind 0 bis 999): %s%s.',
+            count($offending),
+            implode(', ', $named),
+            count($offending) > 3 ? ' …' : ''
+        )];
     }
 
     /**

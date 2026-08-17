@@ -101,8 +101,8 @@ Direktauftrag), haben hier keinen Wert.
 | X80–X87, X52 | `Award` | lesen + schreiben |
 | X31 | `QtyDeterm` | lesen + schreiben |
 | X83Z–X86ZR (Zeitvertrag) | `Award`, **ohne** `PrjInfo` | nur lesen |
-| X89/X89B (Rechnung) | `Invoice` | nur lesen |
-| X93–X97 (Handel) | `Order` | nur lesen |
+| X89/X89B (Rechnung) | `Invoice` | lesen + schreiben |
+| X93–X97 (Handel) | `Order` | lesen + schreiben |
 
 Was geschrieben werden kann, beantwortet `GaebPhase::isWritableAsDaXml()`. Wo
 es nicht geht, wirft der Schreiber eine Ausnahme mit Begründung, statt eine halb
@@ -117,14 +117,45 @@ Leistungen *ohne Menge*, sie entsteht erst beim Einzelabruf, und welche Phase
 Preise trägt, unterscheidet sich. Der Einzelauftrag (86ZE) verlangt zusätzlich
 Stundenlohn-, Material- und Zuschlagssätze aus `IndivAgrInfo`.
 
-**Rechnung (X89/X89B):** `tgInvoice` verlangt `InvoiceHeader` (Nummer, Datum,
-Art, Leistungszeitraum), `InvoiceCreator` und `InvoiceRecipient` (je Anschrift +
-Steuernummer), `InvoiceShare` (Anteile mit Art, Betrag, Prozentsatz,
-Gegenforderung) und `TotalGross` — durchweg Pflicht.
+**Rechnung (X89/X89B):** umgesetzt. Sie hängt unter `Invoice` statt unter
+`Award` und unterscheidet sich in zwei Punkten von jeder anderen Phase
+(Fachdokumentation 8.1.1): Sie muss die **steuerlichen Pflichtangaben** tragen,
+und **ihren Aufbau gibt nicht GAEB vor, sondern der Auftraggeber** — der
+Standard liefert nur die Liste der 20 möglichen Anteilsarten
+(`GaebInvoiceShareType`), die Bezeichnungen kommen mit der Auftragserteilung.
+Die Reihenfolge der Anteile *ist* ihre Rechenreihenfolge und wird unverändert
+geschrieben.
 
-**Handel (X93–X97):** `tgOrder` mit `OrderInfo`, `SupplierInfo`, `CustomerInfo`,
-`DeliveryPlaceInfo`, `PlannerInfo`, `InvoiceInfo` und `OrderItem`:
-Bestellpositionen statt Gliederung.
+Drei Eigenheiten, die man sonst falsch baut:
+
+1. Die Rechnung nennt die **abgerechnete** Menge (`BillQty`), nicht die
+   beauftragte — `Qty` ist dort unzulässig.
+2. Betrag und Prozentsatz eines Anteils stehen im Schema **zur Wahl**: Ein
+   Anteil ist auf genau eine Art definiert.
+3. **X89B ist keine Rechnung** im Sinne des Handelsrechts. Die rechnungs­
+   begründende Unterlage verweist über `RefInvoiceNo` auf die Rechnung, zu der
+   sie gehört, statt eine eigene Nummer zu führen.
+
+Abzüge tragen ihr Vorzeichen im **Typ**, nicht in der Zahl
+(`reducesAmount()`); eine Gegenforderung kehrt es um (`lowersTotal()`).
+
+**Handel (X93–X97):** umgesetzt. Diese Phasen laufen **neben** der Vergabe: Der
+Unternehmer fragt beim Händler Preise an (X93), erhält ein Angebot (X94),
+bestellt (X96) und bekommt eine Bestätigung (X97). Das Dokument trägt deshalb
+kein Leistungsverzeichnis, sondern eine Bestellung — identifiziert wird über
+die **Artikelnummer**, nicht über eine Ordnungszahl, und der Liefertermin hängt
+an der Zeile, weil eine Lieferung selten auf einmal kommt. Das Gewicht reist
+mit: Fracht wird danach berechnet.
+
+Der Lieferant nennt zusätzlich **Steuer- und Handelsregisternummer**, der Kunde
+nur seine Anschrift. Beide Elemente müssen beim Lieferanten **dastehen**, ihr
+Inhalt darf aber leer sein — und das muss er können: Ein Einzelunternehmer oder
+Kleingewerbetreibender ohne Eintrag hat schlicht keine Handelsregisternummer.
+Ein `<RegNo/>` ohne Inhalt ist deshalb korrekt, nicht nachlässig; das Weglassen
+des Elements wäre der Fehler.
+
+Die Preisanfrage fragt *ohne* Preis; erst das Angebot nennt einen
+(`carriesPrices()`).
 
 Zwei Fallen stecken in den Sequenzen selbst: **Nummer und Status eines
 Nachtrags sind eine Pflichtgruppe** (`<xs:sequence minOccurs="0">` mit beiden
@@ -417,8 +448,9 @@ nichts validieren.
 - [x] Nachtragskopf `COInfo` (Phase, Ersteller, Begründung, Datum)
 - [x] Zuschlagsarten mit Bemessungsgrundlage und Zuschlagsrechnung
 - [x] Vergabeart `Cat` als Enum (11 Werte, versionsabhängig, Zeitvertragsfilter)
-- [ ] Zeitvertrag **schreiben** (`CnstSite`/`IndivAgrInfo` fehlen im Modell)
-- [ ] Rechnung X89/X89B schreiben (`Invoice`: Kopf, Ersteller, Empfänger, Anteile)
-- [ ] Handel X93–X97 schreiben (`Order`: Bestellpositionen statt Gliederung)
+- [ ] Zeitvertrag **schreiben** (Positionsebene: preist ohne Menge, Preise je Phase)
+- [x] Rechnung X89/X89B schreiben (`Invoice`: Kopf, Ersteller, Empfänger, 20 Anteilsarten)
+- [x] Handel X93–X97 schreiben (`Order`: Artikelnummern, Liefertermine, Gewichte)
+- [x] Export-Guard: GAEB-widrige Nachtragsnummern werden benannt statt geschrieben
 - [ ] GAEB-90-Feinwerk: Zeilenart 24, Zuschläge, Lose, T0/T1/T9
 - [ ] `MarkupType`-Semantiken, `COPhase`/`COInfo` auf Kopfebene

@@ -14,8 +14,8 @@ namespace Tests\Generators;
 
 use CommonToolkit\Enums\CurrencyCode;
 use CommonToolkit\ValueObjects\Money;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebChangeOrder, GaebItem, GaebParty, GaebSection};
-use ERechnungToolkit\Enums\{GaebAwardCategory, GaebChangeOrderInitiator, GaebChangeOrderPhase, GaebChangeOrderStatus, GaebItemType, GaebMarkupType, GaebPhase};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebChangeOrder, GaebInvoice, GaebInvoiceShare, GaebItem, GaebOrder, GaebOrderItem, GaebParty, GaebSection};
+use ERechnungToolkit\Enums\{GaebAwardCategory, GaebChangeOrderInitiator, GaebChangeOrderPhase, GaebChangeOrderStatus, GaebInvoiceShareType, GaebInvoiceType, GaebItemType, GaebMarkupType, GaebPhase};
 use ERechnungToolkit\Generators\GaebDaXmlGenerator;
 use ERechnungToolkit\Helper\Gaeb\GaebCalculator;
 use ERechnungToolkit\Parsers\GaebDaXmlParser;
@@ -199,10 +199,186 @@ class GaebPhaseConformanceTest extends BaseTestCase {
         $this->assertTrue(GaebPhase::Lv->isWritableAsDaXml());
         $this->assertTrue(GaebPhase::Award->isWritableAsDaXml());
         $this->assertTrue(GaebPhase::QuantitySurvey->isWritableAsDaXml());
+        $this->assertTrue(GaebPhase::Invoice->isWritableAsDaXml());
+
+        $this->assertTrue(GaebPhase::Order->isWritableAsDaXml());
 
         $this->assertFalse(GaebPhase::FrameworkBid->isWritableAsDaXml());
-        $this->assertFalse(GaebPhase::Invoice->isWritableAsDaXml());
-        $this->assertFalse(GaebPhase::Order->isWritableAsDaXml());
+    }
+
+    private function order(): GaebOrder {
+        return new GaebOrder(
+            deliveryDate: '2026-09-01',
+            items: [
+                new GaebOrderItem(
+                    catalogArticleNo: 'BET-C25-30',
+                    description: 'Transportbeton C25/30',
+                    quantity: '12.000',
+                    unit: 'm3',
+                    price: Money::of('98.50', CurrencyCode::Euro),
+                    weight: '28800',
+                    weightUnit: 'kg',
+                    vatRate: '19',
+                ),
+            ],
+            supplier: $this->party('Baustoff Meier'),
+            supplierTaxNo: '205/5711/0041',
+            supplierRegisterNo: 'HRB 4711',
+            customer: $this->party('Bau GmbH'),
+            inquiryNo: 'ANF-2026-88',
+            vatRate: '19',
+        );
+    }
+
+    /**
+     * Der Handel läuft neben der Vergabe: Er kauft Artikel statt Positionen und
+     * hängt deshalb unter `Order` statt unter `Award`.
+     *
+     * @return list<array{GaebPhase}>
+     */
+    public static function tradePhases(): array {
+        return [[GaebPhase::PriceInquiry], [GaebPhase::PriceOffer], [GaebPhase::Order], [GaebPhase::OrderConfirmation]];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('tradePhases')]
+    public function test_trade_phases_write_valid_documents(GaebPhase $phase): void {
+        $xml = (new GaebDaXmlGenerator)->generate(new GaebBoq, $phase, order: $this->order());
+
+        $this->assertSame([], (new GaebSchemaValidator)->validate($xml), "X{$phase->value} ist nicht schemavalide.");
+        $this->assertStringContainsString('<Order>', $xml);
+        $this->assertStringNotContainsString('<Award>', $xml);
+        $this->assertStringContainsString('<CatalogArtNo>BET-C25-30</CatalogArtNo>', $xml);
+        // Handelsrecht: Steuer- und Handelsregisternummer des Lieferanten.
+        $this->assertStringContainsString('<TaxNo>205/5711/0041</TaxNo>', $xml);
+        $this->assertStringContainsString('<RegNo>HRB 4711</RegNo>', $xml);
+    }
+
+    /**
+     * Ein Einzelunternehmer hat keine Handelsregisternummer - er ist nicht
+     * eingetragen. Das Schema verlangt das **Element**, nicht seinen Inhalt:
+     * `<RegNo/>` leer ist korrekt, das Weglassen wäre der Fehler.
+     */
+    public function test_supplier_without_register_entry_stays_valid(): void {
+        $order = new GaebOrder(
+            deliveryDate: '2026-09-01',
+            items: [new GaebOrderItem(catalogArticleNo: 'BET', quantity: '1.000', unit: 'm3')],
+            supplier: $this->party('Maurermeister Krause'),
+            supplierTaxNo: '205/5711/0041',
+            // kein Handelsregistereintrag
+            customer: $this->party('Bau GmbH'),
+        );
+
+        $xml = (new GaebDaXmlGenerator)->generate(new GaebBoq, GaebPhase::Order, order: $order);
+
+        $this->assertSame([], (new GaebSchemaValidator)->validate($xml));
+        $this->assertStringContainsString('<RegNo/>', $xml);
+        // Der Kunde nennt nur seine Anschrift, keine Steuernummer.
+        $this->assertMatchesRegularExpression('#<CustomerInfo>\s*<Address>.*?</Address>\s*</CustomerInfo>#s', $xml);
+    }
+
+    /** Die Preisanfrage fragt ohne Preis; erst das Angebot nennt einen. */
+    public function test_price_inquiry_asks_without_prices(): void {
+        $generator = new GaebDaXmlGenerator;
+
+        $inquiry = $generator->generate(new GaebBoq, GaebPhase::PriceInquiry, order: $this->order());
+        $this->assertStringNotContainsString('<NetPrice>', $inquiry);
+
+        $offer = $generator->generate(new GaebBoq, GaebPhase::PriceOffer, order: $this->order());
+        $this->assertStringContainsString('<NetPrice>98.5</NetPrice>', $offer);
+    }
+
+    private function invoice(): GaebInvoice {
+        return new GaebInvoice(
+            number: '2026-0042',
+            date: '2026-08-17',
+            type: GaebInvoiceType::Deduction,
+            serviceStart: '2026-07-01',
+            serviceEnd: '2026-07-31',
+            creator: $this->party('Bau GmbH'),
+            creatorTaxNumber: '205/5711/0041',
+            recipient: $this->party('Stadt Bonn'),
+            shares: [
+                new GaebInvoiceShare(GaebInvoiceShareType::BasicAmount, 'Leistung Juli', Money::of('125.00', CurrencyCode::Euro)),
+                new GaebInvoiceShare(GaebInvoiceShareType::SecurityForFulfilment, 'Sicherheit 5 %', percent: '5'),
+                new GaebInvoiceShare(GaebInvoiceShareType::Vat, '19 % USt', Money::of('23.75', CurrencyCode::Euro)),
+            ],
+            totalGross: Money::of('148.75', CurrencyCode::Euro),
+        );
+    }
+
+    /** Die Rechnung hängt unter `Invoice`, nicht unter `Award`. */
+    public function test_invoice_is_written_under_its_own_root(): void {
+        $xml = (new GaebDaXmlGenerator)->generate(
+            $this->document(),
+            GaebPhase::Invoice,
+            contractor: $this->party('Bau GmbH'),
+            client: $this->party('Stadt Bonn'),
+            invoice: $this->invoice(),
+        );
+
+        $this->assertSame([], (new GaebSchemaValidator)->validate($xml));
+        $this->assertStringContainsString('<Invoice>', $xml);
+        $this->assertStringNotContainsString('<Award>', $xml);
+        $this->assertStringContainsString('<InvoiceNo>2026-0042</InvoiceNo>', $xml);
+        $this->assertStringContainsString('<InvoiceType>deduction</InvoiceType>', $xml);
+        $this->assertStringContainsString('<TaxNo>205/5711/0041</TaxNo>', $xml);
+        // Die Rechnung nennt die abgerechnete Menge, nicht die beauftragte.
+        $this->assertStringContainsString('<BillQty>10</BillQty>', $xml);
+        $this->assertStringNotContainsString('<Qty>', $xml);
+    }
+
+    /**
+     * Betrag und Prozentsatz stehen im Schema zur Wahl: Ein Rechnungsanteil ist
+     * auf genau eine Art definiert.
+     */
+    public function test_invoice_share_carries_either_amount_or_percentage(): void {
+        $xml = (new GaebDaXmlGenerator)->generate(
+            $this->document(),
+            GaebPhase::Invoice,
+            client: $this->party('Stadt Bonn'),
+            invoice: $this->invoice(),
+        );
+
+        // Der prozentuale Anteil trägt keinen Betrag daneben.
+        $this->assertMatchesRegularExpression(
+            '#<InvoiceShare>\s*<InvoiceShareType>security deposit for fulfillment of a contract</InvoiceShareType>\s*<Description>[^<]*</Description>\s*<Percent>5</Percent>\s*</InvoiceShare>#',
+            $xml
+        );
+        $this->assertSame([], (new GaebSchemaValidator)->validate($xml));
+    }
+
+    /**
+     * Die rechnungsbegründende Unterlage ist keine Rechnung im Sinne des
+     * Handelsrechts - sie verweist auf die Nummer der Rechnung, zu der sie
+     * gehört, statt eine eigene zu führen.
+     */
+    public function test_invoice_attachment_refers_to_its_invoice(): void {
+        $xml = (new GaebDaXmlGenerator)->generate(
+            $this->document(),
+            GaebPhase::InvoiceAttachment,
+            client: $this->party('Stadt Bonn'),
+            invoice: $this->invoice(),
+        );
+
+        $this->assertSame([], (new GaebSchemaValidator)->validate($xml));
+        $this->assertStringContainsString('<RefInvoiceNo>2026-0042</RefInvoiceNo>', $xml);
+        $this->assertStringNotContainsString('<InvoiceNo>', $xml);
+    }
+
+    /** Abzüge tragen ihr Vorzeichen im Typ, nicht in der Zahl. */
+    public function test_share_types_know_whether_they_lower_the_sum(): void {
+        $this->assertFalse(GaebInvoiceShareType::BasicAmount->reducesAmount());
+        $this->assertTrue(GaebInvoiceShareType::SecurityForDefects->reducesAmount());
+        $this->assertTrue(GaebInvoiceShareType::PaymentsReceived->reducesAmount());
+        $this->assertTrue(GaebInvoiceShareType::Subtotal->isIntermediate());
+
+        // Eine Gegenforderung kehrt das Vorzeichen um.
+        $claim = new GaebInvoiceShare(GaebInvoiceShareType::BasicAmount, 'Gegenforderung', counterClaim: true);
+        $this->assertTrue($claim->lowersTotal());
+
+        // Eine Pro-forma-Rechnung fordert kein Geld.
+        $this->assertFalse(GaebInvoiceType::ProForma->demandsPayment());
+        $this->assertTrue(GaebInvoiceType::FinalAccount->closesContract());
     }
 
     /** Ein Zuschlag auf einen Zuschlag würde sich aufschaukeln - er zählt nicht mit. */

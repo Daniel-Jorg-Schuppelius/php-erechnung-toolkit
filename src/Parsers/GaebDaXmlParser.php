@@ -203,6 +203,8 @@ final class GaebDaXmlParser {
             alternativeGroup: $this->trimOrNull($this->textOf($this->findFirst($item, 'ALNGroupNo'))),
             alternativeNo: $alternativeNo === null ? null : (int) $alternativeNo,
             markupType: GaebMarkupType::tryFrom((string) $this->trimOrNull($this->textOf($this->findFirst($item, 'MarkupType')))),
+            bidUpDownRequired: $this->textOf($this->findFirst($item, 'BidUpDownReq')) === 'Yes',
+            bidUpDownPercent: $this->trimOrNull($this->textOf($this->findFirst($item, 'BidUpDownPct'))),
             textComplements: $complements,
             subDescriptions: $this->parseSubDescriptions($item),
             unitPriceComponents: $this->parseUnitPriceComponents($item, $currency),

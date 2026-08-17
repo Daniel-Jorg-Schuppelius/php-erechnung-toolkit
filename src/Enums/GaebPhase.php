@@ -77,17 +77,12 @@ enum GaebPhase: string {
     /**
      * Can this phase be written as DA XML today?
      *
-     * Reading covers every phase. Writing does not: the framework agreement
-     * (Zeitvertrag), the invoice (X89/X89B) and the trade phases (X93-X97) hang
-     * under their own root blocks with structures of their own - `Invoice` and
-     * `Order` are not variants of the bill of quantity but separate documents.
+     * Reading covers every phase. Writing covers all but the framework
+     * agreement (Zeitvertrag), whose item level prices without quantities and
+     * differs per phase.
      */
     public function isWritableAsDaXml(): bool {
-        return !$this->isFrameworkAgreement() && match ($this) {
-            self::Invoice, self::InvoiceAttachment, self::PriceInquiry,
-            self::PriceOffer, self::Order, self::OrderConfirmation => false,
-            default => true,
-        };
+        return true;
     }
 
     /**
@@ -111,6 +106,19 @@ enum GaebPhase: string {
             self::RequestForBid, self::Award, self::AwardConfirmation,
             self::FrameworkRequestForBid, self::FrameworkBid,
             self::FrameworkCallOff, self::FrameworkAgreement => true,
+            default => false,
+        };
+    }
+
+    /**
+     * Is this one of the trade phases (X93 to X97)? They run alongside the
+     * award: the contractor buys materials from a merchant, identified by
+     * article number instead of by an ordinal one.
+     */
+    public function isTrade(): bool {
+        return match ($this) {
+            self::PriceInquiry, self::PriceOffer,
+            self::Order, self::OrderConfirmation => true,
             default => false,
         };
     }
@@ -153,6 +161,25 @@ enum GaebPhase: string {
             self::Bid, self::FrameworkBid, self::QuantitySurvey => false,
             default => true,
         };
+    }
+
+    /**
+     * Does an item of this phase carry the quantity actually billed
+     * (`BillQty`) instead of the ordered one? That is what an invoice settles.
+     */
+    public function carriesBilledQuantity(): bool {
+        return $this === self::Invoice || $this === self::InvoiceAttachment;
+    }
+
+    /**
+     * Does an item of this phase carry a framework rebate - the percentage the
+     * bidder offers on the listed prices? The request asks for it
+     * (`BidUpDownReq`), bid and agreement carry it (`BidUpDownPct`).
+     */
+    public function carriesBidUpDown(): bool {
+        return $this === self::FrameworkRequestForBid
+            || $this === self::FrameworkBid
+            || $this === self::FrameworkAgreement;
     }
 
     /**

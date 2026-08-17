@@ -45,6 +45,8 @@ final class GaebItem {
         private readonly ?int $alternativeNo = null,
         private readonly ?GaebMarkupType $markupType = null,
         private readonly ?Money $markupBase = null,
+        private readonly bool $bidUpDownRequired = false,
+        private readonly ?string $bidUpDownPercent = null,
         private readonly array $textComplements = [],
         private readonly array $subDescriptions = [],
         private readonly array $unitPriceComponents = [],
@@ -125,6 +127,23 @@ final class GaebItem {
      */
     public function getMarkupType(): ?GaebMarkupType {
         return $this->markupType;
+    }
+
+    /**
+     * Does the framework request ask the bidder for a percentage on or off the
+     * listed price (`BidUpDownReq`)? The client prices the service, the bidder
+     * answers with one figure instead of with prices of their own.
+     */
+    public function isBidUpDownRequired(): bool {
+        return $this->bidUpDownRequired;
+    }
+
+    /**
+     * The percentage the bidder offered (`BidUpDownPct`). Negative means below
+     * the listed price - that is the usual case in a framework bid.
+     */
+    public function getBidUpDownPercent(): ?string {
+        return $this->bidUpDownPercent;
     }
 
     /**

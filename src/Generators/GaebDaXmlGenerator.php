@@ -15,7 +15,7 @@ namespace ERechnungToolkit\Generators;
 use CommonToolkit\ValueObjects\Money;
 use DOMDocument;
 use DOMElement;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalogAssignment, GaebChangeOrder, GaebFrameworkAgreement, GaebItem, GaebParty, GaebSection, GaebTotals};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalogAssignment, GaebChangeOrder, GaebFrameworkAgreement, GaebInvoice, GaebItem, GaebOrder, GaebOrderItem, GaebParty, GaebSection, GaebTotals};
 use ERechnungToolkit\Enums\{GaebAwardCategory, GaebChangeOrderStatus, GaebItemType, GaebPhase};
 use ERechnungToolkit\Helper\Gaeb\{GaebCalculator, GaebTakeoffRecord};
 use InvalidArgumentException;
@@ -77,7 +77,9 @@ final class GaebDaXmlGenerator {
         ?GaebParty $client = null,
         ?string $time = null,
         ?GaebAwardCategory $category = null,
-        ?GaebFrameworkAgreement $framework = null
+        ?GaebFrameworkAgreement $framework = null,
+        ?GaebInvoice $invoice = null,
+        ?GaebOrder $order = null
     ): string {
         // Die Zeitvertragsphasen verlangen Angaben, die dieses Modell nicht
         // führt: Baustelle (`CnstSite`) und - beim Einzelauftrag - die Daten des
@@ -92,7 +94,7 @@ final class GaebDaXmlGenerator {
         // ab (Menge entfällt, Preise stehen je Phase anders), und der
         // Einzelauftrag verlangt Sätze aus dem Einzelvertrag. Eine halb
         // richtige Vergabedatei ist schlimmer als eine klare Absage.
-        if (!$phase->isWritableAsDaXml()) {
+        if (!$phase->isWritableAsDaXml() && $invoice === null && $order === null) {
             throw new InvalidArgumentException(
                 "Das Schreiben der Phase X{$phase->value} ist noch nicht umgesetzt - Lesen ist möglich."
             );
@@ -135,7 +137,22 @@ final class GaebDaXmlGenerator {
         // Verfahren, nach dem gerechnet wurde.
         $isSurvey = $phase === GaebPhase::QuantitySurvey;
 
-        $award = $dom->createElement($isSurvey ? 'QtyDeterm' : 'Award');
+        $isInvoice = $phase === GaebPhase::Invoice || $phase === GaebPhase::InvoiceAttachment;
+        $isTrade = $phase->isTrade();
+
+        // Der Handel hat kein Leistungsverzeichnis: Er kauft Artikel, keine
+        // Positionen, und ist damit hinter der Wurzel ein anderes Dokument.
+        if ($isTrade) {
+            $root->appendChild($this->orderElement($dom, $phase, $order, $currency, $date));
+
+            return (string) $dom->saveXML();
+        }
+
+        $award = $dom->createElement(match (true) {
+            $isSurvey => 'QtyDeterm',
+            $isInvoice => 'Invoice',
+            default => 'Award',
+        });
         if ($isSurvey) {
             $surveyInfo = $dom->createElement('QtyDetermInfo');
             $surveyInfo->appendChild($dom->createElement('MethodDescription', self::SURVEY_METHOD));
@@ -146,7 +163,19 @@ final class GaebDaXmlGenerator {
         }
         $award->appendChild($dom->createElement('DP', $phase->value));
 
-        if (!$isSurvey) {
+        if ($isInvoice) {
+            // Die Rechnung kennt keinen AwardInfo-Block: Ihr Kopf, die Parteien
+            // und die Anteile hängen unmittelbar unter Invoice.
+            // Parteien und Baustelle stehen vor dem Verzeichnis, Kopf und
+            // Anteile dahinter - die Reihenfolge gibt das Schema vor.
+            if ($client !== null) {
+                $award->appendChild($this->partyElement($dom, 'OWN', $client));
+            }
+            if ($contractor !== null) {
+                $award->appendChild($this->partyElement($dom, 'CTR', $contractor));
+            }
+            $award->appendChild($dom->createElement('CnstSite'));
+        } elseif (!$isSurvey) {
             $award->appendChild($this->awardInfoElement($dom, $boq, $phase, $currency, $openingDate, $date, $category, $framework));
 
             // Der Auftraggeber steht im Schema vor dem Auftragnehmer und ist
@@ -208,7 +237,13 @@ final class GaebDaXmlGenerator {
             $boqInfo->appendChild($el);
         }
         if (!$isSurvey) {
-            $this->appendTotals($dom, $boqInfo, $boq->getTotals());
+            // Die Rechnung verlangt die Summe des Verzeichnisses; wo das
+            // Dokument keine mitbringt, wird sie gebildet.
+            if ($isInvoice && $boq->getTotals()?->getTotal() === null) {
+                $boqInfo->appendChild($this->totalElement($dom, $this->calculator->documentTotal($boq)));
+            } else {
+                $this->appendTotals($dom, $boqInfo, $boq->getTotals());
+            }
             $boqEl->appendChild($boqInfo);
         }
 
@@ -217,6 +252,9 @@ final class GaebDaXmlGenerator {
         $boqEl->appendChild($body);
 
         $award->appendChild($boqEl);
+        if ($isInvoice) {
+            $this->appendInvoiceDetails($dom, $award, $invoice, $boq, $phase);
+        }
         $root->appendChild($award);
 
         return (string) $dom->saveXML();
@@ -334,7 +372,13 @@ final class GaebDaXmlGenerator {
             $el->appendChild($dom->createElement('QtyTBD', 'Yes'));
         }
         $carriesQuantity = $item->getType() !== GaebItemType::Markup && $item->getType() !== GaebItemType::Note;
-        if ($carriesQuantity && $item->getQuantity() !== null && $phase->carriesQuantities() && !($item->hasFreeQuantity() && $phase === GaebPhase::RequestForBid)) {
+        if ($carriesQuantity && $phase->carriesBilledQuantity() && $item->getQuantity() !== null) {
+            // Die Rechnung nennt die abgerechnete Menge, nicht die beauftragte.
+            $el->appendChild($dom->createElement('BillQty', $this->num($item->getQuantity())));
+        }
+        if ($carriesQuantity && $item->getQuantity() !== null && $phase->carriesQuantities()
+            && !$phase->carriesBilledQuantity()
+            && !($item->hasFreeQuantity() && $phase === GaebPhase::RequestForBid)) {
             $el->appendChild($dom->createElement('Qty', $this->num($item->getQuantity())));
         }
         foreach ($phase->carriesTexts() ? $item->getQuantitySplits() : [] as $split) {
@@ -446,6 +490,17 @@ final class GaebDaXmlGenerator {
 
         if ($item->getAlternativeBidStatus() !== null) {
             $el->appendChild($dom->createElement('AlterBidStatus', $item->getAlternativeBidStatus()->value));
+        }
+        // Zeitvertrag: Die Aufforderung fragt das Auf-/Abgebot ab, Angebot und
+        // Rahmenauftrag tragen den Satz. Es steht hinter der Beschreibung.
+        if ($phase->carriesBidUpDown()) {
+            if ($phase === GaebPhase::FrameworkRequestForBid) {
+                if ($item->isBidUpDownRequired()) {
+                    $el->appendChild($dom->createElement('BidUpDownReq', 'Yes'));
+                }
+            } elseif ($item->getBidUpDownPercent() !== null) {
+                $el->appendChild($dom->createElement('BidUpDownPct', $this->num($item->getBidUpDownPercent())));
+            }
         }
 
         // Die Mengenermittlung trägt ihre Rechenzeilen an der Position - auch
@@ -746,6 +801,199 @@ final class GaebDaXmlGenerator {
         }
 
         return $el;
+    }
+
+    /**
+     * Head, parties and components of an invoice - everything the X89 carries
+     * behind its bill of quantity.
+     *
+     * The layout of the components is not GAEB's but the client's: the standard
+     * only offers the list of types, the captions come from the award (see the
+     * technical documentation, 8.1.2). The order is the computation order, so
+     * it is written exactly as handed in.
+     */
+    private function appendInvoiceDetails(DOMDocument $dom, DOMElement $parent, ?GaebInvoice $invoice, GaebBoq $boq, GaebPhase $phase): void {
+        if ($invoice === null) {
+            return;
+        }
+
+        // Die rechnungsbegründende Unterlage ist keine Rechnung im Sinne des
+        // Handelsrechts: Sie verweist auf die Nummer der Rechnung, zu der sie
+        // gehört, statt eine eigene zu führen.
+        if ($phase === GaebPhase::InvoiceAttachment) {
+            $header = $dom->createElement('InvoiceHeader');
+            $header->appendChild($this->textElement($dom, 'RefInvoiceNo', $invoice->getNumber()));
+            $header->appendChild($dom->createElement('ServiceProvisionStartDate', $invoice->getServiceStart()));
+            $header->appendChild($dom->createElement('ServiceProvisionEndDate', $invoice->getServiceEnd()));
+            $parent->appendChild($header);
+
+            $creator = $dom->createElement('InvoiceCreator');
+            if ($invoice->getCreator() !== null) {
+                $creator->appendChild($this->addressElement($dom, $invoice->getCreator()));
+            }
+            $creator->appendChild($this->textElement($dom, 'TaxNo', $invoice->getCreatorTaxNumber() ?? ''));
+            $parent->appendChild($creator);
+
+            return;
+        }
+
+        $header = $dom->createElement('InvoiceHeader');
+        $header->appendChild($this->textElement($dom, 'InvoiceNo', $invoice->getNumber()));
+        $header->appendChild($dom->createElement('InvoiceDate', $invoice->getDate()));
+        $header->appendChild($dom->createElement('InvoiceType', $invoice->getType()->value));
+        if ($invoice->isCreditNote()) {
+            $header->appendChild($dom->createElement('CreditNote', 'Yes'));
+        }
+        if ($invoice->getSequentialNo() !== null) {
+            $header->appendChild($this->textElement($dom, 'SequentialNo', $invoice->getSequentialNo()));
+        }
+        $header->appendChild($dom->createElement('ServiceProvisionStartDate', $invoice->getServiceStart()));
+        $header->appendChild($dom->createElement('ServiceProvisionEndDate', $invoice->getServiceEnd()));
+        $parent->appendChild($header);
+
+        // Der Ersteller nennt seine Steuernummer - Pflichtangabe des
+        // Steuerrechts, nicht des Formats.
+        $creator = $dom->createElement('InvoiceCreator');
+        if ($invoice->getCreator() !== null) {
+            $creator->appendChild($this->addressElement($dom, $invoice->getCreator()));
+        }
+        $creator->appendChild($this->textElement($dom, 'TaxNo', $invoice->getCreatorTaxNumber() ?? ''));
+        $parent->appendChild($creator);
+
+        $recipient = $dom->createElement('InvoiceRecipient');
+        if ($invoice->getRecipient() !== null) {
+            $recipient->appendChild($this->addressElement($dom, $invoice->getRecipient()));
+        }
+        $parent->appendChild($recipient);
+
+        foreach ($invoice->getShares() as $share) {
+            $el = $dom->createElement('InvoiceShare');
+            $el->appendChild($dom->createElement('InvoiceShareType', $share->getType()->value));
+            $el->appendChild($this->textElement($dom, 'Description', mb_substr($share->getDescription(), 0, 256)));
+            // Betrag oder Prozentsatz, nie beides: Das Schema stellt sie zur
+            // Wahl, weil ein Anteil auf genau eine Art definiert ist. Liegt
+            // beides vor, gewinnt der Betrag - er ist der konkretere Wert.
+            if ($share->getTotal() !== null) {
+                $el->appendChild($dom->createElement('Total', $this->amount($share->getTotal())));
+            } elseif ($share->getPercent() !== null) {
+                $el->appendChild($dom->createElement('Percent', $this->num($share->getPercent())));
+            }
+            if ($share->isCounterClaim()) {
+                $el->appendChild($dom->createElement('CounterClaim', 'Yes'));
+            }
+            $parent->appendChild($el);
+        }
+
+        $parent->appendChild($dom->createElement(
+            'TotalGross',
+            $this->amount($invoice->getTotalGross() ?? $this->calculator->documentTotal($boq))
+        ));
+    }
+
+    /**
+     * A trade document: head, both parties and the order lines.
+     *
+     * Prices belong to the phases that name them - the inquiry asks without
+     * them, the offer answers with them. Everything else is the same shape, so
+     * one builder serves all four phases.
+     */
+    private function orderElement(DOMDocument $dom, GaebPhase $phase, ?GaebOrder $order, string $currency, ?string $date): DOMElement {
+        $el = $dom->createElement('Order');
+        $el->appendChild($dom->createElement('DP', $phase->value));
+
+        $info = $dom->createElement('OrderInfo');
+        foreach (['InquiryNo' => $order?->getInquiryNo(), 'OfferNo' => $order?->getOfferNo(), 'OrderConfNo' => $order?->getOrderConfirmationNo()] as $name => $value) {
+            if ($value !== null) {
+                $info->appendChild($this->textElement($dom, $name, mb_substr($value, 0, 15)));
+            }
+        }
+        $info->appendChild($dom->createElement('DeliveryDate', $order?->getDeliveryDate() ?? $date ?? '2026-01-01'));
+        $cur = $dom->createElement('Cur', $currency);
+        $cur->setAttribute('ISO', $currency);
+        $info->appendChild($cur);
+        if ($order?->getVatRate() !== null) {
+            $info->appendChild($dom->createElement('VAT', $this->num($order->getVatRate())));
+        }
+        $el->appendChild($info);
+
+        // Steuer- und Handelsregisternummer des Lieferanten müssen als
+        // Elemente dastehen, ihr Inhalt darf aber leer sein - und das muss er
+        // können: Ein Einzelunternehmer ohne Eintrag hat keine HR-Nummer. Der
+        // Kunde nennt umgekehrt nur seine Anschrift.
+        $supplier = $dom->createElement('SupplierInfo');
+        if ($order?->getSupplier() !== null) {
+            $supplier->appendChild($this->addressElement($dom, $order->getSupplier()));
+        }
+        $supplier->appendChild($this->textElement($dom, 'TaxNo', $order?->getSupplierTaxNo() ?? ''));
+        $supplier->appendChild($this->textElement($dom, 'RegNo', $order?->getSupplierRegisterNo() ?? ''));
+        $el->appendChild($supplier);
+
+        $customer = $dom->createElement('CustomerInfo');
+        if ($order?->getCustomer() !== null) {
+            $customer->appendChild($this->addressElement($dom, $order->getCustomer()));
+        }
+        $el->appendChild($customer);
+
+        foreach ($order?->getItems() ?? [] as $item) {
+            $el->appendChild($this->orderItemElement($dom, $phase, $item, $order));
+        }
+
+        return $el;
+    }
+
+    /** One order line - identified by article number, not by an ordinal one. */
+    private function orderItemElement(DOMDocument $dom, GaebPhase $phase, GaebOrderItem $item, ?GaebOrder $order): DOMElement {
+        $el = $dom->createElement('OrderItem');
+        // Auch die Bestellzeile trägt eine Pflicht-ID (xs:ID); sie wird aus der
+        // Artikelnummer abgeleitet, damit wiederholte Exporte gleich bleiben.
+        $el->setAttribute('ID', $this->identifier('A', $item->getCatalogArticleNo()));
+
+        if ($item->getEan() !== null) {
+            $el->appendChild($dom->createElement('EAN', $item->getEan()));
+        }
+        if ($item->getSupplierArticleNo() !== null) {
+            $el->appendChild($this->textElement($dom, 'SupplierArtNo', mb_substr($item->getSupplierArticleNo(), 0, 15)));
+        }
+        if ($item->getCustomerArticleNo() !== null) {
+            $el->appendChild($this->textElement($dom, 'CustomerArtNo', mb_substr($item->getCustomerArticleNo(), 0, 15)));
+        }
+        $el->appendChild($this->textElement($dom, 'CatalogArtNo', $item->getCatalogArticleNo()));
+        if ($item->getQuantity() !== null) {
+            $el->appendChild($dom->createElement('Qty', $this->num($item->getQuantity())));
+        }
+        if ($item->getUnit() !== null) {
+            $el->appendChild($this->textElement($dom, 'QU', mb_substr($item->getUnit(), 0, 4)));
+        }
+        if ($item->getDescription() !== null) {
+            $description = $dom->createElement('Description');
+            $description->appendChild($this->outlineText($dom, $item->getDescription()));
+            $el->appendChild($description);
+        }
+        // Die Preisanfrage fragt ohne Preis; erst das Angebot nennt einen.
+        if ($phase->carriesPrices() && $item->getPrice() !== null) {
+            $el->appendChild($dom->createElement('NetPrice', $this->amount($item->getPrice())));
+        }
+        $el->appendChild($dom->createElement('DeliveryDate', $item->getDeliveryDate() ?? $order?->getDeliveryDate() ?? '2026-01-01'));
+        if ($item->getVatRate() !== null) {
+            $el->appendChild($dom->createElement('VAT', $this->num($item->getVatRate())));
+        }
+        if ($item->getWeight() !== null) {
+            $el->appendChild($dom->createElement('Weight', $this->num($item->getWeight())));
+            $el->appendChild($this->textElement($dom, 'UW', $item->getWeightUnit() ?? 'kg'));
+        }
+
+        return $el;
+    }
+
+    /** Bare address block, as the invoice parties carry it. */
+    private function addressElement(DOMDocument $dom, GaebParty $party): DOMElement {
+        $address = $dom->createElement('Address');
+        $address->appendChild($this->textElement($dom, 'Name1', $party->getName()));
+        $address->appendChild($this->textElement($dom, 'Street', $party->getStreet()));
+        $address->appendChild($this->textElement($dom, 'PCode', $party->getPostalCode()));
+        $address->appendChild($this->textElement($dom, 'City', $party->getCity()));
+
+        return $address;
     }
 
     /**
