@@ -77,9 +77,10 @@ final class GaebDaXmlGenerator {
         ?GaebParty $client = null,
         ?string $time = null,
         ?GaebAwardCategory $category = null,
-        ?GaebFrameworkAgreement $framework = null,
+        ?GaebFrameworkAgreement $frameworkAgreement = null,
         ?GaebInvoice $invoice = null,
-        ?GaebOrder $order = null
+        ?GaebOrder $order = null,
+        ?GaebParty $site = null
     ): string {
         // Die Zeitvertragsphasen verlangen Angaben, die dieses Modell nicht
         // führt: Baustelle (`CnstSite`) und - beim Einzelauftrag - die Daten des
@@ -126,7 +127,7 @@ final class GaebDaXmlGenerator {
         // mandatory in every phase.
         // Die Mengenermittlung kennt keinen PrjInfo-Block; ihr Projektname steht
         // im Kopf der Mengenermittlung selbst.
-        if ($phase !== GaebPhase::QuantitySurvey) {
+        if ($phase !== GaebPhase::QuantitySurvey && !$phase->isFrameworkAgreement()) {
             $prj = $dom->createElement('PrjInfo');
             $prj->appendChild($this->textElement($dom, 'NamePrj', $name));
             $root->appendChild($prj);
@@ -176,16 +177,44 @@ final class GaebDaXmlGenerator {
             }
             $award->appendChild($dom->createElement('CnstSite'));
         } elseif (!$isSurvey) {
-            $award->appendChild($this->awardInfoElement($dom, $boq, $phase, $currency, $openingDate, $date, $category, $framework));
+            $award->appendChild($this->awardInfoElement($dom, $boq, $phase, $currency, $openingDate, $date, $category, $frameworkAgreement));
 
             // Der Auftraggeber steht im Schema vor dem Auftragnehmer und ist
             // in der Auftragserteilung Pflicht - ohne ihn ist die Datei für
             // X86 unvollständig, was der Preflight meldet.
+            if ($phase === GaebPhase::FrameworkCallOff) {
+                // Der Einzelauftrag nennt die Sätze des Einzelvertrags; ohne
+                // Angaben bleibt der Block leer.
+                $award->appendChild($dom->createElement('IndivAgrInfo'));
+            }
+            // Der Zeitvertrag führt die Parteien schlanker: ohne Länderkennung,
+            // dafür mit der Vergabenummer am Auftraggeber - und das Angebot
+            // nennt ihn nur über sie (an den Beispieldateien belegt).
+            $framework = $phase->isFrameworkAgreement();
             if ($client !== null && $phase->carriesClient()) {
-                $award->appendChild($this->partyElement($dom, 'OWN', $client));
+                // Angebot und Einzelauftrag nennen den Auftraggeber allein über
+                // die Vergabenummer - seine Anschrift ist längst bekannt.
+                $bare = $phase === GaebPhase::FrameworkBid || $phase === GaebPhase::FrameworkCallOff;
+                $own = $bare
+                    ? $dom->createElement('OWN')
+                    : $this->partyElement($dom, 'OWN', $client, !$framework);
+                if ($framework) {
+                    $own->appendChild($this->textElement($dom, 'AwardNo', $frameworkAgreement?->getNumber() ?? '1'));
+                }
+                $award->appendChild($own);
             }
             if ($contractor !== null && $phase->carriesContractor()) {
-                $award->appendChild($this->partyElement($dom, 'CTR', $contractor));
+                $award->appendChild($this->partyElement($dom, 'CTR', $contractor, !$framework));
+            }
+            // Die Baustelle ist im Zeitvertrag Pflicht und braucht dort eine
+            // Anschrift. Fehlt sie, bleibt das Element leer - die Lücke gehört
+            // in den Preflight, nicht in eine erfundene Adresse.
+            if ($framework && $phase !== GaebPhase::FrameworkBid) {
+                $cnstSite = $dom->createElement('CnstSite');
+                if ($site !== null) {
+                    $cnstSite->appendChild($this->addressElement($dom, $site));
+                }
+                $award->appendChild($cnstSite);
             }
         }
 
@@ -199,12 +228,21 @@ final class GaebDaXmlGenerator {
         // hat gar keinen BoQInfo-Block: dort hängt die Gliederung unmittelbar
         // unter BoQ.
         $boqInfo = $isSurvey ? $boqEl : $dom->createElement('BoQInfo');
-        if (!$isSurvey) {
+        // Nur das Zeitvertrag-Angebot verzichtet auf den Kurznamen.
+        if (!$isSurvey && $phase !== GaebPhase::FrameworkBid) {
             $boqInfo->appendChild($this->textElement($dom, 'Name', mb_substr($name, 0, 20)));
         }
         if ($phase->carriesTexts()) {
             $boqInfo->appendChild($this->textElement($dom, 'LblBoQ', mb_substr($name, 0, 60)));
-            $boqInfo->appendChild($dom->createElement('OutlCompl', $this->textScope($boq)));
+            // Der Einzelauftrag datiert das Verzeichnis, auf das er sich beruft.
+            if ($phase === GaebPhase::FrameworkCallOff) {
+                $boqInfo->appendChild($dom->createElement('Date', $date ?? '2026-01-01'));
+            }
+            // Der Textumfang gehört zur Ausschreibung; der Zeitvertrag kennt
+            // ihn nicht.
+            if (!$phase->isFrameworkAgreement()) {
+                $boqInfo->appendChild($dom->createElement('OutlCompl', $this->textScope($boq)));
+            }
         }
         $this->appendBreakdown($dom, $boqInfo, $boq);
         // How many shares the client requires the unit price to be split into
@@ -265,7 +303,9 @@ final class GaebDaXmlGenerator {
             $ctgy = $dom->createElement('BoQCtgy');
             $ctgy->setAttribute('ID', $section->getExternalId() ?? $this->identifier('C', $section->getReference()));
             $ctgy->setAttribute('RNoPart', $this->localPart($section->getReference(), $parentRef));
-            if ($section->getLabel() !== null && $phase->carriesTexts()) {
+            // Der Einzelauftrag ruft ab, was benannt ist - er beschriftet die
+            // Gruppen nicht erneut.
+            if ($section->getLabel() !== null && $phase->carriesTexts() && $phase !== GaebPhase::FrameworkCallOff) {
                 $ctgy->appendChild($this->htmlText($dom, 'LblTx', $section->getLabel()));
             }
             if ($phase->carriesTexts()) {
@@ -274,12 +314,19 @@ final class GaebDaXmlGenerator {
             $childBody = $dom->createElement('BoQBody');
             $this->appendBody($dom, $childBody, $boq, $phase, $section->getReference(), $section->getReference());
             $ctgy->appendChild($childBody);
+            // Die Zeitvertrag-Aufforderung fragt das Auf-/Abgebot auch je
+            // Gruppe ab, nicht nur je Position - hinter deren Inhalt.
+            if ($phase === GaebPhase::FrameworkRequestForBid) {
+                $ctgy->appendChild($dom->createElement('BidUpDownReq', 'Yes'));
+            }
             // The bid demands a sum on every group; where the document carries
             // none it is added up from the items below. Ohne Preise gibt es
             // nichts zu summieren - die Mengenermittlung weist ihr Schema ab.
             // Jede Gruppe einer Preisphase muss ihre Summe nennen; wo das
             // Dokument keine mitbringt, wird sie aus den Positionen gebildet.
-            if ($phase->carriesPrices()) {
+            // Der Zeitvertrag bepreist ohne Menge - eine Gruppensumme gäbe es
+            // dort nicht zu bilden.
+            if ($phase->carriesPrices() && !$phase->isFrameworkAgreement()) {
                 if ($section->getTotals()?->getTotal() === null) {
                     $ctgy->appendChild($this->totalElement($dom, $this->calculator->sectionTotal($boq, $section->getReference())));
                 } else {
@@ -392,7 +439,12 @@ final class GaebDaXmlGenerator {
             $this->appendCatalogAssignments($dom, $splitEl, $split->getCatalogAssignments());
             $el->appendChild($splitEl);
         }
-        if ($carriesQuantity && $item->getUnit() !== null && $phase->carriesQuantities()) {
+        // Die Einheit gehört zur Leistung, nicht zur Menge: Der Zeitvertrag
+        // bepreist „je m²", ohne schon zu wissen, wie viele es werden. Der
+        // Einzelauftrag ruft umgekehrt nur eine Menge ab - Einheit und
+        // Beschreibung stehen im Rahmenvertrag.
+        if ($carriesQuantity && $item->getUnit() !== null && ($phase->carriesQuantities() || ($phase->carriesBidUpDown() && $phase->carriesTexts()))
+            && $phase !== GaebPhase::FrameworkCallOff) {
             $el->appendChild($this->textElement($dom, 'QU', $item->getUnit()));
         }
         if ($phase->carriesTexts()) {
@@ -443,7 +495,15 @@ final class GaebDaXmlGenerator {
         // so an item without one carries its short text directly.
         $shortText = $item->getShortText();
         $longText = $item->getLongText();
-        if ($phase->carriesTexts() && ($shortText !== null || $longText !== null)) {
+        // Der Einzelauftrag beruft sich auf die Position im Rahmenvertrag,
+        // statt ihren Text zu wiederholen - dafür steht die Katalognummer.
+        if ($phase === GaebPhase::FrameworkCallOff) {
+            $reference = $dom->createElement('Description');
+            $reference->appendChild($this->textElement($dom, 'WICNo', $item->getCatalogueNo() ?? $item->getReference()));
+            $el->appendChild($reference);
+        }
+
+        if ($phase->carriesTexts() && $phase !== GaebPhase::FrameworkCallOff && ($shortText !== null || $longText !== null)) {
             $desc = $dom->createElement('Description');
 
             if ($longText !== null) {

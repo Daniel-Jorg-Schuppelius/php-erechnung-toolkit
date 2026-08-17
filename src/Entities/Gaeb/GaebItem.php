@@ -47,6 +47,7 @@ final class GaebItem {
         private readonly ?Money $markupBase = null,
         private readonly bool $bidUpDownRequired = false,
         private readonly ?string $bidUpDownPercent = null,
+        private readonly ?string $catalogueNo = null,
         private readonly array $textComplements = [],
         private readonly array $subDescriptions = [],
         private readonly array $unitPriceComponents = [],
@@ -127,6 +128,15 @@ final class GaebItem {
      */
     public function getMarkupType(): ?GaebMarkupType {
         return $this->markupType;
+    }
+
+    /**
+     * Number this item has in the parent bill of quantity (`WICNo`). A single
+     * call-off from a framework agreement refers to it instead of repeating the
+     * description - the text stands in the agreement.
+     */
+    public function getCatalogueNo(): ?string {
+        return $this->catalogueNo;
     }
 
     /**

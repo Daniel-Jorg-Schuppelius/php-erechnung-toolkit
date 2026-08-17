@@ -100,7 +100,7 @@ Direktauftrag), haben hier keinen Wert.
 | ------ | ----------- | ----- |
 | X80–X87, X52 | `Award` | lesen + schreiben |
 | X31 | `QtyDeterm` | lesen + schreiben |
-| X83Z–X86ZR (Zeitvertrag) | `Award`, **ohne** `PrjInfo` | nur lesen |
+| X83Z–X86ZR (Zeitvertrag) | `Award`, **ohne** `PrjInfo` | lesen + schreiben |
 | X89/X89B (Rechnung) | `Invoice` | lesen + schreiben |
 | X93–X97 (Handel) | `Order` | lesen + schreiben |
 
@@ -109,13 +109,25 @@ es nicht geht, wirft der Schreiber eine Ausnahme mit Begründung, statt eine hal
 richtige Vergabedatei abzuliefern — bei einer Ausschreibung ist eine klare
 Absage besser als eine Datei, die die Vergabestelle zurückweist.
 
-**Zeitvertrag:** Kopf und Parteien sind vermessen und umgesetzt
-(`GaebAwardCategory`, `GaebFrameworkAgreement` mit Laufzeit, Auf-/Abgebot und
-Mindestwerten, je Phase eigene `AwardInfo`: 84Z trägt nur ein Datum, 86ZE die
-Vertragsnummer). Offen ist die **Positionsebene** — der Zeitvertrag preist
-Leistungen *ohne Menge*, sie entsteht erst beim Einzelabruf, und welche Phase
-Preise trägt, unterscheidet sich. Der Einzelauftrag (86ZE) verlangt zusätzlich
-Stundenlohn-, Material- und Zuschlagssätze aus `IndivAgrInfo`.
+**Zeitvertrag (X83Z–X86ZE):** umgesetzt. Er dreht die gewohnte Reihenfolge um —
+und das ist der Grund, warum man ihn nicht als LV-Variante bauen kann:
+
+| Phase | Was die Position trägt |
+| ----- | ---------------------- |
+| `X83Z` Aufforderung | Einheit, **Listenpreis**, Langtext, `BidUpDownReq` — auch je Gruppe |
+| `X84Z` Angebot | **nur** `BidUpDownPct` — ein Prozentsatz, sonst nichts |
+| `X86ZR` Rahmenauftrag | wie 83Z, dazu den vereinbarten Prozentsatz |
+| `X86ZE` Einzelauftrag | **Menge** und `WICNo` (Verweis ins Mutter-LV), kein Text |
+
+Der Auftraggeber preist also vor, der Bieter antwortet mit **einer Zahl**, und
+die Menge entsteht erst beim Abruf. Entsprechend gibt es im Zeitvertrag keine
+Gruppensummen (ohne Menge nichts zu summieren), keinen Textumfang und keine
+Länderkennung an den Parteien; Angebot und Einzelauftrag nennen den Auftraggeber
+allein über die Vergabenummer. Die Baustelle (`CnstSite`) ist Pflicht und braucht
+eine Anschrift — sie wird als `site` übergeben, nicht erfunden.
+
+`GaebAwardCategory` (Vergabeart, im Zeitvertrag auf vier Werte begrenzt) und
+`GaebFrameworkAgreement` (Laufzeit, Auf-/Abgebot, Mindestwerte) tragen den Kopf.
 
 **Rechnung (X89/X89B):** umgesetzt. Sie hängt unter `Invoice` statt unter
 `Award` und unterscheidet sich in zwei Punkten von jeder anderen Phase
@@ -448,7 +460,7 @@ nichts validieren.
 - [x] Nachtragskopf `COInfo` (Phase, Ersteller, Begründung, Datum)
 - [x] Zuschlagsarten mit Bemessungsgrundlage und Zuschlagsrechnung
 - [x] Vergabeart `Cat` als Enum (11 Werte, versionsabhängig, Zeitvertragsfilter)
-- [ ] Zeitvertrag **schreiben** (Positionsebene: preist ohne Menge, Preise je Phase)
+- [x] Zeitvertrag schreiben (X83Z/X84Z/X86ZR/X86ZE, alle vier schemavalide)
 - [x] Rechnung X89/X89B schreiben (`Invoice`: Kopf, Ersteller, Empfänger, 20 Anteilsarten)
 - [x] Handel X93–X97 schreiben (`Order`: Artikelnummern, Liefertermine, Gewichte)
 - [x] Export-Guard: GAEB-widrige Nachtragsnummern werden benannt statt geschrieben

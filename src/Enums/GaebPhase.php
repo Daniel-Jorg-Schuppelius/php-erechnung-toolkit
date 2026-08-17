@@ -75,11 +75,9 @@ enum GaebPhase: string {
     }
 
     /**
-     * Can this phase be written as DA XML today?
-     *
-     * Reading covers every phase. Writing covers all but the framework
-     * agreement (Zeitvertrag), whose item level prices without quantities and
-     * differs per phase.
+     * Can this phase be written as DA XML? Since the framework agreement was
+     * completed, every one of them can - the method stays as the single place
+     * to answer the question when a new phase arrives.
      */
     public function isWritableAsDaXml(): bool {
         return true;
@@ -142,8 +140,13 @@ enum GaebPhase: string {
      */
     public function carriesPrices(): bool {
         return match ($this) {
-            self::Lv, self::RequestForBid, self::FrameworkRequestForBid,
-            self::QuantitySurvey, self::PriceInquiry => false,
+            // Der Zeitvertrag dreht die gewohnte Reihenfolge um: Die
+            // Aufforderung nennt bereits die Listenpreise, der Bieter antwortet
+            // nur mit einem Auf-/Abgebot in Prozent, und der Einzelauftrag ruft
+            // ab, was im Rahmenvertrag steht (an den amtlichen Beispieldateien
+            // belegt).
+            self::Lv, self::RequestForBid, self::QuantitySurvey, self::PriceInquiry,
+            self::FrameworkBid, self::FrameworkCallOff => false,
             default => true,
         };
     }
@@ -196,9 +199,11 @@ enum GaebPhase: string {
             // Fällen eine Menge zu fordern hieße, die Phase misszuverstehen.
             // Der Zeitvertrag preist Leistungen ohne Menge: Sie entsteht erst
             // beim Einzelabruf (belegt an den amtlichen Beispieldateien).
+            // Im Zeitvertrag steht die Menge erst im Einzelauftrag fest - bis
+            // dahin werden Leistungen ohne Menge bepreist.
             self::Bid, self::QuantitySurvey,
             self::FrameworkRequestForBid, self::FrameworkBid,
-            self::FrameworkCallOff, self::FrameworkAgreement => false,
+            self::FrameworkAgreement => false,
             default => true,
         };
     }

@@ -14,7 +14,7 @@ namespace Tests\Generators;
 
 use CommonToolkit\Enums\CurrencyCode;
 use CommonToolkit\ValueObjects\Money;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebChangeOrder, GaebInvoice, GaebInvoiceShare, GaebItem, GaebOrder, GaebOrderItem, GaebParty, GaebSection};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebChangeOrder, GaebFrameworkAgreement, GaebInvoice, GaebInvoiceShare, GaebItem, GaebOrder, GaebOrderItem, GaebParty, GaebSection};
 use ERechnungToolkit\Enums\{GaebAwardCategory, GaebChangeOrderInitiator, GaebChangeOrderPhase, GaebChangeOrderStatus, GaebInvoiceShareType, GaebInvoiceType, GaebItemType, GaebMarkupType, GaebPhase};
 use ERechnungToolkit\Generators\GaebDaXmlGenerator;
 use ERechnungToolkit\Helper\Gaeb\GaebCalculator;
@@ -182,19 +182,7 @@ class GaebPhaseConformanceTest extends BaseTestCase {
         $this->assertTrue(GaebAwardCategory::PublicInvitation->allowedInFrameworkAgreement());
     }
 
-    /**
-     * Gelesen wird jede Phase, geschrieben nicht: Zeitvertrag, Rechnung und
-     * Handel hängen unter eigenen Wurzelblöcken mit eigener Struktur. Das sagt
-     * der Schreiber deutlich, statt eine halb richtige Vergabedatei abzuliefern.
-     */
-    public function test_framework_phases_refuse_to_be_written(): void {
-        $this->expectException(\InvalidArgumentException::class);
-        $this->expectExceptionMessageMatches('/Phase X83Z/');
-
-        (new GaebDaXmlGenerator)->generate($this->document(), GaebPhase::FrameworkRequestForBid);
-    }
-
-    /** Was geschrieben werden kann, ist im Enum festgehalten - nicht im Generator. */
+    /** Seit dem Zeitvertrag lässt sich jede Phase schreiben, nicht nur lesen. */
     public function test_enum_states_which_phases_can_be_written(): void {
         $this->assertTrue(GaebPhase::Lv->isWritableAsDaXml());
         $this->assertTrue(GaebPhase::Award->isWritableAsDaXml());
@@ -202,8 +190,7 @@ class GaebPhaseConformanceTest extends BaseTestCase {
         $this->assertTrue(GaebPhase::Invoice->isWritableAsDaXml());
 
         $this->assertTrue(GaebPhase::Order->isWritableAsDaXml());
-
-        $this->assertFalse(GaebPhase::FrameworkBid->isWritableAsDaXml());
+        $this->assertTrue(GaebPhase::FrameworkBid->isWritableAsDaXml());
     }
 
     private function order(): GaebOrder {
@@ -274,6 +261,101 @@ class GaebPhaseConformanceTest extends BaseTestCase {
         $this->assertStringContainsString('<RegNo/>', $xml);
         // Der Kunde nennt nur seine Anschrift, keine Steuernummer.
         $this->assertMatchesRegularExpression('#<CustomerInfo>\s*<Address>.*?</Address>\s*</CustomerInfo>#s', $xml);
+    }
+
+    private function framework(): GaebFrameworkAgreement {
+        return new GaebFrameworkAgreement(
+            label: 'Winterdienst 2026',
+            description: 'Räumen und Streuen der Verkehrsflächen',
+            begin: '2026-01-01',
+            end: '2026-12-31',
+            number: 'RV-7',
+        );
+    }
+
+    private function frameworkDocument(): GaebBoq {
+        return new GaebBoq(
+            projectName: 'Winterdienst',
+            sections: [new GaebSection(reference: '001', label: 'Räumen')],
+            items: [new GaebItem(
+                reference: '001.0010',
+                sectionReference: '001',
+                shortText: 'Räumen je m²',
+                longText: 'Räumen und Streuen der Verkehrsflächen nach Bedarf.',
+                quantity: '25.000',
+                unit: 'm2',
+                unitPrice: Money::of('7.80', CurrencyCode::Euro),
+                bidUpDownRequired: true,
+                bidUpDownPercent: '-5.00',
+            )],
+        );
+    }
+
+    /** @return list<array{GaebPhase}> */
+    public static function frameworkPhases(): array {
+        return [
+            [GaebPhase::FrameworkRequestForBid], [GaebPhase::FrameworkBid],
+            [GaebPhase::FrameworkAgreement], [GaebPhase::FrameworkCallOff],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('frameworkPhases')]
+    public function test_framework_phases_write_valid_documents(GaebPhase $phase): void {
+        $xml = (new GaebDaXmlGenerator)->generate(
+            $this->frameworkDocument(),
+            $phase,
+            contractor: $this->party('Bau GmbH'),
+            client: $this->party('Stadt Bonn'),
+            frameworkAgreement: $this->framework(),
+            site: $this->party('Baustelle Nordstraße'),
+        );
+
+        $this->assertSame([], (new GaebSchemaValidator)->validate($xml), "X{$phase->value} ist nicht schemavalide.");
+    }
+
+    /**
+     * Der Zeitvertrag dreht die gewohnte Reihenfolge um: Die Aufforderung nennt
+     * bereits die Listenpreise und fragt ein Auf-/Abgebot ab, der Bieter
+     * antwortet allein mit dem Prozentsatz.
+     */
+    public function test_framework_bid_answers_with_a_percentage_only(): void {
+        $generator = new GaebDaXmlGenerator;
+        $args = [
+            'contractor' => $this->party('Bau GmbH'),
+            'client' => $this->party('Stadt Bonn'),
+            'frameworkAgreement' => $this->framework(),
+            'site' => $this->party('Baustelle Nordstraße'),
+        ];
+
+        $request = $generator->generate($this->frameworkDocument(), GaebPhase::FrameworkRequestForBid, ...$args);
+        $this->assertStringContainsString('<UP>7.8</UP>', $request);
+        $this->assertStringContainsString('<BidUpDownReq>Yes</BidUpDownReq>', $request);
+
+        $bid = $generator->generate($this->frameworkDocument(), GaebPhase::FrameworkBid, ...$args);
+        $this->assertStringContainsString('<BidUpDownPct>-5</BidUpDownPct>', $bid);
+        $this->assertStringNotContainsString('<UP>', $bid);
+    }
+
+    /**
+     * Die Menge steht erst im Einzelabruf fest; bis dahin werden Leistungen
+     * ohne Menge bepreist. Der Abruf beruft sich dafür auf die Position im
+     * Rahmenvertrag, statt ihren Text zu wiederholen.
+     */
+    public function test_quantity_appears_only_in_the_single_call_off(): void {
+        $generator = new GaebDaXmlGenerator;
+        $args = [
+            'client' => $this->party('Stadt Bonn'),
+            'frameworkAgreement' => $this->framework(),
+            'site' => $this->party('Baustelle Nordstraße'),
+        ];
+
+        $agreement = $generator->generate($this->frameworkDocument(), GaebPhase::FrameworkAgreement, ...$args);
+        $this->assertStringNotContainsString('<Qty>', $agreement);
+
+        $callOff = $generator->generate($this->frameworkDocument(), GaebPhase::FrameworkCallOff, ...$args);
+        $this->assertStringContainsString('<Qty>25</Qty>', $callOff);
+        $this->assertStringContainsString('<WICNo>001.0010</WICNo>', $callOff);
+        $this->assertStringNotContainsString('<CompleteText>', $callOff);
     }
 
     /** Die Preisanfrage fragt ohne Preis; erst das Angebot nennt einen. */
