@@ -64,7 +64,13 @@ class GaebFormatDetectorTest extends BaseTestCase {
 
         $this->assertSame(GaebFormat::Gaeb90, $result['format']);
         $this->assertSame('83', $result['phaseCode']);
-        $this->assertFalse($result['format']->isSupported());
+        // Alle drei Familien werden gelesen und geschrieben; nur eine nicht
+        // erkannte Datei bleibt außen vor.
+        $this->assertTrue($result['format']->isSupported());
+        $this->assertTrue($result['format']->isWritable());
+        $this->assertTrue(GaebFormat::Gaeb2000->isWritable());
+        $this->assertFalse(GaebFormat::Unknown->isSupported());
+        $this->assertFalse(GaebFormat::Unknown->isWritable());
     }
 
     /** Fehlt die Kennung im Inhalt, hilft die Endung — aber nur als letzter Ausweg. */

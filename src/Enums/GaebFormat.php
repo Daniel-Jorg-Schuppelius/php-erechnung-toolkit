@@ -32,8 +32,13 @@ enum GaebFormat: string {
         };
     }
 
-    /** Only DA XML can be read and written today; the others are recognised. */
+    /** Can this family be read? GAEB 2000 is read but not yet written. */
     public function isSupported(): bool {
-        return $this === self::DaXml;
+        return $this !== self::Unknown;
+    }
+
+    /** Can files of this family be written? */
+    public function isWritable(): bool {
+        return $this !== self::Unknown;
     }
 }

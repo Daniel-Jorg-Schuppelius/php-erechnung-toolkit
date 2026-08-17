@@ -86,11 +86,21 @@ final class GaebCalculator {
     }
 
     /**
-     * Total of the whole document: every top level group plus the items that
-     * hang directly under it.
+     * Total of the whole document. Summed over the items directly, not over the
+     * groups: a bid file carries prices without any group at all, and a position
+     * whose group is missing would silently drop out of a sum built top down.
      */
     public function documentTotal(GaebBoq $boq): Money {
-        return $this->sectionTotal($boq, null);
+        $sum = Money::zero($boq->getCurrency(), self::AMOUNT_SCALE);
+
+        foreach ($boq->getItems() as $item) {
+            $total = $this->itemTotal($item);
+            if ($total !== null) {
+                $sum = $sum->plus($total);
+            }
+        }
+
+        return $sum;
     }
 
     /**

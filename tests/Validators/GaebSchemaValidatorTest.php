@@ -115,6 +115,27 @@ XML;
         $this->assertArrayNotHasKey('Lib', $available);
     }
 
+    /**
+     * Ältere Linien werden mitgeliefert, damit eingehende Dateien prüfbar sind:
+     * 3.2 verhält sich wie 3.3, 3.1 nennt im Namespace weder Phase noch Version
+     * und hat zwei Ausgaben, zwischen denen das `VersDate` entscheidet.
+     */
+    public function test_older_versions_are_available(): void {
+        $available = $this->validator->availableSchemas();
+
+        foreach (['81', '83', '84', '86', '83Z', '86ZR'] as $phase) {
+            $this->assertArrayHasKey('3.2', $available[$phase] ?? [], "Phase {$phase} fehlt in 3.2.");
+        }
+
+        $standard = $this->validator->schemaFile('81', '3.1');
+        $bid = $this->validator->schemaFile('84', '3.1');
+
+        $this->assertNotNull($standard);
+        $this->assertNotNull($bid);
+        $this->assertStringContainsString('_84_3.1_', (string) $bid);
+        $this->assertNotSame($standard, $bid);
+    }
+
     public function test_detects_phase_and_version_from_namespace(): void {
         $this->assertSame(
             ['phase' => '83', 'version' => '3.3'],

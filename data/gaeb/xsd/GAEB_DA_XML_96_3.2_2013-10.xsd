@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 
+X96 - Handel-Bestellung 
+GAEB_DA_XML_3.2_2013-10  
+======================
+
+2013-11-15 Bearbeiter: Martin Hubert
+- Namen der Lib auf "GAEB_DA_XML_Lib_3.2_2013-10.xsd" geändert
+
+GAEB_DA_XML 3.1 2009-12
+Letzte Änderung 2009-11-20 21:00
+-->
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns="http://www.gaeb.de/GAEB_DA_XML/DA96/3.2" targetNamespace="http://www.gaeb.de/GAEB_DA_XML/DA96/3.2" elementFormDefault="qualified" attributeFormDefault="unqualified">
+	<xs:redefine schemaLocation="GAEB_DA_XML_Lib_3.2_2013-10.xsd">
+		<xs:simpleType name="tgDP">
+			<xs:restriction base="tgDP">
+				<xs:enumeration value="96">
+					<xs:annotation>
+						<xs:documentation>Bestellung</xs:documentation>
+					</xs:annotation>
+				</xs:enumeration>
+			</xs:restriction>
+		</xs:simpleType>
+		<xs:complexType name="tgGAEB">
+			<xs:complexContent>
+				<xs:restriction base="tgGAEB">
+					<xs:sequence>
+						<xs:element name="GAEBInfo" type="tgGAEBInfo">
+							<xs:annotation>
+								<xs:documentation>Informationen zum GAEB-Datenaustausch</xs:documentation>
+							</xs:annotation>
+						</xs:element>
+						<xs:element name="PrjInfo" type="tgPrjInfo" minOccurs="0">
+							<xs:annotation>
+								<xs:documentation>Informationen zum Projekt</xs:documentation>
+							</xs:annotation>
+						</xs:element>
+						<xs:element name="Order" type="tgOrder">
+							<xs:annotation>
+								<xs:documentation>Bestellung</xs:documentation>
+							</xs:annotation>
+						</xs:element>
+						<xs:element name="AddText" type="tgAddText" minOccurs="0" maxOccurs="unbounded">
+							<xs:annotation>
+								<xs:documentation>Zusaetzlicher Text; Zusätzliche Textinformation können hier abgelegt werden. </xs:documentation>
+							</xs:annotation>
+						</xs:element>
+					</xs:sequence>
+				</xs:restriction>
+			</xs:complexContent>
+		</xs:complexType>
+	</xs:redefine>
+	<!--GAEB-->
+	<xs:element name="GAEB" type="tgGAEB"/>
+	<!--=========================================================================================================-->
+</xs:schema>
