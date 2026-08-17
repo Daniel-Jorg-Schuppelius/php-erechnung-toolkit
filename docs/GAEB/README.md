@@ -35,6 +35,14 @@ Die Familie wird **aus dem Inhalt** bestimmt, nicht aus der Endung
 werden in der Praxis umbenannt, weitergeleitet und in ZIPs gepackt. Die Codepage
 (CP850, CP1252, UTF-8) wird ebenfalls erkannt.
 
+> **Unterbeschreibungen tragen eigene Texte.** In GAEB 90 eröffnet die
+> **Zeilenart 24** eine Unterbeschreibung (bis zu 99 je Position, mit eigener
+> Nummer, Menge und Einheit, aber ohne Preis) — und die folgenden Kurz- und
+> Langtextsätze gehören **ihr**, nicht mehr der Position. Wer das übersieht,
+> überschreibt den Positionstext: „Einfachfenster Kiefer" kam so als
+> „Schlußbeschichtung AK-Lackfarbe" an. In den Referenzdateien betrifft das
+> jede fünfte Position.
+
 > **Spaltenformate immer mit `mb_substr` lesen.** Ein Umlaut in einem Textfeld
 > ist in CP850 ein Byte, nach der Umwandlung nach UTF-8 aber zwei — mit `substr`
 > verschiebt sich ab dem ersten „ß" jede Folgespalte. Das ist im Toolkit
@@ -101,6 +109,7 @@ Direktauftrag), haben hier keinen Wert.
 | X80–X87, X52 | `Award` | lesen + schreiben |
 | X31 | `QtyDeterm` | lesen + schreiben |
 | X83Z–X86ZR (Zeitvertrag) | `Award`, **ohne** `PrjInfo` | lesen + schreiben |
+| X50/X51 (Kostenermittlung) | `ElementalCosting` | lesen + schreiben; Schemaprüfung eingeschränkt |
 | X89/X89B (Rechnung) | `Invoice` | lesen + schreiben |
 | X93–X97 (Handel) | `Order` | lesen + schreiben |
 
@@ -150,6 +159,37 @@ Drei Eigenheiten, die man sonst falsch baut:
 
 Abzüge tragen ihr Vorzeichen im **Typ**, nicht in der Zahl
 (`reducesAmount()`); eine Gegenforderung kehrt es um (`lowersTotal()`).
+
+**Kostenermittlung (X50/X51):** umgesetzt. Sie beschreibt nicht, was zu tun
+ist, sondern was es kosten soll — gegliedert nach **Kostengruppen** statt nach
+Gewerken, und verschachtelt: Eine Kostengruppe enthält Untergruppen, diese
+Bauelemente. Der `ECType` sagt, wie fest die Zahlen sind: von der
+Kostenschätzung in der Vorplanung bis zur Kostenfeststellung nach geprüfter
+Schlussrechnung (`isActual()`).
+
+Zwei Eigenheiten:
+
+- **Ein früher Kennwert ist eine Spanne, keine Zahl.** `UPFrom`/`UPAvg`/`UPTo`
+  tragen sie; `hasPriceRange()` fragt sie ab. Diese Ehrlichkeit gehört mit
+  übertragen, statt sie auf einen Mittelwert einzudampfen.
+- **Zwei Bauformen.** `.2` schreibt den Elementbezeichner auf jeder Ebene voll
+  aus (`300`, `310`, `314` — die übliche Form für DIN 276), `.1` gibt nur den
+  Teil der eigenen Ebene und überlässt das Zusammensetzen dem Leseprogramm. Der
+  Validator erkennt die Form am Inhalt (`EleNo` gegen `ElePart`).
+
+> **Kostengruppen in GAEB 90 gibt es nicht als Norm.** Die Zeilenarten **70–89
+> sind laut „Freiem GAEB Buch" ausdrücklich für individuelle Informationen
+> freigegeben** — jeder Hersteller belegt sie anders (MWM etwa die 70 mit einer
+> alphanumerischen Ordnungszahl). In keiner der GAEB-90-Referenzdateien kommt
+> eine Zeilenart 75 vor. Sie fest als Kostengruppe zu lesen hieße, fremde
+> Herstellerdaten umzudeuten; das unterbleibt bewusst.
+
+> **Schemaprüfung eingeschränkt:** Die Kostenschemata stapeln **zwei
+> `xs:redefine`-Stufen** übereinander (50.2 über 50 über Lib5x). libxml löst das
+> nicht auf und meldet stattdessen fehlende Typen — ein Folgefehler, der wie ein
+> Dokumentfehler aussieht. Der Validator sagt das deshalb ausdrücklich, statt
+> ihn durchzureichen. Für eine formale Prüfung braucht es ein Werkzeug mit
+> vollständiger XSD-Unterstützung (z. B. den GAEB-XML-Checker).
 
 **Handel (X93–X97):** umgesetzt. Diese Phasen laufen **neben** der Vergabe: Der
 Unternehmer fragt beim Händler Preise an (X93), erhält ein Angebot (X94),
@@ -461,6 +501,9 @@ nichts validieren.
 - [x] Zuschlagsarten mit Bemessungsgrundlage und Zuschlagsrechnung
 - [x] Vergabeart `Cat` als Enum (11 Werte, versionsabhängig, Zeitvertragsfilter)
 - [x] Zeitvertrag schreiben (X83Z/X84Z/X86ZR/X86ZE, alle vier schemavalide)
+- [x] Kostenermittlung X50/X51 schreiben (beide Bauformen, Preisspannen)
+- [x] X50/X51 lesen (`GaebCostingParser`, Bauform am Inhalt erkannt)
+- [x] GAEB 90: Unterbeschreibungen (Zeilenart 24) inkl. Textzuordnung
 - [x] Rechnung X89/X89B schreiben (`Invoice`: Kopf, Ersteller, Empfänger, 20 Anteilsarten)
 - [x] Handel X93–X97 schreiben (`Order`: Artikelnummern, Liefertermine, Gewichte)
 - [x] Export-Guard: GAEB-widrige Nachtragsnummern werden benannt statt geschrieben

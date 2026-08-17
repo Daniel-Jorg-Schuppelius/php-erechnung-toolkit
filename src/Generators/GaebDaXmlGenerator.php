@@ -15,7 +15,7 @@ namespace ERechnungToolkit\Generators;
 use CommonToolkit\ValueObjects\Money;
 use DOMDocument;
 use DOMElement;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalogAssignment, GaebChangeOrder, GaebFrameworkAgreement, GaebInvoice, GaebItem, GaebOrder, GaebOrderItem, GaebParty, GaebSection, GaebTotals};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalogAssignment, GaebChangeOrder, GaebCostElement, GaebCosting, GaebFrameworkAgreement, GaebInvoice, GaebItem, GaebOrder, GaebOrderItem, GaebParty, GaebSection, GaebTotals};
 use ERechnungToolkit\Enums\{GaebAwardCategory, GaebChangeOrderStatus, GaebItemType, GaebPhase};
 use ERechnungToolkit\Helper\Gaeb\{GaebCalculator, GaebTakeoffRecord};
 use InvalidArgumentException;
@@ -80,7 +80,8 @@ final class GaebDaXmlGenerator {
         ?GaebFrameworkAgreement $frameworkAgreement = null,
         ?GaebInvoice $invoice = null,
         ?GaebOrder $order = null,
-        ?GaebParty $site = null
+        ?GaebParty $site = null,
+        ?GaebCosting $costing = null
     ): string {
         // Die Zeitvertragsphasen verlangen Angaben, die dieses Modell nicht
         // führt: Baustelle (`CnstSite`) und - beim Einzelauftrag - die Daten des
@@ -140,6 +141,14 @@ final class GaebDaXmlGenerator {
 
         $isInvoice = $phase === GaebPhase::Invoice || $phase === GaebPhase::InvoiceAttachment;
         $isTrade = $phase->isTrade();
+
+        // Die Kostenermittlung beschreibt nicht, was zu tun ist, sondern was es
+        // kosten soll - gegliedert nach Kostengruppen statt nach Gewerken.
+        if ($phase->isCosting()) {
+            $root->appendChild($this->costingElement($dom, $phase, $costing, $currency, $date));
+
+            return (string) $dom->saveXML();
+        }
 
         // Der Handel hat kein Leistungsverzeichnis: Er kauft Artikel, keine
         // Positionen, und ist damit hinter der Wurzel ein anderes Dokument.
@@ -1040,6 +1049,77 @@ final class GaebDaXmlGenerator {
         if ($item->getWeight() !== null) {
             $el->appendChild($dom->createElement('Weight', $this->num($item->getWeight())));
             $el->appendChild($this->textElement($dom, 'UW', $item->getWeightUnit() ?? 'kg'));
+        }
+
+        return $el;
+    }
+
+    /**
+     * A cost determination (X50 building cost catalogue, X51 costing).
+     *
+     * Elements nest, and their number decides the shape of the document: the
+     * `.2` form writes it out in full on every level, the `.1` form gives only
+     * the part of the current level.
+     */
+    private function costingElement(DOMDocument $dom, GaebPhase $phase, ?GaebCosting $costing, string $currency, ?string $date): DOMElement {
+        $el = $dom->createElement('ElementalCosting');
+        $el->appendChild($dom->createElement('DP', $phase->value));
+
+        $info = $dom->createElement('ECInfo');
+        $info->appendChild($this->textElement($dom, 'Name', mb_substr($costing?->getName() ?? 'Kostenermittlung', 0, 20)));
+        if ($costing?->getLabel() !== null) {
+            $info->appendChild($this->textElement($dom, 'LblEC', mb_substr($costing->getLabel(), 0, 60)));
+        }
+        if ($costing?->getType() !== null) {
+            $info->appendChild($dom->createElement('ECType', $costing->getType()->value));
+        }
+        if ($costing?->getMethod() !== null) {
+            $info->appendChild($dom->createElement('ECMethod', $costing->getMethod()->value));
+        }
+        $info->appendChild($dom->createElement('Date', $costing?->getDate() ?? $date ?? '2026-01-01'));
+        $info->appendChild($dom->createElement('Cur', $currency));
+        $el->appendChild($info);
+
+        $body = $dom->createElement('ECBody');
+        foreach ($costing?->getElements() ?? [] as $element) {
+            $body->appendChild($this->costElement($dom, $element, $costing?->hasFullElementNumbers() ?? true));
+        }
+        $el->appendChild($body);
+
+        return $el;
+    }
+
+    /** One cost element, with its children nested inside it. */
+    private function costElement(DOMDocument $dom, GaebCostElement $element, bool $fullNumbers): DOMElement {
+        $el = $dom->createElement('CostElement');
+
+        if ($element->getNumber() !== null) {
+            $el->appendChild($this->textElement($dom, $fullNumbers ? 'EleNo' : 'ElePart', $element->getNumber()));
+        }
+        $el->appendChild($this->textElement($dom, 'Descr', mb_substr($element->getDescription(), 0, 60)));
+        $this->appendCatalogAssignments($dom, $el, $element->getCatalogAssignments());
+        if ($element->getRemark() !== null) {
+            $el->appendChild($this->htmlText($dom, 'Remark', $element->getRemark()));
+        }
+        if ($element->getQuantity() !== null) {
+            $el->appendChild($dom->createElement('Qty', $this->num($element->getQuantity())));
+        }
+        $el->appendChild($this->textElement($dom, 'QU', $element->getUnit()));
+        if ($element->getUnitPrice() !== null) {
+            $el->appendChild($dom->createElement('UP', $this->amount($element->getUnitPrice())));
+        }
+        if ($element->getTotal() !== null) {
+            $el->appendChild($dom->createElement('IT', $this->amount($element->getTotal())));
+        }
+        // Ein früher Kennwert ist eine Spanne, keine Zahl - das Format hält das
+        // aus, und die Ehrlichkeit gehört mit übertragen.
+        foreach (['UPFrom' => $element->getUnitPriceFrom(), 'UPAvg' => $element->getUnitPriceAverage(), 'UPTo' => $element->getUnitPriceTo()] as $name => $value) {
+            if ($value !== null) {
+                $el->appendChild($dom->createElement($name, $this->amount($value)));
+            }
+        }
+        foreach ($element->getChildren() as $child) {
+            $el->appendChild($this->costElement($dom, $child, $fullNumbers));
         }
 
         return $el;

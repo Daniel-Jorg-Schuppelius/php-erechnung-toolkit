@@ -121,6 +121,15 @@ enum GaebPhase: string {
         };
     }
 
+    /**
+     * Is this a costing phase (X50 to X52)? These describe what something is
+     * expected to cost, ordered by cost groups after DIN 276 - not what is to
+     * be done, ordered by trades.
+     */
+    public function isCosting(): bool {
+        return $this === self::CostCatalogue || $this === self::CostEstimate;
+    }
+
     /** Is this one of the bill of quantity phases (X80 to X87)? */
     public function isBillOfQuantity(): bool {
         return match ($this) {

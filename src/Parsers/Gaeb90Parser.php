@@ -14,7 +14,7 @@ namespace ERechnungToolkit\Parsers;
 
 use CommonToolkit\Enums\CurrencyCode;
 use CommonToolkit\ValueObjects\Money;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebItem, GaebSection};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebItem, GaebSection, GaebSubDescription};
 use ERechnungToolkit\Enums\GaebItemType;
 use InvalidArgumentException;
 
@@ -74,6 +74,11 @@ final class Gaeb90Parser {
         $shortTexts = [];
         /** @var array<string, list<string>> $longTexts */
         $longTexts = [];
+        /** @var array<string, list<array{no: ?string, quantity: ?string, unit: ?string}>> $subs */
+        $subs = [];
+        // Solange eine Unterbeschreibung offen ist, gehören Kurz- und Langtext
+        // ihr - nicht mehr der Position darüber.
+        $inSubDescription = false;
 
         foreach ($records as $record) {
             $type = mb_substr($record, 0, 2);
@@ -95,6 +100,7 @@ final class Gaeb90Parser {
             if ($type === '21') {
                 $reference = $this->reference(mb_substr($record, 2, 9), $mask);
                 $lastItem = $reference;
+                $inSubDescription = false;
                 $longTexts[$reference] = [];
                 $items[$reference] = [
                     'reference' => $reference,
@@ -106,13 +112,31 @@ final class Gaeb90Parser {
                 continue;
             }
 
-            if ($type === '25' && $lastItem !== null) {
-                $shortTexts[$lastItem] = trim($body);
+            // Zeilenart 24 eröffnet eine Unterbeschreibung: laufende Nummer,
+            // eigene Menge und Einheit (Preis hat sie keinen) und - wo die
+            // Leistung dem Standardleistungsbuch entnommen ist - dessen Nummer.
+            if ($type === '24' && $lastItem !== null) {
+                $subs[$lastItem][] = [
+                    'no' => trim(mb_substr($record, 2, 2)) ?: null,
+                    'quantity' => $this->decimal(mb_substr($record, 5, 11), self::QUANTITY_SCALE),
+                    'unit' => trim(mb_substr($record, 16, 4)) ?: null,
+                ];
+                $inSubDescription = true;
 
                 continue;
             }
 
-            if ($type === '26' && $lastItem !== null) {
+            if ($type === '25' && $lastItem !== null) {
+                // Der Kurztext nach einer Unterbeschreibung gehört ihr; früher
+                // überschrieb er den der Position.
+                if (!$inSubDescription) {
+                    $shortTexts[$lastItem] = trim($body);
+                }
+
+                continue;
+            }
+
+            if ($type === '26' && $lastItem !== null && !$inSubDescription) {
                 $longTexts[$lastItem][] = rtrim($body);
             }
         }
@@ -153,6 +177,10 @@ final class Gaeb90Parser {
                 unitPrice: $prices[$reference]['unit'] ?? null,
                 totalPrice: $prices[$reference]['total'] ?? null,
                 position: $item['position'],
+                subDescriptions: array_map(
+                    static fn (array $sub): GaebSubDescription => new GaebSubDescription($sub['no'], $sub['quantity'], $sub['unit']),
+                    $subs[$reference] ?? []
+                ),
             );
         }
 

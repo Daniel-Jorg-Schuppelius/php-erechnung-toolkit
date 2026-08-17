@@ -121,7 +121,38 @@ final class GaebSchemaValidator {
             return ['Kein GAEB-DA-XML-Namespace am Wurzelelement gefunden.'];
         }
 
-        return $this->validateAs($xml, $detected['phase'], $detected['version']);
+        $phase = $this->refinePhase($xml, $detected['phase']);
+
+        // Die Kostenschemata stapeln zwei `xs:redefine` übereinander (50.2
+        // über 50 über Lib5x). libxml löst das nicht auf und meldet stattdessen
+        // fehlende Typen - ein Folgefehler, der wie ein Dokumentfehler aussieht.
+        // Deshalb sagen wir hier klar, dass nicht geprüft werden konnte.
+        if ($phase === '50.1' || $phase === '50.2' || $phase === '51.1' || $phase === '51.2') {
+            return [\sprintf(
+                'Phase X%s lässt sich mit libxml nicht gegen das Schema prüfen: '
+                . 'Die Kostenschemata verschachteln zwei xs:redefine-Stufen. '
+                . 'Für eine formale Prüfung ein Werkzeug mit vollständiger XSD-Unterstützung verwenden.',
+                $phase
+            )];
+        }
+
+        return $this->validateAs($xml, $phase, $detected['version']);
+    }
+
+    /**
+     * Narrows a phase that shares its namespace with its own shapes.
+     *
+     * X50 and X51 come in two: `.2` writes the element number out in full on
+     * every level (`314` - the usual form for DIN 276), `.1` gives only the
+     * part of the current level. The namespace names the family, so the shape
+     * has to come from the document itself.
+     */
+    private function refinePhase(string $xml, string $phase): string {
+        if ($phase !== '50' && $phase !== '51') {
+            return $phase;
+        }
+
+        return str_contains($xml, '<ElePart') ? "{$phase}.1" : "{$phase}.2";
     }
 
     /**

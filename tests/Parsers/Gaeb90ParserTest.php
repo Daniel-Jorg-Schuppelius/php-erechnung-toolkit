@@ -106,4 +106,45 @@ class Gaeb90ParserTest extends BaseTestCase {
         $this->expectException(\InvalidArgumentException::class);
         $this->parser->parse("   \n\n");
     }
+
+    /**
+     * Zeilenart 24 eröffnet eine Unterbeschreibung mit eigener Nummer, Menge
+     * und Einheit. Ihr Kurztext gehört ihr - er überschrieb bislang den der
+     * Position, sodass „Einfachfenster Kiefer" als „Schlußbeschichtung"
+     * ankam.
+     */
+    public function test_sub_descriptions_keep_their_own_text(): void {
+        $grid = implode("\r\n", [
+            $this->pad('00   83') . '1122PPPPI',
+            $this->pad('11001'),
+            $this->pad('12Fenster'),
+            $this->pad('21001 0010 NNL    X    00000017000St'),
+            $this->pad('25Einfachfenster Kiefer'),
+            $this->pad('26   Langtext der Position'),
+            $this->pad('2401 00000025000St    18505326001011211'),
+            $this->pad('25Erneuerungsbeschichtung'),
+            $this->pad('26   Langtext der Unterbeschreibung'),
+            $this->pad('99'),
+        ]) . "\r\n";
+
+        $item = (new Gaeb90Parser)->parse($grid)->getItems()[0];
+
+        // Der Text der Position bleibt ihrer.
+        $this->assertSame('Einfachfenster Kiefer', $item->getShortText());
+        // Die Einrückung der Langtextzeilen bleibt erhalten - sie ist Teil des
+        // Textbilds, das die Vergabestelle so gesetzt hat.
+        $this->assertStringContainsString('Langtext der Position', (string) $item->getLongText());
+        $this->assertStringNotContainsString('Unterbeschreibung', (string) $item->getLongText());
+
+        $this->assertCount(1, $item->getSubDescriptions());
+        $sub = $item->getSubDescriptions()[0];
+        $this->assertSame('01', $sub->getNo());
+        $this->assertSame('25.000', $sub->getQuantity());
+        $this->assertSame('St', $sub->getUnit());
+    }
+
+    /** Füllt einen Satz auf die feste Breite auf. */
+    private function pad(string $record): string {
+        return $record . str_repeat(' ', max(0, 80 - mb_strlen($record)));
+    }
 }

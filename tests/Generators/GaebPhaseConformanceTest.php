@@ -14,8 +14,8 @@ namespace Tests\Generators;
 
 use CommonToolkit\Enums\CurrencyCode;
 use CommonToolkit\ValueObjects\Money;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebChangeOrder, GaebFrameworkAgreement, GaebInvoice, GaebInvoiceShare, GaebItem, GaebOrder, GaebOrderItem, GaebParty, GaebSection};
-use ERechnungToolkit\Enums\{GaebAwardCategory, GaebChangeOrderInitiator, GaebChangeOrderPhase, GaebChangeOrderStatus, GaebInvoiceShareType, GaebInvoiceType, GaebItemType, GaebMarkupType, GaebPhase};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebChangeOrder, GaebCostElement, GaebCosting, GaebFrameworkAgreement, GaebInvoice, GaebInvoiceShare, GaebItem, GaebOrder, GaebOrderItem, GaebParty, GaebSection};
+use ERechnungToolkit\Enums\{GaebAwardCategory, GaebChangeOrderInitiator, GaebChangeOrderPhase, GaebChangeOrderStatus, GaebCostingMethod, GaebCostingType, GaebInvoiceShareType, GaebInvoiceType, GaebItemType, GaebMarkupType, GaebPhase};
 use ERechnungToolkit\Generators\GaebDaXmlGenerator;
 use ERechnungToolkit\Helper\Gaeb\GaebCalculator;
 use ERechnungToolkit\Parsers\GaebDaXmlParser;
@@ -356,6 +356,88 @@ class GaebPhaseConformanceTest extends BaseTestCase {
         $this->assertStringContainsString('<Qty>25</Qty>', $callOff);
         $this->assertStringContainsString('<WICNo>001.0010</WICNo>', $callOff);
         $this->assertStringNotContainsString('<CompleteText>', $callOff);
+    }
+
+    private function costing(bool $fullNumbers = true): GaebCosting {
+        return new GaebCosting(
+            name: 'KB-2026',
+            elements: [new GaebCostElement(
+                description: 'Baukonstruktion',
+                unit: 'm2',
+                number: '300',
+                quantity: '1200.000',
+                unitPrice: Money::of('1450.00', CurrencyCode::Euro),
+                unitPriceFrom: Money::of('1300.00', CurrencyCode::Euro),
+                unitPriceAverage: Money::of('1450.00', CurrencyCode::Euro),
+                unitPriceTo: Money::of('1600.00', CurrencyCode::Euro),
+                children: [new GaebCostElement(description: 'Gründung', unit: 'm2', number: '320')],
+            )],
+            label: 'Kostenberechnung Neubau',
+            type: GaebCostingType::Calculation,
+            method: GaebCostingMethod::ByElements,
+            date: '2026-08-17',
+            fullElementNumbers: $fullNumbers,
+        );
+    }
+
+    /**
+     * Die Kostenermittlung beschreibt nicht, was zu tun ist, sondern was es
+     * kosten soll - gegliedert nach Kostengruppen statt nach Gewerken, und
+     * verschachtelt.
+     */
+    public function test_costing_is_written_under_its_own_root(): void {
+        $xml = (new GaebDaXmlGenerator)->generate(new GaebBoq, GaebPhase::CostEstimate, costing: $this->costing());
+
+        $this->assertStringContainsString('<ElementalCosting>', $xml);
+        $this->assertStringNotContainsString('<Award>', $xml);
+        $this->assertStringContainsString('<ECType>cost determination</ECType>', $xml);
+        $this->assertStringContainsString('<EleNo>300</EleNo>', $xml);
+        // Das Unterelement steckt im übergeordneten, nicht daneben.
+        $this->assertMatchesRegularExpression('#<CostElement>.*<CostElement>.*<EleNo>320</EleNo>#s', $xml);
+    }
+
+    /**
+     * Ein früher Kennwert ist eine Spanne, keine Zahl - und das Format hält das
+     * aus. Die Ehrlichkeit gehört mit übertragen.
+     */
+    public function test_costing_carries_price_ranges(): void {
+        $xml = (new GaebDaXmlGenerator)->generate(new GaebBoq, GaebPhase::CostEstimate, costing: $this->costing());
+
+        $this->assertStringContainsString('<UPFrom>1300</UPFrom>', $xml);
+        $this->assertStringContainsString('<UPAvg>1450</UPAvg>', $xml);
+        $this->assertStringContainsString('<UPTo>1600</UPTo>', $xml);
+        $this->assertTrue($this->costing()->getElements()[0]->hasPriceRange());
+    }
+
+    /**
+     * Zwei Bauformen: `.2` schreibt den Elementbezeichner voll aus (`314` — die
+     * übliche Form für DIN 276), `.1` nur den Teil der eigenen Ebene.
+     */
+    public function test_costing_shapes_differ_in_the_element_number(): void {
+        $generator = new GaebDaXmlGenerator;
+
+        $full = $generator->generate(new GaebBoq, GaebPhase::CostEstimate, costing: $this->costing(true));
+        $this->assertStringContainsString('<EleNo>300</EleNo>', $full);
+        $this->assertStringNotContainsString('<ElePart>', $full);
+
+        $partial = $generator->generate(new GaebBoq, GaebPhase::CostEstimate, costing: $this->costing(false));
+        $this->assertStringContainsString('<ElePart>300</ElePart>', $partial);
+        $this->assertStringNotContainsString('<EleNo>', $partial);
+    }
+
+    /**
+     * Die Kostenschemata stapeln zwei `xs:redefine` übereinander, was libxml
+     * nicht auflöst. Das sagt der Validator deutlich, statt einen Folgefehler
+     * zu melden, der wie ein Dokumentfehler aussieht.
+     */
+    public function test_costing_schema_limitation_is_named(): void {
+        $xml = (new GaebDaXmlGenerator)->generate(new GaebBoq, GaebPhase::CostEstimate, costing: $this->costing());
+
+        $errors = (new GaebSchemaValidator)->validate($xml);
+
+        $this->assertCount(1, $errors);
+        $this->assertStringContainsString('libxml', $errors[0]);
+        $this->assertStringContainsString('xs:redefine', $errors[0]);
     }
 
     /** Die Preisanfrage fragt ohne Preis; erst das Angebot nennt einen. */
