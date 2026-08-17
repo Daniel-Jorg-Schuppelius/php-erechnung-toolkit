@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace Tests\Helper;
 
-use ERechnungToolkit\Entities\Gaeb\{GaebItem, GaebTakeoffLine};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebItem, GaebTakeoffLine};
 use ERechnungToolkit\Helper\Gaeb\{GaebExpression, GaebTakeoffCalculator};
 use InvalidArgumentException;
 use Tests\Contracts\BaseTestCase;
@@ -48,6 +48,134 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
     /** Trapez: (2,330 + 2,850) / 2 × 1,250. */
     public function test_trapezium(): void {
         $this->assertEqualsWithDelta(3.2375, (float) $this->calculator->line($this->line('05', ['2330', '2850', '1250'])), 0.0001);
+    }
+
+    /** Prisma mit drei Höhen: 4 × 3 × (2+2+2) / 6. */
+    public function test_prism_with_three_heights(): void {
+        $line = $this->line('13', ['4000', '3000', '2000', '2000', '2000']);
+        $this->assertEqualsWithDelta(12.0, (float) $this->calculator->line($line), 0.0001);
+    }
+
+    /**
+     * Pyramidenstümpfe teilen den Zähler (2AB + 2ab + Ab + aB) · H und
+     * unterscheiden sich nur im Nenner: 12 beim Dreieck, 6 beim Rechteck.
+     * (2·12 + 2·2 + 4 + 6) · 6 = 228.
+     */
+    public function test_truncated_pyramids(): void {
+        $values = ['4000', '3000', '6000', '2000', '1000'];
+        $this->assertEqualsWithDelta(19.0, (float) $this->calculator->line($this->line('14', $values)), 0.0001);
+        $this->assertEqualsWithDelta(38.0, (float) $this->calculator->line($this->line('15', $values)), 0.0001);
+    }
+
+    /** Deckfläche 0 macht den Stumpf zur vollen Pyramide: 12 × 6 / 3 = 24. */
+    public function test_truncated_pyramid_without_top_is_a_full_pyramid(): void {
+        $line = $this->line('15', ['4000', '3000', '6000', '0', '0']);
+        $this->assertEqualsWithDelta(24.0, (float) $this->calculator->line($line), 0.0001);
+    }
+
+    /**
+     * Koordinatenformeln laufen über mehrere Sätze bis zum abschließenden `=`;
+     * die offene Kette (0|0) → (10|0) → (10|10) → (0|10) misst 30 m.
+     */
+    public function test_polygon_length_spans_several_lines(): void {
+        $item = new GaebItem(reference: '1', takeoffLines: [
+            new GaebTakeoffLine(formula: '21', values: ['0', '0', '10000', '0']),
+            new GaebTakeoffLine(formula: '21', values: ['10000', '10000', '0', '10000'], closesResult: true),
+        ]);
+
+        $this->assertEqualsWithDelta(30.0, $this->calculator->total($item)['quantity'], 0.0001);
+    }
+
+    /** Dieselben vier Punkte als geschlossenes Vieleck: 10 × 10 = 100 m². */
+    public function test_gauss_area_over_coordinates(): void {
+        $item = new GaebItem(reference: '1', takeoffLines: [
+            new GaebTakeoffLine(formula: '22', values: ['0', '0', '10000', '0']),
+            new GaebTakeoffLine(formula: '22', values: ['10000', '10000', '0', '10000'], closesResult: true),
+        ]);
+
+        $this->assertEqualsWithDelta(100.0, $this->calculator->total($item)['quantity'], 0.0001);
+    }
+
+    /** Ein einzelner Wert am Ende ist die Dicke und macht die Fläche zum Körper. */
+    public function test_gauss_area_with_thickness_becomes_a_volume(): void {
+        $item = new GaebItem(reference: '1', takeoffLines: [
+            new GaebTakeoffLine(formula: '22', values: ['0', '0', '10000', '0']),
+            new GaebTakeoffLine(formula: '22', values: ['10000', '10000', '0', '10000', '500'], closesResult: true),
+        ]);
+
+        $this->assertEqualsWithDelta(50.0, $this->calculator->total($item)['quantity'], 0.0001);
+    }
+
+    /**
+     * Formel 25 nach REB: je Station ein Trapez `F = (a+b)/2 · h`, zwischen den
+     * Stationen die Trapezregel. Werte der BVBS-Prüfdatei:
+     * F = 5,0625 / 4,2435 / 5,109 bei 750, 760 und 770 m
+     * → 10·(5,0625+4,2435)/2 + 10·(4,2435+5,109)/2 = 93,2925.
+     */
+    public function test_stationed_trapezoidal_profiles(): void {
+        $item = new GaebItem(reference: '1', takeoffLines: [
+            new GaebTakeoffLine(formula: '25', values: ['750000', '4500', '1250', '1000']),
+            new GaebTakeoffLine(formula: '25', values: ['760000', '4100', '1120', '0950']),
+            new GaebTakeoffLine(formula: '25', values: ['770000', '3900', '1400', '1220'], closesResult: true),
+        ]);
+
+        $this->assertEqualsWithDelta(93.2925, $this->calculator->total($item)['quantity'], 0.0001);
+    }
+
+    /** Formel 23 nimmt die Flächen fertig entgegen: 25 m × (100 + 60) / 2. */
+    public function test_cross_section_profiles(): void {
+        $item = new GaebItem(reference: '1', takeoffLines: [
+            new GaebTakeoffLine(formula: '23', values: ['12000', '100000']),
+            new GaebTakeoffLine(formula: '23', values: ['37000', '60000'], closesResult: true),
+        ]);
+
+        $this->assertEqualsWithDelta(2000.0, $this->calculator->total($item)['quantity'], 0.0001);
+    }
+
+    /**
+     * Der Rechenansatz trägt sein Vorzeichen **vor** dem Wert; weil die Felder
+     * rechtsbündig stehen, liegen Leerzeichen dazwischen. Das Vorzeichen des
+     * ersten Wertes einer Folgezeile steht hinter dem letzten Feld der Zeile
+     * davor und kommt als eigener Eintrag an.
+     */
+    public function test_plain_sum_carries_its_signs_across_lines(): void {
+        $item = new GaebItem(reference: '1', takeoffLines: [
+            new GaebTakeoffLine(formula: '00', values: ['22700', '+ 24300', '- 31400', '+']),
+            new GaebTakeoffLine(formula: '00', values: ['29900', '- 24700'], closesResult: true),
+        ]);
+
+        // 22,7 + 24,3 - 31,4 + 29,9 - 24,7 = 20,8
+        $this->assertEqualsWithDelta(20.8, $this->calculator->total($item)['quantity'], 0.0001);
+    }
+
+    /** Die freie Formel darf sich über mehrere Zeilen erstrecken (REB 2009: bis 20). */
+    public function test_free_formula_spans_several_lines(): void {
+        $item = new GaebItem(reference: '1', takeoffLines: [
+            new GaebTakeoffLine(formula: '91', values: ['(4,55 + 4,65 + 4,48 +']),
+            new GaebTakeoffLine(formula: '91', values: ['4,52) / 2='], closesResult: true),
+        ]);
+
+        $this->assertEqualsWithDelta(9.1, $this->calculator->total($item)['quantity'], 0.0001);
+    }
+
+    /**
+     * Adressen gelten dokumentweit: Eine Position übernimmt die Zwischensumme
+     * einer anderen (REB 23.003 Ausgabe 2009 - Verweise auf höhere Ordnungs-
+     * zahlen sind ausdrücklich erlaubt).
+     */
+    public function test_addresses_reach_across_items(): void {
+        $first = new GaebItem(reference: '001.0010', takeoffLines: [
+            new GaebTakeoffLine(kind: GaebTakeoffLine::KIND_SUBTOTAL, formula: '04', values: ['35000', '46000'], address: '0004K0'),
+        ]);
+        $second = new GaebItem(reference: '001.0020', takeoffLines: [
+            new GaebTakeoffLine(formula: '91', values: ['0004K0='], address: '0005D0'),
+        ]);
+        $boq = new GaebBoq(items: [$first, $second]);
+
+        $surveys = $this->calculator->document($boq);
+
+        $this->assertEqualsWithDelta(1610.0, $surveys['001.0010']['quantity'], 0.0001);
+        $this->assertEqualsWithDelta(1610.0, $surveys['001.0020']['quantity'], 0.0001);
     }
 
     /** Der Winkel steht in Gon: 100 Gon sind ein rechter Winkel. */
@@ -103,14 +231,28 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
     public function test_unsupported_formulas_are_reported(): void {
         $item = new GaebItem(reference: '001.0010', takeoffLines: [
             $this->line('04', ['2000', '3000']),
-            $this->line('22', ['12000', '106200']),
+            $this->line('23', ['12000', '106200']),
         ]);
 
         $result = $this->calculator->total($item);
 
         $this->assertEqualsWithDelta(6.0, $result['quantity'], 0.0001);
         $this->assertCount(1, $result['skipped']);
-        $this->assertStringContainsString('Formel 22', $result['skipped'][0]);
+        $this->assertStringContainsString('Formel 23', $result['skipped'][0]);
+    }
+
+    /** Eine Koordinatengruppe ohne abschließendes `=` ist unvollständig. */
+    public function test_unfinished_coordinate_group_is_reported(): void {
+        $item = new GaebItem(reference: '001.0010', takeoffLines: [
+            $this->line('04', ['2000', '3000']),
+            new GaebTakeoffLine(formula: '22', values: ['0', '0', '10000', '0']),
+        ]);
+
+        $result = $this->calculator->total($item);
+
+        $this->assertEqualsWithDelta(6.0, $result['quantity'], 0.0001);
+        $this->assertCount(1, $result['skipped']);
+        $this->assertStringContainsString('Abschluss', $result['skipped'][0]);
     }
 
     /** Die freie Formel rechnet einen Ausdruck mit Komma als Trennzeichen. */
@@ -171,5 +313,41 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
 
         // 35,0 × 46,0 = 1610,0 — einmal als Zwischensumme, einmal übernommen.
         $this->assertEqualsWithDelta(3220.0, $result['quantity'], 0.0001);
+    }
+
+    /**
+     * Die Formelsammlung schreibt jede Flächenformel doppelt: einmal als
+     * Fläche, einmal als Körper darüber. Unterschieden wird allein durch den
+     * zusätzlichen Wert am Ende.
+     */
+    public function test_area_formulas_become_volumes_with_a_height(): void {
+        // Dreieck 12,330 × 4,560 / 2 = 28,1124 m², mal Höhe 2,000 m
+        $this->assertEqualsWithDelta(56.2248, (float) $this->calculator->line($this->line('01', ['12330', '4560', '2000'])), 0.0001);
+        // Trapez mal Höhe
+        $this->assertEqualsWithDelta(6.475, (float) $this->calculator->line($this->line('05', ['2330', '2850', '1250', '2000'])), 0.0001);
+    }
+
+    /** Kreissektor und Zylindersektor: der Vollkreis misst 400 Gon. */
+    public function test_circle_sector_and_cylinder(): void {
+        // r = 4,220 m, 45 gon → r²·π·45/400
+        $this->assertEqualsWithDelta(6.2940, (float) $this->calculator->line($this->line('07', ['4220', '45000'])), 0.0001);
+        $this->assertEqualsWithDelta(12.5880, (float) $this->calculator->line($this->line('07', ['4220', '45000', '2000'])), 0.0001);
+        // Voller Kreis: 400 gon ergeben π·r²
+        $this->assertEqualsWithDelta(M_PI, (float) $this->calculator->line($this->line('07', ['1000', '400000'])), 0.0001);
+    }
+
+    /** Kreisringsektor zieht den inneren Kreis ab. */
+    public function test_annulus_sector(): void {
+        $this->assertEqualsWithDelta(6.6039, (float) $this->calculator->line($this->line('08', ['6870', '5870', '66000'])), 0.0001);
+    }
+
+    /** Parabelsegment: zwei Drittel des umschließenden Rechtecks. */
+    public function test_parabolic_segment(): void {
+        $this->assertEqualsWithDelta(7.7667, (float) $this->calculator->line($this->line('09', ['1250', '9320'])), 0.0001);
+    }
+
+    /** Kegelstumpfsektor nach der Formel der REB-VB 23.003. */
+    public function test_truncated_cone_sector(): void {
+        $this->assertEqualsWithDelta(2492.7124, (float) $this->calculator->line($this->line('12', ['45000', '28000', '52000', '4500'])), 0.0001);
     }
 }

@@ -33,6 +33,7 @@ final class GaebWriter {
         private readonly GaebDaXmlGenerator $xml = new GaebDaXmlGenerator,
         private readonly Gaeb90Generator $gaeb90 = new Gaeb90Generator,
         private readonly Gaeb2000Generator $gaeb2000 = new Gaeb2000Generator,
+        private readonly Da11Generator $da11 = new Da11Generator,
     ) {}
 
     /**
@@ -44,7 +45,8 @@ final class GaebWriter {
         GaebFormat $format,
         GaebPhase $phase,
         ?string $date = null,
-        ?GaebParty $contractor = null
+        ?GaebParty $contractor = null,
+        ?GaebParty $client = null
     ): array {
         if (!$format->isWritable()) {
             throw new InvalidArgumentException("Writing {$format->value} is not supported yet.");
@@ -52,18 +54,53 @@ final class GaebWriter {
 
         return match ($format) {
             GaebFormat::DaXml => [
-                'content' => $this->xml->generate($boq, $phase, $boq->getCurrency()->value, $date, 'php-erechnung-toolkit', null, null, $contractor),
+                'content' => $this->xml->generate($boq, $phase, $boq->getCurrency()->value, $date, 'php-erechnung-toolkit', null, null, $contractor, $client),
                 'losses' => [],
             ],
             GaebFormat::Gaeb2000 => [
                 'content' => $this->gaeb2000->generate($boq, $phase),
                 'losses' => $this->lossesForKeywordFormat($boq),
             ],
+            // Die DA11 trägt ausschließlich die Mengenermittlung - Texte,
+            // Mengen und Preise des Verzeichnisses haben dort keinen Platz.
+            GaebFormat::Da11 => [
+                'content' => $this->da11->generate($boq),
+                'losses' => array_merge($this->da11->getLosses(), $this->lossesForDa11($boq, $phase)),
+            ],
             default => [
                 'content' => $this->gaeb90->generate($boq, $phase),
                 'losses' => $this->lossesForGrid($boq),
             ],
         };
+    }
+
+    /**
+     * What the DA11 cannot carry. It is a quantity survey, not a bill of
+     * quantity: everything the award document describes stays behind.
+     *
+     * @return list<string>
+     */
+    public function lossesForDa11(GaebBoq $boq, GaebPhase $phase): array {
+        $losses = [];
+
+        if ($phase !== GaebPhase::QuantitySurvey) {
+            $losses[] = 'Die DA11 trägt nur die Mengenermittlung; Texte, Mengen und Preise der Phase ' . $phase->label() . ' entfallen.';
+        }
+
+        $withoutLines = 0;
+        foreach ($boq->getItems() as $item) {
+            if ($item->getTakeoffLines() === []) {
+                $withoutLines++;
+            }
+        }
+        if ($withoutLines > 0) {
+            $losses[] = "{$withoutLines} Position(en) ohne Aufmaßzeilen erscheinen nicht in der Datei.";
+        }
+        if ($boq->getSections() !== []) {
+            $losses[] = 'Die Gliederung steckt in der Ordnungszahl; eigene Gruppensätze kennt die DA11 nicht.';
+        }
+
+        return $losses;
     }
 
     /**

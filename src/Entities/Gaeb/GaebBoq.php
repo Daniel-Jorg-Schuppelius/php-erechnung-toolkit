@@ -30,6 +30,7 @@ final class GaebBoq {
      * @param list<GaebItem>         $items
      * @param list<GaebUpComponent>  $upComponents unit price shares required by the client
      * @param list<GaebCatalog>      $catalogs catalogues the assignments point to
+     * @param list<GaebChangeOrder>  $changeOrders addendum heads of the document
      */
     public function __construct(
         private readonly ?string $version = null,
@@ -41,7 +42,8 @@ final class GaebBoq {
         private readonly array $upComponents = [],
         private readonly ?GaebTotals $totals = null,
         private readonly CurrencyCode $currency = CurrencyCode::Euro,
-        private readonly array $catalogs = []
+        private readonly array $catalogs = [],
+        private readonly array $changeOrders = []
     ) {}
 
     /** GAEB DA XML version, e.g. "3.3". */
@@ -103,6 +105,27 @@ final class GaebBoq {
      */
     public function getCatalogs(): array {
         return $this->catalogs;
+    }
+
+    /**
+     * Addendum heads. The items carry only the number; who raised an addendum,
+     * why and since when it is agreed stands here.
+     *
+     * @return list<GaebChangeOrder>
+     */
+    public function getChangeOrders(): array {
+        return $this->changeOrders;
+    }
+
+    /** The head belonging to an addendum number, if the document names one. */
+    public function getChangeOrder(string $number): ?GaebChangeOrder {
+        foreach ($this->changeOrders as $order) {
+            if ($order->getNumber() === $number) {
+                return $order;
+            }
+        }
+
+        return null;
     }
 
     public function getTotals(): ?GaebTotals {

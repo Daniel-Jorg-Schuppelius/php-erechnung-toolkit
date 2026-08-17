@@ -12,7 +12,9 @@ declare(strict_types=1);
 
 namespace Tests\Validators;
 
-use ERechnungToolkit\Enums\GaebFormat;
+use ERechnungToolkit\Enums\{GaebFormat, GaebPhase};
+use ERechnungToolkit\Generators\GaebDaXmlGenerator;
+use ERechnungToolkit\Helper\Gaeb\{GaebTakeoffCalculator, GaebTakeoffRecord};
 use ERechnungToolkit\Parsers\GaebReader;
 use ERechnungToolkit\Validators\GaebSchemaValidator;
 use Tests\Contracts\BaseTestCase;
@@ -78,6 +80,87 @@ class GaebConformanceTest extends BaseTestCase {
         foreach ($files as $file) {
             $boq = $reader->read((string) file_get_contents($file), basename($file));
             $this->assertGreaterThan(0, $boq->countItems(), basename($file) . ' liefert keine Positionen.');
+        }
+    }
+
+    /**
+     * Die Aufmaßsätze der Prüfdatei müssen den Schreiber **byteweise**
+     * überstehen. Das ist der schärfste Nachweis für die Spaltengrenzen: Jede
+     * Verschiebung um ein Zeichen fällt sofort auf, während sie in der Rechnung
+     * lange unbemerkt bliebe.
+     */
+    public function test_quantity_survey_records_survive_byte_for_byte(): void {
+        $files = $this->files('pruefdateien/extracted/*.{x31,X31}');
+        $this->skipWithout($files, 'die Mengenermittlung');
+
+        $record = new GaebTakeoffRecord;
+        foreach ($files as $file) {
+            $raw = (string) file_get_contents($file);
+            $boq = (new GaebReader)->read($raw, basename($file));
+
+            preg_match_all('/Row="([^"]*)"/', $raw, $matches);
+            $expected = array_map(html_entity_decode(...), $matches[1]);
+
+            $index = 0;
+            foreach ($boq->getItems() as $item) {
+                foreach ($item->getTakeoffLines() as $line) {
+                    $this->assertSame(
+                        rtrim($expected[$index] ?? '<fehlt>'),
+                        rtrim($record->render($line)),
+                        basename($file) . ": Satz {$index} weicht ab."
+                    );
+                    $index++;
+                }
+            }
+            $this->assertSame(count($expected), $index, basename($file) . ': Satzzahl weicht ab.');
+        }
+    }
+
+    /**
+     * Und jede Rechenzeile der Prüfdatei muss auch gerechnet werden. Bliebe
+     * eine Formel übrig, wäre die Menge stillschweigend zu klein - der Grund,
+     * warum der Rechner Übersprungenes überhaupt meldet.
+     */
+    public function test_every_formula_of_the_test_file_is_computed(): void {
+        $files = $this->files('pruefdateien/extracted/*.{x31,X31}');
+        $this->skipWithout($files, 'die Mengenermittlung');
+
+        foreach ($files as $file) {
+            $boq = (new GaebReader)->read((string) file_get_contents($file), basename($file));
+            foreach ((new GaebTakeoffCalculator)->document($boq) as $reference => $survey) {
+                $this->assertSame([], $survey['skipped'], basename($file) . ", Position {$reference}.");
+            }
+        }
+    }
+
+    /**
+     * Der X31-Export muss schemavalide sein und dieselben Mengen liefern -
+     * sonst wäre die Datei zwar lesbar, aber fachlich eine andere.
+     */
+    public function test_quantity_survey_export_is_valid_and_lossless(): void {
+        $files = $this->files('pruefdateien/extracted/*.{x31,X31}');
+        $this->skipWithout($files, 'die Mengenermittlung');
+
+        $calculator = new GaebTakeoffCalculator;
+        foreach ($files as $file) {
+            $source = (new GaebReader)->read((string) file_get_contents($file), basename($file));
+            $xml = (new GaebDaXmlGenerator)->generate($source, GaebPhase::QuantitySurvey);
+
+            $this->assertSame([], (new GaebSchemaValidator)->validate($xml), basename($file) . ': Export nicht schemavalide.');
+
+            $again = (new GaebReader)->read($xml, 'roundtrip.x31');
+            $before = $calculator->document($source);
+            $after = $calculator->document($again);
+
+            $this->assertSame(array_keys($before), array_keys($after), 'Positionen gingen verloren.');
+            foreach ($before as $reference => $survey) {
+                $this->assertEqualsWithDelta(
+                    $survey['quantity'],
+                    $after[$reference]['quantity'],
+                    0.0001,
+                    "Menge von {$reference} weicht nach dem Schreiben ab."
+                );
+            }
         }
     }
 

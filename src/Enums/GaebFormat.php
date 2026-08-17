@@ -18,6 +18,7 @@ namespace ERechnungToolkit\Enums;
  */
 enum GaebFormat: string {
     case Gaeb90 = 'gaeb90';     // .d81 … .d86, fixed 80 character records
+    case Da11 = 'da11';         // .d11, quantity survey after REB-VB 23.003
     case Gaeb2000 = 'gaeb2000'; // .p81 … .p86, keyword syntax with RTF texts
     case DaXml = 'daxml';       // .x31, .x80 … .x89B, XML against the official schemas
     case Unknown = 'unknown';
@@ -25,7 +26,7 @@ enum GaebFormat: string {
     /** File extension prefix of the family (`x`, `p`, `d`). */
     public function extensionPrefix(): ?string {
         return match ($this) {
-            self::Gaeb90 => 'd',
+            self::Gaeb90, self::Da11 => 'd',
             self::Gaeb2000 => 'p',
             self::DaXml => 'x',
             self::Unknown => null,

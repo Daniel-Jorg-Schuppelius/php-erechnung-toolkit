@@ -96,11 +96,13 @@ enum GaebPhase: string {
      * Does this phase carry the texts of the bill of quantity? The bid returns
      * prices for an already known document: labels, short and long texts have no
      * place there, only the text complements the bidder filled in (GAEB DA XML
-     * 3.3, X84 schema).
+     * 3.3, X84 schema). The quantity survey carries even less - it answers an
+     * existing document with nothing but ordinal numbers and computed lines,
+     * and its schema rejects a label outright.
      */
     public function carriesTexts(): bool {
         return match ($this) {
-            self::Bid, self::FrameworkBid => false,
+            self::Bid, self::FrameworkBid, self::QuantitySurvey => false,
             default => true,
         };
     }
@@ -120,6 +122,61 @@ enum GaebPhase: string {
             self::Bid, self::FrameworkBid, self::QuantitySurvey => false,
             default => true,
         };
+    }
+
+    /**
+     * Does this phase name the contractor (`CTR`)? Before the bid the bidder is
+     * unknown, so the request for bid has no place for one - the schemas of X81
+     * to X83 do not even define the element.
+     */
+    public function carriesContractor(): bool {
+        return match ($this) {
+            self::Bid, self::SideBid, self::Award, self::AwardConfirmation,
+            self::FrameworkBid, self::FrameworkCallOff, self::FrameworkAgreement => true,
+            default => false,
+        };
+    }
+
+    /**
+     * Does this phase name the awarding body (`OWN`)? In the award it is even
+     * mandatory - a contract without a client is not one.
+     */
+    public function carriesClient(): bool {
+        return match ($this) {
+            self::RequestForBid, self::Award, self::AwardConfirmation,
+            self::FrameworkRequestForBid, self::FrameworkCallOff, self::FrameworkAgreement => true,
+            default => false,
+        };
+    }
+
+    /** Is the awarding body mandatory rather than merely allowed? */
+    public function requiresClient(): bool {
+        return $this === self::Award || $this === self::AwardConfirmation;
+    }
+
+    /**
+     * Does this phase carry the head of an addendum (`COInfo`)? The bid answers
+     * a document it did not write and therefore describes no addendum of its
+     * own.
+     */
+    public function carriesChangeOrderHead(): bool {
+        return match ($this) {
+            self::RequestForBid, self::Award, self::AwardConfirmation => true,
+            default => false,
+        };
+    }
+
+    /** Does an item of this phase carry its addendum number (`CONo`)? */
+    public function carriesItemChangeOrder(): bool {
+        return match ($this) {
+            self::Bid, self::SideBid => false,
+            default => true,
+        };
+    }
+
+    /** Only the bid may mark an item as not offered (`NotOffered`). */
+    public function carriesNotOffered(): bool {
+        return $this === self::Bid;
     }
 
     /**

@@ -22,8 +22,9 @@ use ERechnungToolkit\Enums\{GaebFormat, GaebPhase};
  * and is wrong often enough. The content decides: GAEB DA XML declares its
  * namespace, GAEB 2000 marks its objects with `#begin[`, and GAEB 90 is the
  * fixed 80 character grid whose last six columns hold a gapless record number.
- * The extension only breaks ties and supplies the phase where the content does
- * not.
+ * The DA11 quantity survey shares that grid but not the record number, so it is
+ * recognised by its data type before the grid is even looked at. The extension
+ * only breaks ties and supplies the phase where the content does not.
  */
 final class GaebFormatDetector {
     /** @return array{format: GaebFormat, phase: ?GaebPhase, phaseCode: ?string} */
@@ -49,7 +50,35 @@ final class GaebFormatDetector {
             return GaebFormat::Gaeb2000;
         }
 
+        // Die DA11 wird zuerst geprüft: Sie teilt sich zwar das 80-Zeichen-
+        // Raster mit GAEB 90, führt an dessen Ende aber keine fortlaufende
+        // Satznummer - die Rasterprüfung würde sie deshalb verwerfen.
+        if ($this->looksLikeDa11($content)) {
+            return GaebFormat::Da11;
+        }
+
         return $this->looksLikeFixedGrid($content) ? GaebFormat::Gaeb90 : GaebFormat::Unknown;
+    }
+
+    /**
+     * A DA11 file consists of the header record and lines of data type 11. The
+     * bill of quantity formats use other types, so the first content line is
+     * decisive.
+     */
+    private function looksLikeDa11(string $content): bool {
+        foreach (preg_split('/\R/', $content) ?: [] as $line) {
+            if (trim($line) === '') {
+                continue;
+            }
+            if (str_starts_with($line, '00')) {
+                // Der Kopfsatz nennt die Verfahrensbeschreibung an Stelle 11.
+                return str_starts_with(trim(mb_substr($line, 10, 6)), '23.003');
+            }
+
+            return str_starts_with($line, '11');
+        }
+
+        return false;
     }
 
     /**
@@ -98,6 +127,11 @@ final class GaebFormatDetector {
             if (preg_match('/^00\s*(\d{2})/m', $content, $matches) === 1) {
                 return $matches[1];
             }
+        }
+
+        // Die DA11 kennt nur eine Phase - sie ist die Mengenermittlung.
+        if ($format === GaebFormat::Da11) {
+            return GaebPhase::QuantitySurvey->value;
         }
 
         return null;

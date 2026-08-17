@@ -13,7 +13,7 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Entities\Gaeb;
 
 use CommonToolkit\ValueObjects\Money;
-use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderStatus, GaebItemType};
+use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderStatus, GaebItemType, GaebMarkupType};
 
 /**
  * A single entry of a bill of quantity: a regular item, a markup item or a
@@ -43,7 +43,8 @@ final class GaebItem {
         private readonly ?string $provisionKind = null,
         private readonly ?string $alternativeGroup = null,
         private readonly ?int $alternativeNo = null,
-        private readonly ?string $markupType = null,
+        private readonly ?GaebMarkupType $markupType = null,
+        private readonly ?Money $markupBase = null,
         private readonly array $textComplements = [],
         private readonly array $subDescriptions = [],
         private readonly array $unitPriceComponents = [],
@@ -118,8 +119,21 @@ final class GaebItem {
     }
 
     /** How the markup applies, e.g. `AllInCat`. */
-    public function getMarkupType(): ?string {
+    /**
+     * What the markup applies to. Without it a markup item is a percentage
+     * without a base - the sum would be a guess.
+     */
+    public function getMarkupType(): ?GaebMarkupType {
         return $this->markupType;
+    }
+
+    /**
+     * Sum the markup applies to (`ITMarkup`). Only the types that name their
+     * base in the document carry it - for `AllInCat` it follows from the group
+     * and is computed instead.
+     */
+    public function getMarkupBase(): ?Money {
+        return $this->markupBase;
     }
 
     /** @return list<GaebTextComplement> */

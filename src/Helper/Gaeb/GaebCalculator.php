@@ -86,6 +86,54 @@ final class GaebCalculator {
     }
 
     /**
+     * Base a markup item is computed on - the sum of the items it applies to.
+     *
+     * The type decides which those are (GAEB `MarkupType`). `AllInCat` takes
+     * the group the markup item stands in, minus the markup items themselves:
+     * a markup on a markup would compound and is not what the form means.
+     * The other two types name their base explicitly in the document, so it is
+     * taken from there rather than guessed.
+     */
+    public function markupBase(GaebBoq $boq, GaebItem $item): Money {
+        $zero = Money::zero($boq->getCurrency(), self::AMOUNT_SCALE);
+        if ($item->getMarkupType()?->derivesBaseFromStructure() !== true) {
+            return $item->getMarkupBase() ?? $zero;
+        }
+
+        $sum = $zero;
+        foreach ($boq->getItems() as $other) {
+            if ($other->getSectionReference() !== $item->getSectionReference()) {
+                continue;
+            }
+            if ($other->getType() === GaebItemType::Markup || $other->getType() === GaebItemType::Note) {
+                continue;
+            }
+            $total = $this->itemTotal($other);
+            if ($total !== null) {
+                $sum = $sum->plus($total);
+            }
+        }
+
+        return $sum;
+    }
+
+    /**
+     * Amount a markup item contributes: its rate applied to the base. The rate
+     * is a percentage, so a base of 1.000 EUR at 5 makes 50 EUR.
+     */
+    public function markupAmount(GaebBoq $boq, GaebItem $item): Money {
+        $rate = $item->getUnitPrice();
+        if ($rate === null) {
+            return Money::zero($boq->getCurrency(), self::AMOUNT_SCALE);
+        }
+
+        return $this->markupBase($boq, $item)
+            ->times($rate->getAmount(), RoundingMode::HalfUp)
+            ->dividedBy('100', RoundingMode::HalfUp)
+            ->withScale(self::AMOUNT_SCALE, RoundingMode::HalfUp);
+    }
+
+    /**
      * Total of the whole document. Summed over the items directly, not over the
      * groups: a bid file carries prices without any group at all, and a position
      * whose group is missing would silently drop out of a sum built top down.

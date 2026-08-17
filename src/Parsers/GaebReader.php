@@ -36,6 +36,7 @@ final class GaebReader {
         private readonly GaebDaXmlParser $xml = new GaebDaXmlParser,
         private readonly Gaeb90Parser $gaeb90 = new Gaeb90Parser,
         private readonly Gaeb2000Parser $gaeb2000 = new Gaeb2000Parser,
+        private readonly Da11Parser $da11 = new Da11Parser,
     ) {}
 
     /**
@@ -49,6 +50,7 @@ final class GaebReader {
         return match ($format) {
             GaebFormat::DaXml => $this->xml->parse($content),
             GaebFormat::Gaeb90 => $this->gaeb90->parse($content),
+            GaebFormat::Da11 => $this->da11->parse($content),
             GaebFormat::Gaeb2000 => $this->gaeb2000->parse($content),
             GaebFormat::Unknown => throw new InvalidArgumentException(
                 'File is not a recognised GAEB document' . ($fileName !== null ? ": {$fileName}" : '.')

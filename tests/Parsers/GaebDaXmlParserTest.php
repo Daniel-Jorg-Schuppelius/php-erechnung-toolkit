@@ -13,7 +13,7 @@ declare(strict_types=1);
 namespace Tests\Parsers;
 
 use CommonToolkit\ValueObjects\Money;
-use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderStatus, GaebItemType, GaebPhase};
+use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderStatus, GaebItemType, GaebMarkupType, GaebPhase};
 use ERechnungToolkit\Generators\GaebDaXmlGenerator;
 use ERechnungToolkit\Parsers\GaebDaXmlParser;
 use InvalidArgumentException;
@@ -208,7 +208,7 @@ XML;
         $this->assertSame('2.000', $byRef['001.0030']->getSubDescriptions()[0]->getQuantity());
 
         $this->assertSame(GaebItemType::Markup, $byRef['001.0040']->getType());
-        $this->assertSame('AllInCat', $byRef['001.0040']->getMarkupType());
+        $this->assertSame(GaebMarkupType::AllInCategory, $byRef['001.0040']->getMarkupType());
 
         $this->assertSame(GaebItemType::Note, $byRef['001.H01']->getType());
     }
@@ -279,7 +279,9 @@ XML;
         $this->assertStringContainsString('<UPBkdn>Yes</UPBkdn>', $xml);
         $this->assertStringContainsString('<CONo>N1</CONo>', $xml);
         $this->assertStringContainsString('<COStatus>Offered</COStatus>', $xml);
-        $this->assertStringContainsString('<NotOffered>Yes</NotOffered>', $xml);
+        // „Nicht angeboten" gibt es nur in der Angebotsabgabe; die Auftrags-
+        // erteilung kennt das Element nicht (Schema DA86).
+        $this->assertStringNotContainsString('<NotOffered>Yes</NotOffered>', $xml);
         $this->assertStringContainsString('<QtyTBD>Yes</QtyTBD>', $xml);
         $this->assertStringContainsString('<DiscountPcnt>2.5</DiscountPcnt>', $xml);
         $this->assertStringContainsString('<TotAfterDisc>9700</TotAfterDisc>', $xml);

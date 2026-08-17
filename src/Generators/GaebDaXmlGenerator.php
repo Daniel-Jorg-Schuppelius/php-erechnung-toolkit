@@ -15,9 +15,9 @@ namespace ERechnungToolkit\Generators;
 use CommonToolkit\ValueObjects\Money;
 use DOMDocument;
 use DOMElement;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalogAssignment, GaebItem, GaebParty, GaebSection, GaebTotals};
-use ERechnungToolkit\Enums\{GaebItemType, GaebPhase};
-use ERechnungToolkit\Helper\Gaeb\GaebCalculator;
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalogAssignment, GaebChangeOrder, GaebItem, GaebParty, GaebSection, GaebTotals};
+use ERechnungToolkit\Enums\{GaebChangeOrderStatus, GaebItemType, GaebPhase};
+use ERechnungToolkit\Helper\Gaeb\{GaebCalculator, GaebTakeoffRecord};
 
 /**
  * Writer for GAEB DA XML, the counterpart of {@see \ERechnungToolkit\Parsers\GaebDaXmlParser}.
@@ -33,7 +33,10 @@ final class GaebDaXmlGenerator {
 
     private readonly GaebCalculator $calculator;
 
-    public function __construct(?GaebCalculator $calculator = null) {
+    private readonly GaebTakeoffRecord $takeoff;
+
+    public function __construct(?GaebCalculator $calculator = null, ?GaebTakeoffRecord $takeoff = null) {
+        $this->takeoff = $takeoff ?? new GaebTakeoffRecord;
         $this->calculator = $calculator ?? new GaebCalculator;
     }
 
@@ -46,11 +49,20 @@ final class GaebDaXmlGenerator {
     private const VERS_DATE = '2021-05';
 
     /**
+     * Verfahren, nach dem die Mengen gerechnet wurden. Die X31 nennt es im
+     * Kopf; alles andere wäre für den Prüfenden nicht nachvollziehbar.
+     */
+    private const SURVEY_METHOD = 'REB23003-2009';
+
+    /**
      * @param string|null    $openingDate Date of the bid opening. Required by the
      *                                    schema for X83 and ignored elsewhere.
      * @param GaebParty|null $contractor  Bidder or contractor. The schema demands
      *                                    it in X84, X86 and X87; without it those
      *                                    phases stay incomplete.
+     * @param GaebParty|null $client      Awarding body. Mandatory in the award
+     *                                    (X86) - the schema has `OWN` without
+     *                                    `minOccurs="0"` there.
      */
     public function generate(
         GaebBoq $boq,
@@ -60,7 +72,8 @@ final class GaebDaXmlGenerator {
         string $progSystem = 'php-erechnung-toolkit',
         ?string $projectName = null,
         ?string $openingDate = null,
-        ?GaebParty $contractor = null
+        ?GaebParty $contractor = null,
+        ?GaebParty $client = null
     ): string {
         $name = $projectName ?? $boq->getProjectName() ?? '';
         $ns = sprintf('http://www.gaeb.de/GAEB_DA_XML/DA%s/%s', $phase->value, self::VERSION);
@@ -81,34 +94,67 @@ final class GaebDaXmlGenerator {
         // PrjInfo carries no currency: the X84 project block is reduced to name
         // and identifiers. The currency belongs to AwardInfo, where it is
         // mandatory in every phase.
-        $prj = $dom->createElement('PrjInfo');
-        $prj->appendChild($this->textElement($dom, 'NamePrj', $name));
-        $root->appendChild($prj);
+        // Die Mengenermittlung kennt keinen PrjInfo-Block; ihr Projektname steht
+        // im Kopf der Mengenermittlung selbst.
+        if ($phase !== GaebPhase::QuantitySurvey) {
+            $prj = $dom->createElement('PrjInfo');
+            $prj->appendChild($this->textElement($dom, 'NamePrj', $name));
+            $root->appendChild($prj);
+        }
 
-        $award = $dom->createElement('Award');
+        // Die Mengenermittlung ist kein Vergabevorgang: Sie hängt unter
+        // QtyDeterm statt unter Award und nennt statt Währung und Bieter das
+        // Verfahren, nach dem gerechnet wurde.
+        $isSurvey = $phase === GaebPhase::QuantitySurvey;
+
+        $award = $dom->createElement($isSurvey ? 'QtyDeterm' : 'Award');
+        if ($isSurvey) {
+            $surveyInfo = $dom->createElement('QtyDetermInfo');
+            $surveyInfo->appendChild($dom->createElement('MethodDescription', self::SURVEY_METHOD));
+            if ($name !== '') {
+                $surveyInfo->appendChild($this->textElement($dom, 'ProjDescr', mb_substr($name, 0, 60)));
+            }
+            $award->appendChild($surveyInfo);
+        }
         $award->appendChild($dom->createElement('DP', $phase->value));
 
-        $awardInfo = $dom->createElement('AwardInfo');
-        $awardInfo->appendChild($dom->createElement('Cur', $currency));
-        if ($openingDate !== null) {
-            $awardInfo->appendChild($dom->createElement('OpenDate', $openingDate));
-        }
-        $award->appendChild($awardInfo);
+        if (!$isSurvey) {
+            $awardInfo = $dom->createElement('AwardInfo');
+            $awardInfo->appendChild($dom->createElement('Cur', $currency));
+            if ($openingDate !== null) {
+                $awardInfo->appendChild($dom->createElement('OpenDate', $openingDate));
+            }
+            // Nachtragsköpfe beschreiben den Vorgang, nicht das Verzeichnis -
+            // sie stehen deshalb in AwardInfo (Schema tgAwardInfo).
+            foreach ($phase->carriesChangeOrderHead() ? $boq->getChangeOrders() : [] as $order) {
+                $awardInfo->appendChild($this->changeOrderElement($dom, $order));
+            }
+            $award->appendChild($awardInfo);
 
-        if ($contractor !== null) {
-            $award->appendChild($this->partyElement($dom, 'CTR', $contractor));
+            // Der Auftraggeber steht im Schema vor dem Auftragnehmer und ist
+            // in der Auftragserteilung Pflicht - ohne ihn ist die Datei für
+            // X86 unvollständig, was der Preflight meldet.
+            if ($client !== null && $phase->carriesClient()) {
+                $award->appendChild($this->partyElement($dom, 'OWN', $client));
+            }
+            if ($contractor !== null && $phase->carriesContractor()) {
+                $award->appendChild($this->partyElement($dom, 'CTR', $contractor));
+            }
         }
 
         $boqEl = $dom->createElement('BoQ');
-        if ($boq->getExternalId() !== null) {
-            $boqEl->setAttribute('ID', $boq->getExternalId());
-        }
+        // Die ID ist Pflicht (xs:ID) und darf nicht mit einer Ziffer beginnen.
+        $boqEl->setAttribute('ID', $boq->getExternalId() ?? $this->identifier('B', $name === '' ? 'boq' : $name));
 
         // Name is the short key (20 characters), LblBoQ the label (60). The bid
         // header knows neither label nor text scope nor share captions - it
-        // answers a document the other side already has.
-        $boqInfo = $dom->createElement('BoQInfo');
-        $boqInfo->appendChild($this->textElement($dom, 'Name', mb_substr($name, 0, 20)));
+        // answers a document the other side already has. Die Mengenermittlung
+        // hat gar keinen BoQInfo-Block: dort hängt die Gliederung unmittelbar
+        // unter BoQ.
+        $boqInfo = $isSurvey ? $boqEl : $dom->createElement('BoQInfo');
+        if (!$isSurvey) {
+            $boqInfo->appendChild($this->textElement($dom, 'Name', mb_substr($name, 0, 20)));
+        }
         if ($phase->carriesTexts()) {
             $boqInfo->appendChild($this->textElement($dom, 'LblBoQ', mb_substr($name, 0, 60)));
             $boqInfo->appendChild($dom->createElement('OutlCompl', $this->textScope($boq)));
@@ -143,8 +189,10 @@ final class GaebDaXmlGenerator {
             }
             $boqInfo->appendChild($el);
         }
-        $this->appendTotals($dom, $boqInfo, $boq->getTotals());
-        $boqEl->appendChild($boqInfo);
+        if (!$isSurvey) {
+            $this->appendTotals($dom, $boqInfo, $boq->getTotals());
+            $boqEl->appendChild($boqInfo);
+        }
 
         $body = $dom->createElement('BoQBody');
         $this->appendBody($dom, $body, $boq, $phase, null, '');
@@ -171,11 +219,16 @@ final class GaebDaXmlGenerator {
             $this->appendBody($dom, $childBody, $boq, $phase, $section->getReference(), $section->getReference());
             $ctgy->appendChild($childBody);
             // The bid demands a sum on every group; where the document carries
-            // none it is added up from the items below.
-            if (!$phase->carriesTexts() && $section->getTotals()?->getTotal() === null) {
-                $ctgy->appendChild($this->totalElement($dom, $this->calculator->sectionTotal($boq, $section->getReference())));
-            } else {
-                $this->appendTotals($dom, $ctgy, $section->getTotals());
+            // none it is added up from the items below. Ohne Preise gibt es
+            // nichts zu summieren - die Mengenermittlung weist ihr Schema ab.
+            // Jede Gruppe einer Preisphase muss ihre Summe nennen; wo das
+            // Dokument keine mitbringt, wird sie aus den Positionen gebildet.
+            if ($phase->carriesPrices()) {
+                if ($section->getTotals()?->getTotal() === null) {
+                    $ctgy->appendChild($this->totalElement($dom, $this->calculator->sectionTotal($boq, $section->getReference())));
+                } else {
+                    $this->appendTotals($dom, $ctgy, $section->getTotals());
+                }
             }
             $body->appendChild($ctgy);
         }
@@ -187,12 +240,12 @@ final class GaebDaXmlGenerator {
 
         $list = $dom->createElement('Itemlist');
         foreach ($items as $item) {
-            $list->appendChild($this->itemElement($dom, $item, $phase, $parentRef));
+            $list->appendChild($this->itemElement($dom, $boq, $item, $phase, $parentRef));
         }
         $body->appendChild($list);
     }
 
-    private function itemElement(DOMDocument $dom, GaebItem $item, GaebPhase $phase, string $parentRef): DOMElement {
+    private function itemElement(DOMDocument $dom, GaebBoq $boq, GaebItem $item, GaebPhase $phase, string $parentRef): DOMElement {
         // Markup items and remarks are own elements of an Itemlist, not item
         // variants.
         $el = $dom->createElement(match ($item->getType()) {
@@ -216,22 +269,21 @@ final class GaebDaXmlGenerator {
             $el->setAttribute('RNoIndex', $index);
         }
 
-        if ($item->getType() === GaebItemType::Markup && $item->getMarkupType() !== null) {
-            $el->appendChild($dom->createElement('MarkupType', $item->getMarkupType()));
-        }
-        if ($item->getProvisionKind() !== null) {
-            $el->appendChild($dom->createElement('Provis', $item->getProvisionKind()));
-        }
+        // Die Reihenfolge ist im Schema festgelegt: Alternativkennzeichen vor
+        // der Bedarfsart, die Zuschlagsart erst hinter dem Nachtragsstatus.
         if ($item->getAlternativeGroup() !== null) {
             $el->appendChild($dom->createElement('ALNGroupNo', $item->getAlternativeGroup()));
         }
         if ($item->getAlternativeNo() !== null) {
             $el->appendChild($dom->createElement('ALNSerNo', (string) $item->getAlternativeNo()));
         }
+        if ($item->getProvisionKind() !== null) {
+            $el->appendChild($dom->createElement('Provis', $item->getProvisionKind()));
+        }
         if ($item->isNotApplicable()) {
             $el->appendChild($dom->createElement('NotAppl', 'Yes'));
         }
-        if ($item->isNotOffered()) {
+        if ($item->isNotOffered() && $phase->carriesNotOffered()) {
             $el->appendChild($dom->createElement('NotOffered', 'Yes'));
         }
         if ($item->isHourlyItem()) {
@@ -244,11 +296,18 @@ final class GaebDaXmlGenerator {
         }
         // Addendum items must carry their number (GAEB rules for X80 to X86,
         // object Item, rule 8); the status travels with them.
-        if ($item->getChangeOrderNo() !== null) {
+        // Nummer und Status bilden im Schema eine Pflichtgruppe: Eine
+        // Nachtragsnummer ohne Status ist nicht darstellbar. Fehlt der Status,
+        // gilt „erkannt" - der schwächste, der nur die Existenz behauptet.
+        if ($item->getChangeOrderNo() !== null && $phase->carriesItemChangeOrder()) {
             $el->appendChild($this->textElement($dom, 'CONo', $item->getChangeOrderNo()));
+            $el->appendChild($dom->createElement(
+                'COStatus',
+                ($item->getChangeOrderStatus() ?? GaebChangeOrderStatus::Recognised)->value
+            ));
         }
-        if ($item->getChangeOrderStatus() !== null) {
-            $el->appendChild($dom->createElement('COStatus', $item->getChangeOrderStatus()->value));
+        if ($item->getType() === GaebItemType::Markup && $item->getMarkupType() !== null && $phase->carriesTexts()) {
+            $el->appendChild($dom->createElement('MarkupType', $item->getMarkupType()->value));
         }
 
         // Bei freier Menge fordert der Ausschreibende die Menge vom Bieter an;
@@ -256,7 +315,8 @@ final class GaebDaXmlGenerator {
         if ($item->hasFreeQuantity()) {
             $el->appendChild($dom->createElement('QtyTBD', 'Yes'));
         }
-        if ($item->getQuantity() !== null && !($item->hasFreeQuantity() && $phase === GaebPhase::RequestForBid)) {
+        $carriesQuantity = $item->getType() !== GaebItemType::Markup && $item->getType() !== GaebItemType::Note;
+        if ($carriesQuantity && $item->getQuantity() !== null && $phase->carriesQuantities() && !($item->hasFreeQuantity() && $phase === GaebPhase::RequestForBid)) {
             $el->appendChild($dom->createElement('Qty', $this->num($item->getQuantity())));
         }
         foreach ($phase->carriesTexts() ? $item->getQuantitySplits() : [] as $split) {
@@ -270,13 +330,40 @@ final class GaebDaXmlGenerator {
             $this->appendCatalogAssignments($dom, $splitEl, $split->getCatalogAssignments());
             $el->appendChild($splitEl);
         }
-        if ($item->getUnit() !== null && $phase->carriesQuantities()) {
+        if ($carriesQuantity && $item->getUnit() !== null && $phase->carriesQuantities()) {
             $el->appendChild($this->textElement($dom, 'QU', $item->getUnit()));
         }
         if ($phase->carriesTexts()) {
             $this->appendCatalogAssignments($dom, $el, $item->getCatalogAssignments());
         }
 
+        if ($phase->carriesPrices() && $item->getType() === GaebItemType::Markup && $item->getUnitPrice() !== null) {
+            // Die Zuschlagsposition trägt einen Satz statt eines Einheitspreises
+            // - und davor die Bemessungsgrundlage, ohne die der Satz nichts
+            // aussagt. Das Schema verlangt beides in den Auftragsphasen.
+            $el->appendChild($dom->createElement('ITMarkup', $this->amount($this->calculator->markupBase($boq, $item))));
+            $el->appendChild($dom->createElement('Markup', $this->amount($item->getUnitPrice())));
+            $el->appendChild($dom->createElement('IT', $this->amount(
+                $item->getTotalPrice() ?? $this->calculator->markupAmount($boq, $item)
+            )));
+        } elseif ($phase->carriesPrices() && $item->getUnitPrice() !== null && !$item->isNotOffered()) {
+            $el->appendChild($dom->createElement('UP', $this->amount($item->getUnitPrice())));
+            foreach ($item->getUnitPriceComponents() as $i => $value) {
+                $el->appendChild($dom->createElement('UPComp' . ($i + 1), $this->amount($value)));
+            }
+            if ($item->getTotalPrice() !== null) {
+                $el->appendChild($dom->createElement('IT', $this->amount($item->getTotalPrice())));
+            }
+        }
+        if ($item->getDiscountPercent() !== null) {
+            $el->appendChild($dom->createElement('DiscountPcnt', $this->num($item->getDiscountPercent())));
+        }
+        if ($item->getVatRate() !== null) {
+            $el->appendChild($dom->createElement('VAT', $this->num($item->getVatRate())));
+        }
+        if ($item->getBidderComment() !== null) {
+            $el->appendChild($this->htmlText($dom, 'BidComm', $item->getBidderComment()));
+        }
         // The bid carries no texts of its own: only the complements the bidder
         // filled in travel back, inside a CompleteText without markers.
         if (!$phase->carriesTexts()) {
@@ -339,26 +426,23 @@ final class GaebDaXmlGenerator {
             }
         }
 
-        if ($phase->carriesPrices() && $item->getUnitPrice() !== null && !$item->isNotOffered()) {
-            $el->appendChild($dom->createElement('UP', $this->amount($item->getUnitPrice())));
-            foreach ($item->getUnitPriceComponents() as $i => $value) {
-                $el->appendChild($dom->createElement('UPComp' . ($i + 1), $this->amount($value)));
-            }
-            if ($item->getTotalPrice() !== null) {
-                $el->appendChild($dom->createElement('IT', $this->amount($item->getTotalPrice())));
-            }
-        }
-        if ($item->getDiscountPercent() !== null) {
-            $el->appendChild($dom->createElement('DiscountPcnt', $this->num($item->getDiscountPercent())));
-        }
-        if ($item->getVatRate() !== null) {
-            $el->appendChild($dom->createElement('VAT', $this->num($item->getVatRate())));
-        }
-        if ($item->getBidderComment() !== null) {
-            $el->appendChild($this->htmlText($dom, 'BidComm', $item->getBidderComment()));
-        }
         if ($item->getAlternativeBidStatus() !== null) {
             $el->appendChild($dom->createElement('AlterBidStatus', $item->getAlternativeBidStatus()->value));
+        }
+
+        // Die Mengenermittlung trägt ihre Rechenzeilen an der Position - auch
+        // dann als leeres Element, wenn zu dieser Ordnungszahl nichts aufgemessen
+        // wurde: Die Datei bildet das ganze Verzeichnis ab.
+        if ($phase === GaebPhase::QuantitySurvey) {
+            $determ = $dom->createElement('QtyDeterm');
+            foreach ($item->getTakeoffLines() as $line) {
+                $entry = $dom->createElement('QDetermItem');
+                $takeoff = $dom->createElement('QTakeoff');
+                $takeoff->setAttribute('Row', $this->takeoff->render($line));
+                $entry->appendChild($takeoff);
+                $determ->appendChild($entry);
+            }
+            $el->appendChild($determ);
         }
 
         return $el;
@@ -578,6 +662,32 @@ final class GaebDaXmlGenerator {
             $entry->appendChild($dom->createElement('Num', $numeric ? 'Yes' : 'No'));
             $boqInfo->appendChild($entry);
         }
+    }
+
+    /** Head of an addendum - the order of the elements is fixed by the schema. */
+    private function changeOrderElement(DOMDocument $dom, GaebChangeOrder $order): DOMElement {
+        $el = $dom->createElement('COInfo');
+        $el->appendChild($dom->createElement('CONo', $order->getNumber()));
+        if ($order->getPhase() !== null) {
+            $el->appendChild($dom->createElement('COPhase', $order->getPhase()->value));
+        }
+        if ($order->getStatus() !== null) {
+            $el->appendChild($dom->createElement('COStatus', $order->getStatus()->value));
+        }
+        if ($order->getInitiator() !== null) {
+            $el->appendChild($dom->createElement('COInit', $order->getInitiator()->value));
+        }
+        if ($order->getReason() !== null) {
+            $el->appendChild($this->htmlText($dom, 'COReas', $order->getReason()));
+        }
+        if ($order->getContractReference() !== null) {
+            $el->appendChild($this->textElement($dom, 'RefBoQCOInfo', mb_substr($order->getContractReference(), 0, 60)));
+        }
+        if ($order->getDate() !== null) {
+            $el->appendChild($dom->createElement('CODate', $order->getDate()));
+        }
+
+        return $el;
     }
 
     private function partyElement(DOMDocument $dom, string $name, GaebParty $party): DOMElement {
