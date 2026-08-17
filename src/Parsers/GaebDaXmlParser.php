@@ -15,7 +15,7 @@ namespace ERechnungToolkit\Parsers;
 use CommonToolkit\Enums\CurrencyCode;
 use CommonToolkit\Helper\Data\{NumberHelper, XmlHelper};
 use CommonToolkit\ValueObjects\Money;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalog, GaebCatalogAssignment, GaebItem, GaebQuantitySplit, GaebSection, GaebSubDescription, GaebTextComplement, GaebTotals, GaebUpComponent};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalog, GaebCatalogAssignment, GaebItem, GaebQuantitySplit, GaebSection, GaebSubDescription, GaebTakeoffLine, GaebTextComplement, GaebTotals, GaebUpComponent};
 use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderStatus, GaebItemType};
 use InvalidArgumentException;
 use SimpleXMLElement;
@@ -211,6 +211,7 @@ final class GaebDaXmlParser {
             externalId: $this->attr($item, 'ID'),
             catalogAssignments: $this->parseCatalogAssignments($item),
             quantitySplits: $this->parseQuantitySplits($item),
+            takeoffLines: $this->parseTakeoffLines($item),
             position: $position,
         );
     }
@@ -508,6 +509,93 @@ final class GaebDaXmlParser {
     }
 
     /** GAEB uses the dot as decimal separator; tolerant against comma and grouping. */
+    /**
+     * Quantity survey of an item (`QtyDeterm` with `QTakeoff`). The line is a
+     * fixed 80 character record of the REB world, wrapped in XML: the first
+     * eleven columns stay empty, from column 12 it is identical to the REB file.
+     *
+     * Column layout after REB-VB 23.003 (the DA11 record), verified against the
+     * BVBS test file: kind (13), explanation (14-22), sign of the factor (23),
+     * factor (24-29), formula (30-31), values (32-69, read as five fields of
+     * seven from column 34), sheet number, line and index (70-75).
+     *
+     * @return list<GaebTakeoffLine>
+     */
+    private function parseTakeoffLines(SimpleXMLElement $item): array {
+        $determ = $this->findFirst($item, 'QtyDeterm');
+        if ($determ === null) {
+            return [];
+        }
+
+        $lines = [];
+        foreach ($determ->children() as $entry) {
+            if ($entry->getName() !== 'QDetermItem') {
+                continue;
+            }
+            $takeoff = $this->findFirst($entry, 'QTakeoff');
+            if ($takeoff === null) {
+                continue;
+            }
+
+            $row = (string) $this->attr($takeoff, 'Row');
+            if (trim($row) === '') {
+                continue;
+            }
+            // Zeichen zählen, nicht Bytes: „Aufmaß" verschiebt sonst jede
+            // folgende Spalte, weil ein Umlaut in UTF-8 zwei Bytes belegt.
+            $row = $row . str_repeat(' ', max(0, 80 - mb_strlen($row)));
+
+            $kind = mb_substr($row, 12, 1);
+            if ($kind === GaebTakeoffLine::KIND_COMMENT) {
+                // Eine Kommentarzeile trägt nur Text - keine Felder.
+                $lines[] = new GaebTakeoffLine(
+                    kind: $kind,
+                    explanation: trim(mb_substr($row, 13, 56)) ?: null,
+                    address: trim(mb_substr($row, 69, 6)) ?: null,
+                );
+
+                continue;
+            }
+
+            // Feldgrenzen nach REB-VB 23.003 (DA11-Satzaufbau, Stellen 13-75):
+            // Erläuterung 14-22, Vorzeichen des Faktors 23, Faktor 24-29.
+            $explanation = trim(mb_substr($row, 13, 9));
+            $sign = trim(mb_substr($row, 22, 1));
+            $factor = trim(mb_substr($row, 23, 6));
+            $formula = trim(mb_substr($row, 29, 2));
+
+            $values = [];
+            if ($formula === '91') {
+                // Die freie Formel kennt keine Wertfelder: alles hinter ihrer
+                // Nummer ist ein Ausdruck, der über mehrere Zeilen laufen darf.
+                $expression = rtrim(mb_substr($row, 31, 38));
+                if ($expression !== '') {
+                    $values[] = ltrim($expression);
+                }
+            } else {
+                for ($i = 0; $i < 5; $i++) {
+                    $value = trim(mb_substr($row, 33 + $i * 7, 7));
+                    if ($value !== '') {
+                        $values[] = $value;
+                    }
+                }
+            }
+
+            $lines[] = new GaebTakeoffLine(
+                kind: $kind === '' ? ' ' : $kind,
+                explanation: $explanation === '' ? null : $explanation,
+                factor: $factor === '' ? null : ($sign === '-' ? '-' . $factor : $factor),
+                formula: $formula === '' ? null : $formula,
+                values: $values,
+                address: trim(mb_substr($row, 69, 6)) ?: null,
+                // Ein abschließendes Gleichheitszeichen schließt die Rechnung ab.
+                closesResult: str_contains(mb_substr($row, 12, 57), '='),
+            );
+        }
+
+        return $lines;
+    }
+
     /**
      * Catalogues declared in the header. Without them an assignment is a code
      * without a meaning - the type carries the edition of DIN 276.

@@ -60,8 +60,8 @@ final class Gaeb90Parser {
         }
 
         $opening = $this->firstOfType($records, '00');
-        $mask = $opening !== null ? trim(substr($opening, 62, 9)) : '';
-        $phaseCode = $opening !== null ? trim(substr($opening, 10, 2)) : null;
+        $mask = $opening !== null ? trim(mb_substr($opening, 62, 9)) : '';
+        $phaseCode = $opening !== null ? trim(mb_substr($opening, 10, 2)) : null;
 
         $sections = [];
         $items = [];
@@ -76,11 +76,11 @@ final class Gaeb90Parser {
         $longTexts = [];
 
         foreach ($records as $record) {
-            $type = substr($record, 0, 2);
-            $body = rtrim(substr($record, 2, 72));
+            $type = mb_substr($record, 0, 2);
+            $body = rtrim(mb_substr($record, 2, 72));
 
             if ($type === '11') {
-                $lastGroup = $this->reference(substr($record, 2, 9), $mask);
+                $lastGroup = $this->reference(mb_substr($record, 2, 9), $mask);
                 $labels[$lastGroup] = null;
 
                 continue;
@@ -93,13 +93,13 @@ final class Gaeb90Parser {
             }
 
             if ($type === '21') {
-                $reference = $this->reference(substr($record, 2, 9), $mask);
+                $reference = $this->reference(mb_substr($record, 2, 9), $mask);
                 $lastItem = $reference;
                 $longTexts[$reference] = [];
                 $items[$reference] = [
                     'reference' => $reference,
-                    'quantity' => $this->decimal(substr($record, 23, 11), self::QUANTITY_SCALE),
-                    'unit' => trim(substr($record, 34, 4)) ?: null,
+                    'quantity' => $this->decimal(mb_substr($record, 23, 11), self::QUANTITY_SCALE),
+                    'unit' => trim(mb_substr($record, 34, 4)) ?: null,
                     'position' => $counters['item']++,
                 ];
 
@@ -174,7 +174,7 @@ final class Gaeb90Parser {
             return null;
         }
 
-        $digits = trim(substr($closing, 68, 6));
+        $digits = trim(mb_substr($closing, 68, 6));
 
         return $digits !== '' && ctype_digit($digits) ? (int) $digits : null;
     }
@@ -191,7 +191,10 @@ final class Gaeb90Parser {
             if (trim($line) === '') {
                 continue;
             }
-            $records[] = str_pad(substr($line, 0, self::RECORD_LENGTH), self::RECORD_LENGTH);
+            // Zeichen zählen, nicht Bytes: ein Umlaut im Text verschiebt sonst
+            // jede Spalte dahinter, sobald die Datei als UTF-8 vorliegt.
+            $line = mb_substr($line, 0, self::RECORD_LENGTH);
+            $records[] = $line . str_repeat(' ', max(0, self::RECORD_LENGTH - mb_strlen($line)));
         }
 
         return $records;
@@ -206,21 +209,21 @@ final class Gaeb90Parser {
     private function prices(array $records, CurrencyCode $currency, string $mask): array {
         $prices = [];
         foreach ($records as $record) {
-            if (substr($record, 0, 2) !== '23') {
+            if (mb_substr($record, 0, 2) !== '23') {
                 continue;
             }
 
-            $unit = $this->decimal(substr($record, 12, 10), self::PRICE_SCALE);
-            $tenth = trim(substr($record, 22, 1));
+            $unit = $this->decimal(mb_substr($record, 12, 10), self::PRICE_SCALE);
+            $tenth = trim(mb_substr($record, 22, 1));
             if ($unit !== null && is_numeric($unit) && ctype_digit($tenth)) {
                 // The eleventh column holds a tenth of a cent - dropping it
                 // changes the price of every item that uses it.
                 $unit = bcadd($unit, bcdiv($tenth, '1000', 4), 4);
             }
 
-            $prices[$this->reference(substr($record, 2, 9), $mask)] = [
+            $prices[$this->reference(mb_substr($record, 2, 9), $mask)] = [
                 'unit' => $unit !== null ? Money::of($unit, $currency, self::MONEY_SCALE) : null,
-                'total' => ($total = $this->decimal(substr($record, 24, 12), self::PRICE_SCALE)) !== null
+                'total' => ($total = $this->decimal(mb_substr($record, 24, 12), self::PRICE_SCALE)) !== null
                     ? Money::of($total, $currency, self::MONEY_SCALE)
                     : null,
             ];
@@ -232,7 +235,7 @@ final class Gaeb90Parser {
     /** @param list<string> $records */
     private function firstOfType(array $records, string $type): ?string {
         foreach ($records as $record) {
-            if (substr($record, 0, 2) === $type) {
+            if (mb_substr($record, 0, 2) === $type) {
                 return $record;
             }
         }

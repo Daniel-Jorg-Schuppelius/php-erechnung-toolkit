@@ -54,7 +54,7 @@ final class GaebSchemaValidator {
 
     private readonly string $schemaDir;
 
-    /** @var array<string, array<string, string>>|null Phase ⇒ Version ⇒ Dateipfad */
+    /** @var array<string, array<string, array<string, string>>>|null Phase ⇒ Version ⇒ Ausgabe ⇒ Dateipfad */
     private ?array $schemas = null;
 
     public function __construct(?string $schemaDir = null) {
@@ -132,9 +132,10 @@ final class GaebSchemaValidator {
      * @return list<string>
      */
     public function validateAs(string $xml, string $phase, ?string $version = null): array {
+        $edition = $this->documentEdition($xml);
         $xsd = $version === self::LEGACY_VERSION
-            ? $this->legacySchemaFile($phase, $this->documentEdition($xml))
-            : $this->schemaFile($phase, $version);
+            ? $this->legacySchemaFile($phase, $edition)
+            : $this->schemaFile($phase, $version, $edition);
         if ($xsd === null) {
             return [\sprintf(
                 'Kein GAEB-Schema für Phase %s%s hinterlegt.',
@@ -185,9 +186,9 @@ final class GaebSchemaValidator {
     /**
      * Pfad der Schemadatei; ohne Version gewinnt die höchste vorhandene.
      */
-    public function schemaFile(string $phase, ?string $version = null): ?string {
+    public function schemaFile(string $phase, ?string $version = null, ?string $edition = null): ?string {
         if ($version === self::LEGACY_VERSION) {
-            return $this->legacySchemaFile($phase, null);
+            return $this->legacySchemaFile($phase, $edition);
         }
 
         $available = $this->availableSchemas();
@@ -195,22 +196,55 @@ final class GaebSchemaValidator {
             return null;
         }
 
-        if ($version !== null) {
-            return $available[$phase][$version] ?? null;
+        if ($version === null) {
+            $versions = array_keys($available[$phase]);
+            usort($versions, static fn (string $a, string $b): int => version_compare($a, $b));
+            $newest = end($versions);
+            if ($newest === false) {
+                return null;
+            }
+            $version = $newest;
         }
 
-        $versions = array_keys($available[$phase]);
-        usort($versions, static fn (string $a, string $b): int => version_compare($a, $b));
-        $newest = end($versions);
+        $editions = $available[$phase][$version] ?? null;
+        if ($editions === null) {
+            return null;
+        }
 
-        return $newest === false ? null : $available[$phase][$newest];
+        return $this->pickEdition($editions, $edition);
     }
 
     /**
-     * Alle hinterlegten Schemas. Gibt es eine Phase in mehreren Ausgaben
-     * (X31: 2023-01 neben 2021-05), gewinnt die jüngste.
+     * Passendes Schema unter mehreren Ausgaben: die jüngste, die nicht neuer
+     * ist als das Dokument. Eine X31 von 2021-05 gegen das Schema von 2023-01
+     * zu prüfen meldet sonst nur, dass sie älter ist.
      *
-     * @return array<string, array<string, string>> Phase ⇒ Version ⇒ Dateipfad
+     * @param array<string, string> $editions
+     */
+    private function pickEdition(array $editions, ?string $edition): ?string {
+        ksort($editions);
+        if ($edition === null) {
+            $newest = end($editions);
+
+            return $newest === false ? null : $newest;
+        }
+
+        $chosen = null;
+        foreach ($editions as $candidate => $file) {
+            if ($candidate <= $edition) {
+                $chosen = $file;
+            }
+        }
+
+        return $chosen ?? reset($editions) ?: null;
+    }
+
+    /**
+     * Alle hinterlegten Schemas, nach Phase, Version und Ausgabe. Mehrere
+     * Ausgaben derselben Version bleiben nebeneinander stehen — welche gilt,
+     * sagt das `VersDate` des Dokuments.
+     *
+     * @return array<string, array<string, array<string, string>>> Phase ⇒ Version ⇒ Ausgabe ⇒ Dateipfad
      */
     public function availableSchemas(): array {
         if ($this->schemas !== null) {
@@ -223,7 +257,6 @@ final class GaebSchemaValidator {
         }
 
         $found = [];
-        $editions = [];
         foreach ($files as $path) {
             if (preg_match(self::FILE_PATTERN, basename($path), $matches) !== 1) {
                 continue;
@@ -233,16 +266,8 @@ final class GaebSchemaValidator {
                 continue;
             }
 
-            $phase = $matches['phase'];
-            $version = $matches['version'];
-            $edition = $matches['edition'];
-
-            if (isset($editions[$phase][$version]) && $editions[$phase][$version] >= $edition) {
-                continue;
-            }
-
-            $editions[$phase][$version] = $edition;
-            $found[$phase][$version] = $path;
+            // Alle Ausgaben behalten: welche gilt, entscheidet das Dokument.
+            $found[$matches['phase']][$matches['version']][$matches['edition']] = $path;
         }
 
         ksort($found);

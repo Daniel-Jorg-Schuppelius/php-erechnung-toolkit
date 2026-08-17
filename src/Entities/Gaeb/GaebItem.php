@@ -28,6 +28,7 @@ final class GaebItem {
      * @param list<Money>              $unitPriceComponents shares of the unit price, in the order of the header labels
      * @param list<GaebCatalogAssignment> $catalogAssignments cost group, work category, building, model identifier
      * @param list<GaebQuantitySplit>  $quantitySplits partial quantities, each with its own assignments
+     * @param list<GaebTakeoffLine>    $takeoffLines quantity survey after REB-VB 23.003
      */
     public function __construct(
         private readonly string $reference,
@@ -59,7 +60,8 @@ final class GaebItem {
         private readonly ?string $externalId = null,
         private readonly int $position = 0,
         private readonly array $catalogAssignments = [],
-        private readonly array $quantitySplits = []
+        private readonly array $quantitySplits = [],
+        private readonly array $takeoffLines = []
     ) {}
 
     /** Ordinal number including the index level, e.g. "001.001.0010.A". */
@@ -148,6 +150,16 @@ final class GaebItem {
      */
     public function getQuantitySplits(): array {
         return $this->quantitySplits;
+    }
+
+    /**
+     * Quantity survey of the item (X31). The lines are the calculation behind
+     * the quantity, not a copy of it.
+     *
+     * @return list<GaebTakeoffLine>
+     */
+    public function getTakeoffLines(): array {
+        return $this->takeoffLines;
     }
 
     /** @return list<Money> */
