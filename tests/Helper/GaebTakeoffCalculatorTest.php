@@ -133,4 +133,43 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
         $this->expectException(InvalidArgumentException::class);
         $parser->evaluate('phpinfo()');
     }
+
+    /**
+     * Eine Aufmaßzeile greift auf das Ergebnis einer früheren zu — über deren
+     * Adresse. So wird ein Hilfswert einmal gerechnet und mehrfach benutzt.
+     */
+    public function test_lines_refer_back_to_earlier_results(): void {
+        $helper = new GaebTakeoffLine(
+            kind: GaebTakeoffLine::KIND_HELPER,
+            formula: '04',
+            values: ['2000', '3000'],
+            address: '0004F0',
+        );
+        // Höhe aus dem Hilfswert (6,0) mal Länge 2,0 mal Breite 1,0 = 12,0
+        $uses = new GaebTakeoffLine(formula: '04', values: ['2000', '1000', '0004F0'], address: '0004G0');
+        $item = new GaebItem(reference: '001.0010', takeoffLines: [$helper, $uses]);
+
+        $result = $this->calculator->total($item);
+
+        // Der Hilfswert selbst zählt nicht mit, nur die Zeile, die ihn nutzt.
+        $this->assertEqualsWithDelta(12.0, $result['quantity'], 0.0001);
+        $this->assertSame(1, $result['lines']);
+    }
+
+    /** Formel 91 kann eine Zwischensumme allein über ihre Adresse übernehmen. */
+    public function test_free_formula_takes_over_a_subtotal(): void {
+        $subtotal = new GaebTakeoffLine(
+            kind: GaebTakeoffLine::KIND_SUBTOTAL,
+            formula: '04',
+            values: ['35000', '46000'],
+            address: '0004K0',
+        );
+        $carry = new GaebTakeoffLine(formula: '91', values: ['0004K0='], address: '0005D0');
+        $item = new GaebItem(reference: '001.0010', takeoffLines: [$subtotal, $carry]);
+
+        $result = $this->calculator->total($item);
+
+        // 35,0 × 46,0 = 1610,0 — einmal als Zwischensumme, einmal übernommen.
+        $this->assertEqualsWithDelta(3220.0, $result['quantity'], 0.0001);
+    }
 }

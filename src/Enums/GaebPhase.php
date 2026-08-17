@@ -114,7 +114,10 @@ enum GaebPhase: string {
      */
     public function carriesQuantities(): bool {
         return match ($this) {
-            self::Bid, self::FrameworkBid => false,
+            // Die Angebotsabgabe antwortet auf ein bekanntes LV, und die
+            // Mengenermittlung trägt Aufmaßansätze statt LV-Mengen - in beiden
+            // Fällen eine Menge zu fordern hieße, die Phase misszuverstehen.
+            self::Bid, self::FrameworkBid, self::QuantitySurvey => false,
             default => true,
         };
     }

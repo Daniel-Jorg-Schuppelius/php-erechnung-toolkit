@@ -65,16 +65,30 @@ final class GaebTakeoffCalculator {
         $sum = 0.0;
         $counted = 0;
         $skipped = [];
+        /** @var array<string, float> $results result of every addressed line */
+        $results = [];
 
         foreach ($item->getTakeoffLines() as $line) {
-            if (!$line->countsTowardsQuantity() || $line->getFormula() === null) {
+            if ($line->getFormula() === null) {
                 continue;
             }
 
-            $value = $this->line($line);
+            $value = $this->line($line, $results);
             if ($value === null) {
-                $skipped[] = $this->reason($line);
+                if ($line->countsTowardsQuantity()) {
+                    $skipped[] = $this->reason($line);
+                }
 
+                continue;
+            }
+
+            // Auch Hilfswerte werden abgelegt: sie zählen nicht zur Menge, aber
+            // spätere Zeilen greifen sie über ihre Adresse wieder auf.
+            if ($line->getAddress() !== null) {
+                $results[$line->getAddress()] = $value;
+            }
+
+            if (!$line->countsTowardsQuantity()) {
                 continue;
             }
 
@@ -85,17 +99,22 @@ final class GaebTakeoffCalculator {
         return ['quantity' => round($sum, 4), 'lines' => $counted, 'skipped' => $skipped];
     }
 
-    /** Result of a single line including its factor, or null when unsupported. */
-    public function line(GaebTakeoffLine $line): ?float {
+    /**
+     * Result of a single line including its factor, or null when unsupported.
+     *
+     * @param array<string, float> $results results of earlier addressed lines
+     */
+    public function line(GaebTakeoffLine $line, array $results = []): ?float {
         $formula = $line->getFormula();
         if ($formula === null || !isset(self::SUPPORTED[$formula])) {
             return null;
         }
 
-        $values = array_map(fn (string $raw): float => $this->value($raw), $line->getValues());
+        $raw = $line->getValues();
+        $values = array_map(fn (string $value): float => $this->value($value, $results), $raw);
         $result = $formula === '91'
-            ? $this->freeFormula($line->getValues()[0] ?? '')
-            : $this->apply($formula, $values, $line->getValues());
+            ? $this->freeFormula($raw[0] ?? '', $results)
+            : $this->apply($formula, $values, $raw);
 
         if ($result === null) {
             return null;
@@ -179,11 +198,18 @@ final class GaebTakeoffCalculator {
      * Free formula: an expression with the comma as decimal separator. It is
      * evaluated by a parser of its own - never by `eval`, because the text
      * comes from a foreign file.
+     *
+     * @param array<string, float> $results
      */
-    private function freeFormula(string $expression): ?float {
+    private function freeFormula(string $expression, array $results = []): ?float {
         $expression = rtrim(trim($expression), '=');
         if ($expression === '') {
             return null;
+        }
+
+        // Ein reiner Adressverweis übernimmt die Zwischensumme jener Zeile.
+        if ($this->isAddress($expression)) {
+            return $results[$expression] ?? null;
         }
 
         try {
@@ -211,14 +237,32 @@ final class GaebTakeoffCalculator {
         return $negative ? -$value : $value;
     }
 
-    /** Value field: an integer with three implied decimals. */
-    private function value(string $raw): float {
+    /**
+     * Value field: an integer with three implied decimals - or the address of an
+     * earlier line, whose result is taken instead. A survey refers back to what
+     * it has already computed rather than repeating it.
+     *
+     * @param array<string, float> $results
+     */
+    private function value(string $raw, array $results = []): float {
         $raw = rtrim(trim($raw), '+-=');
-        if ($raw === '' || !is_numeric($raw)) {
+        if ($raw === '') {
             return 0.0;
         }
 
-        return ((float) $raw) / self::VALUE_SCALE;
+        if ($this->isAddress($raw)) {
+            return $results[$raw] ?? 0.0;
+        }
+
+        return is_numeric($raw) ? ((float) $raw) / self::VALUE_SCALE : 0.0;
+    }
+
+    /**
+     * Does the field look like a line address? Four digits, a letter for the
+     * line and one more digit - that is how the survey numbers its sheets.
+     */
+    private function isAddress(string $value): bool {
+        return preg_match('/^\d{4}[A-Za-z]\d$/', $value) === 1;
     }
 
     /** REB angles are given in gon: 400 gon are a full circle. */
