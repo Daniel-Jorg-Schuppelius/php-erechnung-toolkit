@@ -30,6 +30,7 @@ final class GaebBoq {
      * @param list<GaebItem>         $items
      * @param list<GaebUpComponent>  $upComponents unit price shares required by the client
      * @param list<GaebCatalog>      $catalogs catalogues the assignments point to
+     * @param list<GaebCostType>     $costTypes main cost types (X52 calculation data)
      * @param list<GaebChangeOrder>  $changeOrders addendum heads of the document
      */
     public function __construct(
@@ -43,7 +44,8 @@ final class GaebBoq {
         private readonly ?GaebTotals $totals = null,
         private readonly CurrencyCode $currency = CurrencyCode::Euro,
         private readonly array $catalogs = [],
-        private readonly array $changeOrders = []
+        private readonly array $changeOrders = [],
+        private readonly array $costTypes = []
     ) {}
 
     /** GAEB DA XML version, e.g. "3.3". */
@@ -105,6 +107,19 @@ final class GaebBoq {
      */
     public function getCatalogs(): array {
         return $this->catalogs;
+    }
+
+    /**
+     * Main cost types of the calculation data exchange (X52).
+     *
+     * They live in the header because a company surcharges by kind of cost,
+     * not by item — the individual approaches at the items refer to them by
+     * key.
+     *
+     * @return list<GaebCostType>
+     */
+    public function getCostTypes(): array {
+        return $this->costTypes;
     }
 
     /**

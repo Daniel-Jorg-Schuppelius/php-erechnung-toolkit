@@ -211,6 +211,141 @@ class GaebConformanceTest extends BaseTestCase {
     }
 
     /**
+     * Katalogzuordnungen der BVBS-Prüfdatei (Feature 109, MVP-649).
+     *
+     * Die Prüfdatei führt **vier Katalogarten nebeneinander** —
+     * Leistungsbereich, Kostengruppe nach DIN 276, Ort und Kostenträger — und
+     * verteilt Teilmengen auf verschiedene Schlüssel. Genau daran zeigt sich,
+     * ob der Leser den Mechanismus verstanden hat: Es ist **ein** Mechanismus
+     * für alle vier, nicht vier Sonderfälle.
+     */
+    public function test_catalogue_assignments_of_the_official_file_are_read(): void {
+        $files = $this->files('pruefdateien/extracted/*AVA*.{X86,x86}');
+        $this->skipWithout($files, 'die Katalogzuordnungen');
+
+        foreach ($files as $file) {
+            $raw = (string) file_get_contents($file);
+            $boq = (new GaebReader)->read($raw, basename($file));
+
+            // Die Kataloge des Kopfes: der Typ trägt die Ausgabe der Norm.
+            $types = array_map(static fn ($catalog): ?string => $catalog->getType(), $boq->getCatalogs());
+            $this->assertContains('work category', $types, basename($file) . ': Leistungsbereich fehlt.');
+            $this->assertContains('locality', $types, basename($file) . ': Ort fehlt.');
+            $this->assertContains('cost unit', $types, basename($file) . ': Kostenträger fehlt.');
+            $this->assertNotEmpty(
+                array_filter($types, static fn (?string $type): bool => str_starts_with((string) $type, 'cost group')),
+                basename($file) . ': Kostengruppenkatalog fehlt.'
+            );
+
+            // Und die Zuordnungen selbst - an Positionen wie an Teilmengen.
+            $assignments = 0;
+            $splitAssignments = 0;
+            foreach ($boq->getItems() as $item) {
+                $assignments += count($item->getCatalogAssignments());
+                foreach ($item->getQuantitySplits() as $split) {
+                    $splitAssignments += count($split->getCatalogAssignments());
+                }
+            }
+            $this->assertGreaterThan(0, $assignments, basename($file) . ': keine Zuordnung an Positionen.');
+            $this->assertGreaterThan(0, $splitAssignments, basename($file) . ': keine Zuordnung an Teilmengen.');
+        }
+    }
+
+    /**
+     * Round-Trip der Zuordnungen: Was hereinkam, geht unverändert hinaus.
+     *
+     * Eine verlorene Kostengruppe fällt beim Empfänger nicht auf — sie fehlt
+     * einfach, und die Auswertung rechnet leise falsch. Deshalb wird hier
+     * gezählt statt gesichtet.
+     */
+    public function test_catalogue_assignments_survive_a_round_trip(): void {
+        $files = $this->files('pruefdateien/extracted/*AVA*.{X86,x86}');
+        $this->skipWithout($files, 'den Zuordnungs-Round-Trip');
+
+        foreach ($files as $file) {
+            $name = basename($file);
+            $source = (new GaebReader)->read((string) file_get_contents($file), $name);
+            $phase = GaebPhase::fromCode($source->getPhaseCode());
+            if ($phase === null || !$phase->isWritableAsDaXml()) {
+                continue;
+            }
+
+            $xml = (new GaebDaXmlGenerator)->generate($source, $phase);
+            $again = (new GaebReader)->read($xml, $name);
+
+            $this->assertSame(
+                $this->assignmentKeys($source),
+                $this->assignmentKeys($again),
+                $name . ': Katalogzuordnungen weichen nach dem Schreiben ab.'
+            );
+            $this->assertSame(
+                count($source->getCatalogs()),
+                count($again->getCatalogs()),
+                $name . ': Katalogdefinitionen des Kopfes gingen verloren.'
+            );
+        }
+    }
+
+    /**
+     * X → D → X: Der Weg über GAEB 90 **verliert** die Zuordnungen — und sagt
+     * es (Feature 109, MVP-649).
+     *
+     * Das Altformat kennt keine Katalogzuordnung; sie stillschweigend fallen
+     * zu lassen wäre der eigentliche Schaden, weil die Auswertung beim
+     * Empfänger dann leise falsch rechnet. Deshalb steht der Verlust im
+     * Protokoll, und dieser Test hält fest, dass er dort **auch wirklich
+     * steht**.
+     */
+    public function test_conversion_to_gaeb90_reports_the_lost_assignments(): void {
+        $files = $this->files('pruefdateien/extracted/*AVA*.{X86,x86}');
+        $this->skipWithout($files, 'die Verlustmeldung beim Formatwechsel');
+
+        foreach ($files as $file) {
+            $name = basename($file);
+            $source = (new GaebReader)->read((string) file_get_contents($file), $name);
+            $phase = GaebPhase::fromCode($source->getPhaseCode());
+            if ($phase === null) {
+                continue;
+            }
+
+            $result = (new \ERechnungToolkit\Generators\GaebWriter)->write($source, GaebFormat::Gaeb90, $phase);
+
+            $mentionsCatalogues = array_filter(
+                $result['losses'],
+                static fn (string $loss): bool => str_contains($loss, 'Katalogzuordnungen')
+            );
+            $this->assertNotEmpty($mentionsCatalogues, $name . ': Der Verlust der Zuordnungen wurde nicht gemeldet.');
+
+            // Und die erzeugte Datei ist trotzdem brauchbar - der Verlust ist
+            // benannt, nicht fatal.
+            $this->assertNotSame('', trim($result['content']), $name . ': GAEB-90-Ausgabe ist leer.');
+        }
+    }
+
+    /**
+     * Alle Zuordnungen eines Dokuments als vergleichbare Schlüsselliste —
+     * Ordnungszahl, Katalog und Code, sortiert.
+     *
+     * @return list<string>
+     */
+    private function assignmentKeys(\ERechnungToolkit\Entities\Gaeb\GaebBoq $boq): array {
+        $keys = [];
+        foreach ($boq->getItems() as $item) {
+            foreach ($item->getCatalogAssignments() as $assignment) {
+                $keys[] = $item->getReference() . '|' . $assignment->getCatalogId() . '|' . $assignment->getCode();
+            }
+            foreach ($item->getQuantitySplits() as $index => $split) {
+                foreach ($split->getCatalogAssignments() as $assignment) {
+                    $keys[] = $item->getReference() . '#' . $index . '|' . $assignment->getCatalogId() . '|' . $assignment->getCode();
+                }
+            }
+        }
+        sort($keys);
+
+        return $keys;
+    }
+
+    /**
      * Der Abschlusssatz einer GAEB-90-Datei nennt die Positionszahl. Weicht der
      * Leser davon ab, sind Sätze verloren gegangen - genau dafür steht die Zahl
      * in der Datei.

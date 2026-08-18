@@ -27,6 +27,7 @@ final class GaebItem {
      * @param list<GaebSubDescription> $subDescriptions
      * @param list<Money>              $unitPriceComponents shares of the unit price, in the order of the header labels
      * @param list<GaebCatalogAssignment> $catalogAssignments cost group, work category, building, model identifier
+     * @param list<GaebCostApproach>      $costApproaches     calculation data (X52) — what each kind of cost contributes
      * @param list<GaebQuantitySplit>  $quantitySplits partial quantities, each with its own assignments
      * @param list<GaebTakeoffLine>    $takeoffLines quantity survey after REB-VB 23.003
      */
@@ -65,8 +66,18 @@ final class GaebItem {
         private readonly int $position = 0,
         private readonly array $catalogAssignments = [],
         private readonly array $quantitySplits = [],
-        private readonly array $takeoffLines = []
+        private readonly array $takeoffLines = [],
+        private readonly array $costApproaches = []
     ) {}
+
+    /**
+     * Calculation data of this item (X52) — empty in every other phase.
+     *
+     * @return list<GaebCostApproach>
+     */
+    public function getCostApproaches(): array {
+        return $this->costApproaches;
+    }
 
     /** Ordinal number including the index level, e.g. "001.001.0010.A". */
     public function getReference(): string {

@@ -15,7 +15,7 @@ namespace ERechnungToolkit\Parsers;
 use CommonToolkit\Enums\CurrencyCode;
 use CommonToolkit\Helper\Data\{NumberHelper, XmlHelper};
 use CommonToolkit\ValueObjects\Money;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalog, GaebCatalogAssignment, GaebChangeOrder, GaebItem, GaebQuantitySplit, GaebSection, GaebSubDescription, GaebTakeoffLine, GaebTextComplement, GaebTotals, GaebUpComponent};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalog, GaebCatalogAssignment, GaebChangeOrder, GaebCostApproach, GaebCostType, GaebItem, GaebQuantitySplit, GaebSection, GaebSubDescription, GaebTakeoffLine, GaebTextComplement, GaebTotals, GaebUpComponent};
 use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderInitiator, GaebChangeOrderPhase, GaebChangeOrderStatus, GaebItemType, GaebMarkupType};
 use ERechnungToolkit\Helper\Gaeb\GaebTakeoffRecord;
 use InvalidArgumentException;
@@ -84,6 +84,7 @@ final class GaebDaXmlParser {
             items: $items,
             upComponents: $this->parseUpComponents($boq),
             catalogs: $this->parseCatalogs($this->findFirst($boq, 'BoQInfo')),
+            costTypes: $this->parseCostTypes($this->findFirst($boq, 'BoQInfo')),
             changeOrders: $this->parseChangeOrders($this->findDeep($root, 'AwardInfo')),
             totals: $this->parseTotals($this->findFirst($this->findFirst($boq, 'BoQInfo'), 'Totals'), $currency),
             currency: $currency,
@@ -223,6 +224,7 @@ final class GaebDaXmlParser {
             catalogAssignments: $this->parseCatalogAssignments($item),
             quantitySplits: $this->parseQuantitySplits($item),
             takeoffLines: $this->parseTakeoffLines($item),
+            costApproaches: $this->parseCostApproaches($item),
             position: $position,
         );
     }
@@ -624,6 +626,68 @@ final class GaebDaXmlParser {
         }
 
         return $catalogs;
+    }
+
+    /**
+     * Main cost types of the calculation data exchange (X52).
+     *
+     * They sit in the header: a company surcharges by kind of cost, not by
+     * item, and the approaches at the items point back here by key.
+     *
+     * @return list<GaebCostType>
+     */
+    private function parseCostTypes(?SimpleXMLElement $boqInfo): array {
+        if ($boqInfo === null) {
+            return [];
+        }
+
+        $types = [];
+        foreach ($boqInfo->children() as $child) {
+            if ($child->getName() !== 'CostType') {
+                continue;
+            }
+            $key = $this->trimOrNull((string) ($child['Key'] ?? ''));
+            if ($key === null) {
+                continue;
+            }
+            $types[] = new GaebCostType(
+                key: $key,
+                description: $this->trimOrNull($this->textOf($this->findFirst($child, 'CostDescription'))),
+                unit: $this->trimOrNull($this->textOf($this->findFirst($child, 'CostTypeUnit'))),
+                markup: $this->cleanNumber($this->textOf($this->findFirst($child, 'Markup'))),
+            );
+        }
+
+        return $types;
+    }
+
+    /**
+     * Cost approaches of one item (X52) - what each kind of cost contributes.
+     *
+     * @return list<GaebCostApproach>
+     */
+    private function parseCostApproaches(SimpleXMLElement $node): array {
+        $approaches = [];
+        foreach ($node->children() as $child) {
+            if ($child->getName() !== 'CostApproach') {
+                continue;
+            }
+            $key = $this->trimOrNull((string) ($child['Key'] ?? ''));
+            if ($key === null) {
+                continue;
+            }
+            $approaches[] = new GaebCostApproach(
+                costTypeKey: $key,
+                quantity: $this->cleanNumber($this->textOf($this->findFirst($child, 'CostApproachQty'))),
+                // Ohne eigene Einheit gilt die der Kostenart (Schema-Anmerkung)
+                // - sie hier zu kopieren hieße, sie zweimal zu führen.
+                unit: $this->trimOrNull($this->textOf($this->findFirst($child, 'CostApproachQU'))),
+                performance: $this->cleanNumber($this->textOf($this->findFirst($child, 'Performance'))),
+                value: $this->cleanNumber($this->textOf($this->findFirst($child, 'Value'))),
+            );
+        }
+
+        return $approaches;
     }
 
     /**

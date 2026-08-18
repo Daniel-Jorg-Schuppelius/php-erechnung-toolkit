@@ -15,7 +15,7 @@ namespace ERechnungToolkit\Generators;
 use CommonToolkit\ValueObjects\Money;
 use DOMDocument;
 use DOMElement;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalogAssignment, GaebChangeOrder, GaebCostElement, GaebCosting, GaebFrameworkAgreement, GaebInvoice, GaebItem, GaebOrder, GaebOrderItem, GaebParty, GaebSection, GaebTotals};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalogAssignment, GaebChangeOrder, GaebCostApproach, GaebCostElement, GaebCostType, GaebCosting, GaebFrameworkAgreement, GaebInvoice, GaebItem, GaebOrder, GaebOrderItem, GaebParty, GaebSection, GaebTotals};
 use ERechnungToolkit\Enums\{GaebAwardCategory, GaebChangeOrderStatus, GaebItemType, GaebPhase};
 use ERechnungToolkit\Helper\Gaeb\{GaebCalculator, GaebTakeoffRecord};
 use InvalidArgumentException;
@@ -295,6 +295,14 @@ final class GaebDaXmlGenerator {
                 $el->appendChild($this->textElement($dom, 'CtlgAssignType', $catalog->getAssignType()));
             }
             $boqInfo->appendChild($el);
+        }
+        // Die Kalkulationsdaten schließen den Kopf ab (Schemafolge: … Totals,
+        // Ctlg, CostType). Die Kostenarten stehen dort, weil ein Betrieb nach
+        // Kostenart zuschlägt, nicht je Position.
+        if ($phase === GaebPhase::CalculationData) {
+            foreach ($boq->getCostTypes() as $costType) {
+                $boqInfo->appendChild($this->costTypeElement($dom, $costType));
+            }
         }
         if (!$isSurvey) {
             $boqEl->appendChild($boqInfo);
@@ -591,6 +599,13 @@ final class GaebDaXmlGenerator {
                 $determ->appendChild($entry);
             }
             $el->appendChild($determ);
+        }
+
+        // Die Kalkulationsdaten schließen die Position ab - so verlangt es die
+        // Schemafolge, und inhaltlich passt es: Sie beschreiben, wie der Preis
+        // darüber zustande kam.
+        if ($phase === GaebPhase::CalculationData) {
+            $this->appendCostApproaches($dom, $el, $item->getCostApproaches());
         }
 
         return $el;
@@ -1249,6 +1264,57 @@ final class GaebDaXmlGenerator {
     /**
      * Catalogue assignments of a node. One mechanism for cost group, work
      * category, building, cost unit and model identifier alike.
+     *
+     * @param list<GaebCatalogAssignment> $assignments
+     */
+    /** One main cost type in the header (X52). */
+    private function costTypeElement(DOMDocument $dom, GaebCostType $costType): DOMElement {
+        $el = $dom->createElement('CostType');
+        $el->setAttribute('Key', $costType->getKey());
+        if ($costType->getDescription() !== null) {
+            $el->appendChild($this->htmlText($dom, 'CostDescription', $costType->getDescription()));
+        }
+        if ($costType->getUnit() !== null) {
+            $el->appendChild($this->textElement($dom, 'CostTypeUnit', mb_substr($costType->getUnit(), 0, 4)));
+        }
+        if ($costType->getMarkup() !== null) {
+            $el->appendChild($dom->createElement('Markup', $this->num($costType->getMarkup())));
+        }
+
+        return $el;
+    }
+
+    /**
+     * The cost approaches of an item (X52). They close the item, as the schema
+     * sequence demands.
+     *
+     * @param list<GaebCostApproach> $approaches
+     */
+    private function appendCostApproaches(DOMDocument $dom, DOMElement $parent, array $approaches): void {
+        foreach ($approaches as $approach) {
+            $el = $dom->createElement('CostApproach');
+            $el->setAttribute('Key', $approach->getCostTypeKey());
+            if ($approach->getQuantity() !== null) {
+                $el->appendChild($dom->createElement('CostApproachQty', $this->num($approach->getQuantity())));
+            }
+            // Ohne eigene Einheit gilt die der Kostenart - sie hier zu
+            // wiederholen hieße, dieselbe Angabe zweimal zu führen.
+            if ($approach->getUnit() !== null) {
+                $el->appendChild($this->textElement($dom, 'CostApproachQU', mb_substr($approach->getUnit(), 0, 4)));
+            }
+            if ($approach->getPerformance() !== null) {
+                $el->appendChild($dom->createElement('Performance', $this->num($approach->getPerformance())));
+            }
+            if ($approach->getValue() !== null) {
+                $el->appendChild($dom->createElement('Value', $this->num($approach->getValue())));
+            }
+            $parent->appendChild($el);
+        }
+    }
+
+    /**
+     * Catalogue assignments of one node — the same mechanism carries cost
+     * group, work category, building and model identifier.
      *
      * @param list<GaebCatalogAssignment> $assignments
      */
