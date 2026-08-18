@@ -169,6 +169,48 @@ class GaebConformanceTest extends BaseTestCase {
     }
 
     /**
+     * Round-Trip über **echte Kundendateien** (MVP-635): Jede Datei aus
+     * laufenden Verfahren wird gelesen, geschrieben und erneut gelesen — die
+     * Positionszahl und jede Ordnungszahl müssen überstehen.
+     *
+     * Das ist der Nachweis, der mit Musterdateien nicht zu führen ist:
+     * Prüfdateien decken die Grenzfälle des Standards ab, Kundendateien die
+     * Eigenheiten der Werkzeuge, mit denen tatsächlich gearbeitet wird. Die
+     * Dateien liegen außerhalb des Repositorys und werden nirgends
+     * mitgeliefert; ohne sie überspringt der Test.
+     */
+    public function test_real_world_files_survive_a_round_trip(): void {
+        $files = $this->files('realdaten/*.{X81,X82,X83,X84,X86,x81,x82,x83,x84,x86}');
+        $this->skipWithout($files, 'den Round-Trip über echte Dateien');
+
+        $reader = new GaebReader;
+        $generator = new GaebDaXmlGenerator;
+
+        foreach ($files as $file) {
+            $name = basename($file);
+            $source = $reader->read((string) file_get_contents($file), $name);
+
+            $phase = GaebPhase::fromCode($source->getPhaseCode());
+            if ($phase === null || !$phase->isWritableAsDaXml()) {
+                continue;
+            }
+
+            $xml = $generator->generate($source, $phase);
+            $this->assertSame([], (new GaebSchemaValidator)->validate($xml), $name . ': Export nicht schemavalide.');
+
+            $again = $reader->read($xml, $name);
+            $this->assertSame($source->countItems(), $again->countItems(), $name . ': Positionszahl weicht ab.');
+
+            // Die Ordnungszahl ist der Schlüssel, über den die Gegenseite
+            // zuordnet - geht sie verloren, ist die Datei wertlos, auch wenn
+            // die Zahl der Positionen stimmt.
+            $before = array_map(static fn ($item): string => $item->getReference(), $source->getItems());
+            $after = array_map(static fn ($item): string => $item->getReference(), $again->getItems());
+            $this->assertSame($before, $after, $name . ': Ordnungszahlen weichen ab.');
+        }
+    }
+
+    /**
      * Der Abschlusssatz einer GAEB-90-Datei nennt die Positionszahl. Weicht der
      * Leser davon ab, sind Sätze verloren gegangen - genau dafür steht die Zahl
      * in der Datei.

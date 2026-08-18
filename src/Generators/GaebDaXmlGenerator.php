@@ -267,6 +267,19 @@ final class GaebDaXmlGenerator {
                 $boqInfo->appendChild($label);
             }
         }
+        // Reihenfolge nach Schema: erst die Summen, dann die Kataloge. Die
+        // Musterdateien führen keinen Katalog in `BoQInfo`, weshalb die
+        // vertauschte Folge dort nie auffiel - eine Kundendatei mit
+        // DIN-276-Kostengruppen hat sie sichtbar gemacht.
+        if (!$isSurvey) {
+            // Die Rechnung verlangt die Summe des Verzeichnisses; wo das
+            // Dokument keine mitbringt, wird sie gebildet.
+            if ($isInvoice && $boq->getTotals()?->getTotal() === null) {
+                $boqInfo->appendChild($this->totalElement($dom, $this->calculator->documentTotal($boq)));
+            } else {
+                $this->appendTotals($dom, $boqInfo, $boq->getTotals());
+            }
+        }
         // Kataloge und Zuordnungen beschreiben das Dokument; die Angebotsabgabe
         // antwortet darauf und trägt sie nicht erneut.
         foreach ($phase->carriesTexts() ? $boq->getCatalogs() : [] as $catalog) {
@@ -284,13 +297,6 @@ final class GaebDaXmlGenerator {
             $boqInfo->appendChild($el);
         }
         if (!$isSurvey) {
-            // Die Rechnung verlangt die Summe des Verzeichnisses; wo das
-            // Dokument keine mitbringt, wird sie gebildet.
-            if ($isInvoice && $boq->getTotals()?->getTotal() === null) {
-                $boqInfo->appendChild($this->totalElement($dom, $this->calculator->documentTotal($boq)));
-            } else {
-                $this->appendTotals($dom, $boqInfo, $boq->getTotals());
-            }
             $boqEl->appendChild($boqInfo);
         }
 
@@ -795,6 +801,12 @@ final class GaebDaXmlGenerator {
         }
         if ($indexUsed) {
             $breakdown[] = ['Index', 1];
+        }
+
+        // Auch ein Verzeichnis ohne Positionen muss seinen Aufbau nennen -
+        // eine Rechnung ohne LV ist zulässig, ein leerer Kopf nicht.
+        if ($breakdown === []) {
+            $breakdown[] = ['Item', 4];
         }
 
         foreach (array_slice($breakdown, 0, 7) as [$type, $length]) {
