@@ -287,6 +287,47 @@ class GaebConformanceTest extends BaseTestCase {
     }
 
     /**
+     * Lasttest über ein großes LV mit Kostengruppen (Feature 109,
+     * Teststrategie Punkt 5).
+     *
+     * Die Demodatei trägt rund 8.800 Positionen auf 30 MB und an jeder
+     * Position mehrere Katalogzuordnungen. Geprüft wird, dass der Leser das
+     * **in einem Zug** schafft: Ein Verfahren, das erst bei kleinen Dateien
+     * funktioniert, hilft im Bau nicht — dort sind große die Regel.
+     *
+     * Die Schranken sind bewusst großzügig (30 s, 1 GB): Der Test soll eine
+     * Entgleisung fangen, nicht eine Laufzeit festschreiben, die auf jedem
+     * Rechner anders ausfällt.
+     */
+    public function test_large_bill_of_quantities_stays_within_bounds(): void {
+        $files = $this->files('realdaten/*KGR*.{X81,x81}');
+        $this->skipWithout($files, 'den Lasttest');
+
+        foreach ($files as $file) {
+            $name = basename($file);
+            $raw = (string) file_get_contents($file);
+
+            $before = memory_get_peak_usage(true);
+            $start = hrtime(true);
+            $boq = (new GaebReader)->read($raw, $name);
+            $seconds = (hrtime(true) - $start) / 1e9;
+            $peakMb = (memory_get_peak_usage(true) - $before) / 1024 / 1024;
+
+            $this->assertGreaterThan(1000, $boq->countItems(), $name . ': zu wenige Positionen gelesen.');
+            $this->assertLessThan(30.0, $seconds, \sprintf('%s: Lesen dauerte %.1f s.', $name, $seconds));
+            $this->assertLessThan(1024, $peakMb, \sprintf('%s: Spitzenspeicher %.0f MB.', $name, $peakMb));
+
+            // Und die Zuordnungen kommen dabei vollständig mit - eine
+            // Abkürzung bei großen Dateien wäre der stille Datenverlust.
+            $assignments = 0;
+            foreach ($boq->getItems() as $item) {
+                $assignments += count($item->getCatalogAssignments());
+            }
+            $this->assertGreaterThan(0, $assignments, $name . ': keine Katalogzuordnungen gelesen.');
+        }
+    }
+
+    /**
      * X → D → X: Der Weg über GAEB 90 **verliert** die Zuordnungen — und sagt
      * es (Feature 109, MVP-649).
      *
