@@ -13,7 +13,7 @@ declare(strict_types=1);
 namespace Tests\Parsers;
 
 use CommonToolkit\ValueObjects\Money;
-use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderStatus, GaebItemType, GaebMarkupType, GaebPhase};
+use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderInitiator, GaebChangeOrderPhase, GaebChangeOrderStatus, GaebItemType, GaebMarkupType, GaebPhase};
 use ERechnungToolkit\Generators\GaebDaXmlGenerator;
 use ERechnungToolkit\Parsers\GaebDaXmlParser;
 use InvalidArgumentException;
@@ -39,6 +39,23 @@ class GaebDaXmlParserTest extends BaseTestCase {
   <PrjInfo><NamePrj>Prüffall</NamePrj><Cur>EUR</Cur></PrjInfo>
   <Award>
     <DP>83</DP>
+    <AwardInfo>
+      <Cur>EUR</Cur>
+      <COInfo>
+        <CONo>N1</CONo>
+        <COPhase>CallChangOrder</COPhase>
+        <COStatus>Filed</COStatus>
+        <COInit>Owner</COInit>
+        <COReas>Baugrund weicht ab</COReas>
+        <CODate>2026-03-12</CODate>
+      </COInfo>
+      <COInfo>
+        <CONo>N2</CONo>
+        <COPhase>SupplBid</COPhase>
+        <COStatus>Offered</COStatus>
+        <COInit>Contractor</COInit>
+      </COInfo>
+    </AwardInfo>
     <BoQ ID="BOQ-1">
       <BoQInfo>
         <Name>1</Name>
@@ -344,6 +361,35 @@ XML;
         $this->assertNotNull($totals);
         $this->assertTrue($totals->hasDiscount());
         $this->assertSame('9700.0000', $totals->getTotalAfterDiscount()?->getAmount());
+    }
+
+    /**
+     * Addendum heads: a bill of quantity carries several of them side by side,
+     * each with its own reason, initiator and status. The bid submission does
+     * not repeat them - its schema does not even know COInfo.
+     */
+    public function test_reads_change_order_heads_and_writes_them_back(): void {
+        $orders = $this->parser->parse($this->sample())->getChangeOrders();
+
+        $this->assertCount(2, $orders);
+        $this->assertSame('N1', $orders[0]->getNumber());
+        $this->assertSame(GaebChangeOrderPhase::Call, $orders[0]->getPhase());
+        $this->assertSame(GaebChangeOrderStatus::Filed, $orders[0]->getStatus());
+        $this->assertSame(GaebChangeOrderInitiator::Owner, $orders[0]->getInitiator());
+        $this->assertSame('Baugrund weicht ab', $orders[0]->getReason());
+        $this->assertSame('2026-03-12', $orders[0]->getDate());
+        $this->assertSame(GaebChangeOrderInitiator::Contractor, $orders[1]->getInitiator());
+
+        $generator = new GaebDaXmlGenerator;
+        $boq = $this->parser->parse($this->sample());
+
+        $award = $generator->generate($boq, GaebPhase::Award, 'EUR', '2026-01-01');
+        $this->assertStringContainsString('<COInfo>', $award);
+        $this->assertStringContainsString('<COPhase>CallChangOrder</COPhase>', $award);
+        $this->assertCount(2, $this->parser->parse($award)->getChangeOrders());
+
+        $bid = $generator->generate($boq, GaebPhase::Bid, 'EUR', '2026-01-01');
+        $this->assertStringNotContainsString('<COInfo>', $bid);
     }
 
     public function test_rejects_non_gaeb_xml(): void {

@@ -45,6 +45,16 @@ use InvalidArgumentException;
 final class Gaeb90Parser {
     private const RECORD_LENGTH = 80;
 
+    /**
+     * Satzarten, die dieser Leser deutet. Alles andere ist entweder
+     * herstellerfrei (70–89) oder gehört zu einem Bereich, den wir nicht
+     * auswerten — {@see unknownRecordTypes()} macht es sichtbar, statt es
+     * still zu verschlucken.
+     *
+     * @var list<string>
+     */
+    private const KNOWN_TYPES = ['00', '11', '12', '21', '23', '24', '25', '26', '99'];
+
     /** Quantities carry three decimals, prices two plus a tenth of a cent. */
     private const QUANTITY_SCALE = 3;
 
@@ -210,6 +220,51 @@ final class Gaeb90Parser {
     /**
      * Records of exactly 80 characters. Shorter lines are padded: writers pad
      * with spaces, and some drop the trailing ones.
+     *
+     * @return list<string>
+     */
+    /**
+     * Satzarten der Datei, die dieser Leser **nicht** deutet — je Art die Zahl
+     * der Sätze.
+     *
+     * Der Grund ist der Bereich **70–89**: GAEB 90 lässt ihn herstellerfrei,
+     * und manche Systeme legen dort Kostengruppen ab. Eine feste Bedeutung hat
+     * keine dieser Zeilenarten (in keiner der amtlichen Referenzdateien kommt
+     * eine davon vor), also wird nichts geraten — aber wer eine Datei
+     * einliest, soll erfahren, dass sie etwas trägt, das hier niemand deutet.
+     *
+     * @return array<string, int>
+     */
+    public function unknownRecordTypes(string $content): array {
+        $unknown = [];
+        foreach ($this->records($content) as $record) {
+            $type = mb_substr($record, 0, 2);
+            if (in_array($type, self::KNOWN_TYPES, true)) {
+                continue;
+            }
+            $unknown[$type] = ($unknown[$type] ?? 0) + 1;
+        }
+        ksort($unknown);
+
+        return $unknown;
+    }
+
+    /**
+     * Davon die herstellerfreien (70–89) — dort liegen die Kostengruppen, wenn
+     * ein System sie überhaupt ablegt.
+     *
+     * @return array<string, int>
+     */
+    public function vendorRecordTypes(string $content): array {
+        return array_filter(
+            $this->unknownRecordTypes($content),
+            static fn (int $count, string $type): bool => ctype_digit($type) && (int) $type >= 70 && (int) $type <= 89,
+            ARRAY_FILTER_USE_BOTH
+        );
+    }
+
+    /**
+     * Die Sätze der Datei — 80 Zeichen je Zeile, Leerzeilen übergangen.
      *
      * @return list<string>
      */

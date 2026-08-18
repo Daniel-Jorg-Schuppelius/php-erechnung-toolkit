@@ -102,6 +102,35 @@ class Gaeb90ParserTest extends BaseTestCase {
         $this->assertSame('2540.89', (new GaebCalculator)->documentTotal($boq)->getAmount());
     }
 
+    /**
+     * Der Bereich 70–89 ist in GAEB 90 herstellerfrei; manche Systeme legen
+     * dort Kostengruppen ab. Geraten wird nichts — aber wer eine Datei
+     * einliest, soll erfahren, dass sie etwas trägt, das hier niemand deutet.
+     */
+    public function test_vendor_record_types_are_reported_instead_of_swallowed(): void {
+        $content = $this->file([
+            $this->opening('83'),
+            '211111  10 NNN         00000051300m2  ',
+            '25Boden loesen',
+            // Herstellerfreier Satz - Inhalt unbekannt, Existenz meldenswert.
+            '751111  10 KG310',
+            '99                                                                   00001',
+        ]);
+
+        $unknown = $this->parser->unknownRecordTypes($content);
+        $this->assertSame(['75' => 1], $unknown);
+        $this->assertSame(['75' => 1], $this->parser->vendorRecordTypes($content));
+
+        // Und der Rest der Datei wird davon nicht gestört.
+        $boq = $this->parser->parse($content);
+        $this->assertSame(1, $boq->countItems());
+    }
+
+    /** Bekannte Satzarten tauchen in der Meldung nicht auf. */
+    public function test_known_record_types_are_not_reported(): void {
+        $this->assertSame([], $this->parser->unknownRecordTypes($this->award()));
+    }
+
     public function test_rejects_content_without_records(): void {
         $this->expectException(\InvalidArgumentException::class);
         $this->parser->parse("   \n\n");
