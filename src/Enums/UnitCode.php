@@ -20,6 +20,45 @@ namespace ERechnungToolkit\Enums;
  * @see https://docs.peppol.eu/poacc/billing/3.0/codelist/UNECERec20/
  */
 enum UnitCode: string {
+    /**
+     * Freitext-Varianten der Stück-Familie. Bewusst getrennt von
+     * {@see TEXT_ALIAS_CODES}: Sie führen NICHT auf einen festen Case, sondern auf
+     * den vom Aufrufer gewählten Zielcode (`C62` vs. `H87`).
+     */
+    public const PIECE_WORDS = ['stk', 'st', 'stück', 'stueck', 'pc', 'pcs', 'pce', 'piece'];
+
+    /**
+     * Weitere Freitext-Varianten, die {@see abbreviation()} nicht abdeckt
+     * (Fachjargon wie „lfm", Ziffernschreibweisen wie „m2"/„m3",
+     * ausgeschriebene Formen).
+     *
+     * @var array<string, string> Freitext (lowercase, ohne Schlusspunkt) → Code
+     */
+    public const TEXT_ALIAS_CODES = [
+        'std' => 'HUR',
+        'stunde' => 'HUR',
+        'stunden' => 'HUR',
+        'hour' => 'HUR',
+        'minute' => 'MIN',
+        'minuten' => 'MIN',
+        'lfm' => 'MTR',
+        'meter' => 'MTR',
+        'qm' => 'MTK',
+        'm2' => 'MTK',
+        'cbm' => 'MTQ',
+        'm3' => 'MTQ',
+        'liter' => 'LTR',
+        'paar' => 'PR',
+        'satz' => 'SET',
+        'set' => 'SET',
+        'pkg' => 'PK',
+        'paket' => 'PK',
+        'dutzend' => 'DZN',
+        'dtzd' => 'DZN',
+        'pauschal' => 'LS',
+        'pauschale' => 'LS',
+    ];
+
     // Count units
     /** One/Piece (Stück) */
     case PIECE = 'C62';
@@ -212,5 +251,50 @@ enum UnitCode: string {
      */
     public static function fromCode(string $code): ?self {
         return self::tryFrom($code);
+    }
+
+    /**
+     * Löst eine Freitext-Mengeneinheit auf („Stk.", „lfm", „qm", „Stunden").
+     *
+     * Auflösungsreihenfolge: direkter ISO-Code → Wortliste → Abkürzung aus
+     * {@see abbreviation()}. Groß-/Kleinschreibung und ein Schlusspunkt sind
+     * egal; nicht Erkanntes liefert `null` statt eines geratenen Codes — ein
+     * falscher Einheitencode fällt erst beim Empfänger der Rechnung auf.
+     *
+     * Die Stück-Familie ist der einzige Fall mit echter Wahlfreiheit: `C62`
+     * (PIECE) und `H87` (UNIT_H87) meinen dasselbe, aber Bestell-XML und
+     * OCI-Kataloge haben sich historisch unterschiedlich entschieden. Der
+     * Zielcode ist deshalb ein Parameter und keine Annahme dieser Methode.
+     *
+     * @param self $pieceCode Zielcode der Stück-Familie (Default `C62`).
+     */
+    public static function fromText(?string $text, self $pieceCode = self::PIECE): ?self {
+        $trimmed = trim((string) $text);
+        if ($trimmed === '') {
+            return null;
+        }
+
+        $direct = self::tryFrom(strtoupper($trimmed));
+        if ($direct !== null) {
+            return $direct;
+        }
+
+        $normalized = mb_strtolower(rtrim($trimmed, '.'));
+
+        if (in_array($normalized, self::PIECE_WORDS, true)) {
+            return $pieceCode;
+        }
+
+        if (isset(self::TEXT_ALIAS_CODES[$normalized])) {
+            return self::tryFrom(self::TEXT_ALIAS_CODES[$normalized]);
+        }
+
+        foreach (self::cases() as $case) {
+            if (mb_strtolower(rtrim($case->abbreviation(), '.')) === $normalized) {
+                return $case;
+            }
+        }
+
+        return null;
     }
 }
