@@ -50,6 +50,16 @@ class UnitCodeFromTextTest extends BaseTestCase {
         $this->assertSame(UnitCode::PIECE, UnitCode::fromText('C62', UnitCode::UNIT_H87));
     }
 
+    /** Englische Stunden-/Tagesformen und romanische Stückwörter (workDiary-Vollscan 2026-08-23, C8). */
+    public function test_english_time_words_and_romance_piece_words_resolve(): void {
+        self::assertSame(UnitCode::HOUR, UnitCode::fromText('hr'));
+        self::assertSame(UnitCode::HOUR, UnitCode::fromText('Hours'));
+        self::assertSame(UnitCode::DAY, UnitCode::fromText('Tag'));
+        self::assertSame(UnitCode::DAY, UnitCode::fromText('days'));
+        self::assertSame(UnitCode::UNIT_H87, UnitCode::fromText('pz', UnitCode::UNIT_H87));
+        self::assertSame(UnitCode::UNIT_H87, UnitCode::fromText('ud', UnitCode::UNIT_H87));
+    }
+
     public function test_unknown_and_empty_yield_null(): void {
         $this->assertNull(UnitCode::fromText('Schubkarre'));
         $this->assertNull(UnitCode::fromText(''));

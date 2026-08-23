@@ -25,7 +25,7 @@ enum UnitCode: string {
      * {@see TEXT_ALIAS_CODES}: Sie führen NICHT auf einen festen Case, sondern auf
      * den vom Aufrufer gewählten Zielcode (`C62` vs. `H87`).
      */
-    public const PIECE_WORDS = ['stk', 'st', 'stück', 'stueck', 'pc', 'pcs', 'pce', 'piece'];
+    public const PIECE_WORDS = ['stk', 'st', 'stück', 'stueck', 'pc', 'pcs', 'pce', 'piece', 'pz', 'ud'];
 
     /**
      * Weitere Freitext-Varianten, die {@see abbreviation()} nicht abdeckt
@@ -39,6 +39,13 @@ enum UnitCode: string {
         'stunde' => 'HUR',
         'stunden' => 'HUR',
         'hour' => 'HUR',
+        'hours' => 'HUR',
+        'hr' => 'HUR',
+        'hrs' => 'HUR',
+        'tag' => 'DAY',
+        'tage' => 'DAY',
+        'day' => 'DAY',
+        'days' => 'DAY',
         'minute' => 'MIN',
         'minuten' => 'MIN',
         'lfm' => 'MTR',
