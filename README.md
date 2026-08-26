@@ -10,6 +10,7 @@ PHP library for creating, parsing and validating electronic invoices (XRechnung,
 - **XBestellung / Peppol BIS Order**: UBL purchase orders ([docs](docs/XBestellung/README.md))
 - **Order-X**: CII purchase orders + hybrid PDF/A-3 (order-side Factur-X)
 - **Despatch Advice**: UBL delivery notes (Peppol BIS Despatch Advice)
+- **Peppol**: participant/document identifiers, SBDH envelope, SML/SMP lookup, BIS core rules (no AS4 stack)
 - **UBL 2.1**: Universal Business Language
 - **UN/CEFACT CII D16B**: Cross Industry Invoice
 
@@ -231,6 +232,109 @@ if ($validator->isAvailable()) {
 accept/reject recommendation (`isAccepted()`), all rule messages by severity
 (`getErrors()`, `getWarnings()`, `getMessages()`) and the raw KoSIT report
 (`getRawReport()`).
+
+## Peppol
+
+Format-neutral building blocks for the Peppol network — identifiers, envelope,
+participant lookup and the BIS core rules. The toolkit deliberately does **not**
+implement an AS4 access point: PKI, certification and operations stay with a
+certified provider. `AccessPointClientInterface` is the seam an application
+implements for its provider.
+
+### Identifiers
+
+```php
+use ERechnungToolkit\Peppol\{DocumentTypeId, ParticipantId};
+
+$seller = ParticipantId::germanVatId('DE123456789');   // 9930:DE123456789
+$buyer  = ParticipantId::leitwegId('04011000-12345-67'); // 0204:...
+$buyer->canonical();  // iso6523-actorid-upis::0204:04011000-12345-67
+$buyer->urlEncoded(); // for SMP URLs
+$buyer->getIcdLabel(); // "DE:LWID (Leitweg-ID)"
+
+$documentTypeId = DocumentTypeId::peppolBisBillingInvoice();
+$fromDocument   = DocumentTypeId::fromUbl($invoiceXml); // derived from root element + CustomizationID
+```
+
+Participant identifiers are validated against the Peppol identifier policy
+(4-digit ICD, max. 50 characters) and compared case-insensitively.
+
+### SBDH envelope (Peppol Business Message Envelope 2.0)
+
+```php
+use ERechnungToolkit\Peppol\Sbdh;
+
+$sbdh = Sbdh::forUbl($invoiceXml, $seller, $buyer, 'DE'); // COUNTRY_C1 = sender country
+$envelope = $sbdh->envelope($invoiceXml);
+
+$parsed  = Sbdh::parse($envelope);       // header data
+$payload = Sbdh::payloadOf($envelope);   // the UBL document
+```
+
+Document type, standard, root element, syntax version and the process id
+(`cbc:ProfileID`) are derived from the document; instance identifier defaults to
+a UUID v4.
+
+### SML / SMP lookup
+
+```php
+use ERechnungToolkit\Enums\SmlZone;
+use ERechnungToolkit\Peppol\Http\Psr18SmpClient;
+use ERechnungToolkit\Peppol\SmpLookup;
+
+// DNS name of the participant (NAPTR/BDXL: base32(sha256), lowercase, unpadded)
+SmpLookup::dnsName($buyer, SmlZone::PRODUCTION);
+// legacy CNAME scheme: "B-" + md5
+SmpLookup::legacyDnsName($buyer, SmlZone::LEGACY_PRODUCTION);
+
+$lookup = new SmpLookup(new Psr18SmpClient($psr18Client, $psr17RequestFactory));
+
+$group = $lookup->fetchServiceGroup($buyer, 'https://smp.example.org');
+if ($group->supports($documentTypeId)) {
+    $endpoint = $lookup->resolveEndpoint($buyer, $documentTypeId, 'https://smp.example.org');
+    $endpoint?->getUrl();              // AS4 delivery address of the receiver
+    $endpoint?->getCertificateInfo();  // subject/issuer/validity (needs ext-openssl)
+}
+```
+
+HTTP and DNS stay outside the toolkit: `SmpHttpClientInterface` (PSR-18 adapter
+included) and `DnsNaptrResolverInterface` (`SystemNaptrResolver` uses
+`dns_get_record`) are injected, so lookups are testable without network access.
+Not implemented: verifying the XML signature of SMP responses and `Redirect`
+entries — both belong to the access point provider.
+
+### BIS core rules
+
+```php
+use ERechnungToolkit\Peppol\BisValidator;
+
+$result = (new BisValidator)->validate($invoiceXml);
+$result = (new BisValidator)->validateEnvelope($envelope); // envelope + payload
+```
+
+`BisValidator` is a **documented subset**, not a conformance statement: it covers
+the EN 16931 mandatory fields (BR-01..BR-16, BR-62/BR-63), the sum rules
+BR-CO-10/BR-CO-15 and the Peppol rules PEPPOL-EN16931-R001/-R003/-R004/-R010/
+-R020/-R053 — the rules that are decidable without Schematron. For the full rule
+set inject a Schematron validator (`new BisValidator($kositValidator)`); its
+messages are merged into the same `ValidationResult`.
+
+### Sending and receiving
+
+```php
+use ERechnungToolkit\Contracts\AccessPointClientInterface;
+
+final class MyProviderClient implements AccessPointClientInterface {
+    public function isAvailable(): bool { /* ... */ }
+    public function send(string $sbdhEnvelopeXml): TransportReceipt { /* ... */ }
+    public function receive(int $limit = 50): array { /* list<InboundDocument> */ }
+    public function acknowledge(string $messageId): bool { /* ... */ }
+}
+```
+
+`TransportReceipt` carries the technical delivery status (`PeppolTransportStatus`),
+message id, timestamp and the raw provider response; `InboundDocument` wraps a
+received SBDH envelope and exposes header and payload.
 
 ## License
 

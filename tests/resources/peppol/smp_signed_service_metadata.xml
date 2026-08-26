@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Gekürzte, aber strukturgetreue SMP-Antwort (Peppol SMP 1.0, busdox-Namespace)
+  auf GET /{participant}/services/{documentType}. Die XML-Signatur ist bis auf
+  das Wurzelelement weggelassen; das Zertifikat ist ein Testzertifikat.
+-->
+<smp:SignedServiceMetadata xmlns:smp="http://busdox.org/serviceMetadata/publishing/1.0/"
+                           xmlns:id="http://busdox.org/transport/identifiers/1.0/"
+                           xmlns:wsa="http://www.w3.org/2005/08/addressing">
+  <smp:ServiceMetadata>
+    <smp:ServiceInformation>
+      <id:ParticipantIdentifier scheme="iso6523-actorid-upis">9930:DE123456789</id:ParticipantIdentifier>
+      <id:DocumentIdentifier scheme="busdox-docid-qns">urn:oasis:names:specification:ubl:schema:xsd:Invoice-2::Invoice##urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0::2.1</id:DocumentIdentifier>
+      <smp:ProcessList>
+        <smp:Process>
+          <id:ProcessIdentifier scheme="cenbii-procid-ubl">urn:fdc:peppol.eu:2017:poacc:billing:01:1.0</id:ProcessIdentifier>
+          <smp:ServiceEndpointList>
+            <smp:Endpoint transportProfile="peppol-transport-as4-v2_0">
+              <wsa:EndpointReference>
+                <wsa:Address>https://ap.example.org/as4</wsa:Address>
+              </wsa:EndpointReference>
+              <smp:RequireBusinessLevelSignature>false</smp:RequireBusinessLevelSignature>
+              <smp:ServiceActivationDate>2026-01-01T00:00:00Z</smp:ServiceActivationDate>
+              <smp:ServiceExpirationDate>2027-12-31T23:59:59Z</smp:ServiceExpirationDate>
+              <smp:Certificate>
+        MIIDWTCCAkGgAwIBAgIUGJmlVfSBM14+xt5zmk6Qn7m2uJAwDQYJKoZIhvcNAQEL
+        BQAwPDELMAkGA1UEBhMCREUxFDASBgNVBAoMC1BlcHBvbCBUZXN0MRcwFQYDVQQD
+        DA5BUFBfMTAwMDAwMDEyMzAeFw0yNjA4MjYxMjE3NTlaFw0zNjA4MjMxMjE3NTla
+        MDwxCzAJBgNVBAYTAkRFMRQwEgYDVQQKDAtQZXBwb2wgVGVzdDEXMBUGA1UEAwwO
+        QVBQXzEwMDAwMDAxMjMwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC5
+        39vBtSlMtV/HXZkYkKIw9vAVZT+NUyCF+bbyLtcwev29hoktb4Fl1mvn/wUm2uHy
+        IicasUV9El0J4J5fHUud8kyRZuVfjPMa/qmhE120/dqeKRitt5/wVjO1kF3ox9/a
+        4IHC3LjdE2/9OmlMvgRVjKHlcyIblTnmsMw1YHshxn7LfrOyrd3mBWUWDbTJiFs0
+        2M9KOYwJYyB6R9yGKEZYgb3IL+jwIUF3Gj+2c9DNAydkaJTGaERw8HpE9hLGzdvR
+        24xiUqNjAwkEPJAZWVBAgB20zirwwWscb6n6qCmijSkWDwloqupeCYa8ZC/yVrp/
+        SSHC7775wZ8HjhXxgEbjAgMBAAGjUzBRMB0GA1UdDgQWBBQcKFblf6cHarFGdvAC
+        KF++OgbJqzAfBgNVHSMEGDAWgBQcKFblf6cHarFGdvACKF++OgbJqzAPBgNVHRMB
+        Af8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4IBAQBskTCirwLc6XRxXwnZ1apoLVkq
+        +LmF+2+IuMBblvwr62ByFjuREA7zVkDeHQPb8hd58KIJ9nnZ+cVxSIOsRIyYqfbn
+        sQPiefXgQxq2d0xP2aL1QkGev2wKpU7C3DO2G+y5T7SawxCmVC/Gr3fM97947J4P
+        RWwb57CtDepJorutYVHqIxvVsdy5HEQEQdshIYqytiBzYQrje648zrFJJ1KN5scB
+        kCbyrB+pWVdruiSEtmlaHD48yHbhODPBNzM4U3OorrBr3uugUtRveTo0S2iEl95S
+        6o+trzp5rr+/HdxTrbpkmb1CFipMd8X+0OATUGlfRPQrR56jlgdUFov/jld7
+              </smp:Certificate>
+              <smp:ServiceDescription>Peppol Access Point (Test)</smp:ServiceDescription>
+              <smp:TechnicalContactUrl>mailto:support@ap.example.org</smp:TechnicalContactUrl>
+            </smp:Endpoint>
+            <smp:Endpoint transportProfile="busdox-transport-start">
+              <wsa:EndpointReference>
+                <wsa:Address>https://ap.example.org/start</wsa:Address>
+              </wsa:EndpointReference>
+              <smp:ServiceDescription>Altes Transportprofil</smp:ServiceDescription>
+            </smp:Endpoint>
+          </smp:ServiceEndpointList>
+        </smp:Process>
+      </smp:ProcessList>
+    </smp:ServiceInformation>
+  </smp:ServiceMetadata>
+</smp:SignedServiceMetadata>
