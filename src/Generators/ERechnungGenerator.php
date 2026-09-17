@@ -38,6 +38,9 @@ final class ERechnungGenerator {
     private const QDT_NS = 'urn:un:unece:uncefact:data:standard:QualifiedDataType:100';
     private const UDT_NS = 'urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100';
 
+    /** Geschäftsprozess (BT-23) nach Peppol BIS Billing 3.0. */
+    private const PEPPOL_BILLING_PROCESS = 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0';
+
     private ?UblSerializer $ublSerializer = null;
 
     /**
@@ -69,7 +72,7 @@ final class ERechnungGenerator {
         $this->addUblElement($dom, $root, 'cbc:CustomizationID', $document->getProfile()->value);
 
         // ProfileID
-        $this->addUblElement($dom, $root, 'cbc:ProfileID', 'urn:fdc:peppol.eu:2017:poacc:billing:01:1.0');
+        $this->addUblElement($dom, $root, 'cbc:ProfileID', self::PEPPOL_BILLING_PROCESS);
 
         // ID (Invoice number)
         $this->addUblElement($dom, $root, 'cbc:ID', $document->getId());
@@ -77,8 +80,9 @@ final class ERechnungGenerator {
         // IssueDate
         $this->addUblElement($dom, $root, 'cbc:IssueDate', $document->getIssueDate()->format('Y-m-d'));
 
-        // DueDate
-        if ($document->getDueDate() !== null) {
+        // DueDate — eine UBL-CreditNote kennt kein cbc:DueDate; dort trägt
+        // cac:PaymentMeans/cbc:PaymentDueDate die Fälligkeit (BT-9).
+        if (!$isCredit && $document->getDueDate() !== null) {
             $this->addUblElement($dom, $root, 'cbc:DueDate', $document->getDueDate()->format('Y-m-d'));
         }
 
@@ -163,6 +167,10 @@ final class ERechnungGenerator {
                 'cbc:PaymentMeansCode',
                 $paymentMeansCode !== null ? $paymentMeansCode->value : '30'
             );
+
+            if ($isCredit && $document->getDueDate() !== null) {
+                $this->addUblElement($dom, $paymentMeans, 'cbc:PaymentDueDate', $document->getDueDate()->format('Y-m-d'));
+            }
 
             // PaymentID / Verwendungszweck (BT-83)
             if ($document->getRemittanceInformation() !== null) {
@@ -351,6 +359,12 @@ final class ERechnungGenerator {
 
         // ExchangedDocumentContext
         $context = $dom->createElementNS(self::CII_NS, 'rsm:ExchangedDocumentContext');
+        // Geschäftsprozess (BT-23): für XRechnung Pflicht (PEPPOL-EN16931-R001), wie cbc:ProfileID im UBL-Zweig.
+        if ($document->getProfile()->isXRechnung()) {
+            $businessProcess = $dom->createElementNS(self::RAM_NS, 'ram:BusinessProcessSpecifiedDocumentContextParameter');
+            $this->addCiiElement($dom, $businessProcess, 'ram:ID', self::PEPPOL_BILLING_PROCESS);
+            $context->appendChild($businessProcess);
+        }
         $guideline = $dom->createElementNS(self::RAM_NS, 'ram:GuidelineSpecifiedDocumentContextParameter');
         $this->addCiiElement($dom, $guideline, 'ram:ID', $document->getProfile()->value);
         $context->appendChild($guideline);
@@ -477,10 +491,10 @@ final class ERechnungGenerator {
                     $this->addCiiElement($dom, $tax, 'ram:ExemptionReason', $subtotal->getExemptionReason());
                 }
                 $this->addCiiElement($dom, $tax, 'ram:BasisAmount', $this->formatAmount($subtotal->getTaxableAmount()));
+                $this->addCiiElement($dom, $tax, 'ram:CategoryCode', $subtotal->getCategory()->value);
                 if ($subtotal->getExemptionReasonCode() !== null) {
                     $this->addCiiElement($dom, $tax, 'ram:ExemptionReasonCode', $subtotal->getExemptionReasonCode());
                 }
-                $this->addCiiElement($dom, $tax, 'ram:CategoryCode', $subtotal->getCategory()->value);
                 $this->addCiiElement($dom, $tax, 'ram:RateApplicablePercent', $this->formatAmount($subtotal->getPercent()));
                 $settlement->appendChild($tax);
             }
@@ -578,6 +592,14 @@ final class ERechnungGenerator {
             $settlement->appendChild($summation);
         }
 
+        // Rechnungsbezug einer Gutschrift/Korrektur (BT-25) — letztes Element
+        // der XSD-Sequenz, nach der Summenzeile.
+        if ($document->getPrecedingInvoiceReference() !== null) {
+            $invoiceRef = $dom->createElementNS(self::RAM_NS, 'ram:InvoiceReferencedDocument');
+            $this->addCiiElement($dom, $invoiceRef, 'ram:IssuerAssignedID', $document->getPrecedingInvoiceReference());
+            $settlement->appendChild($invoiceRef);
+        }
+
         $transaction->appendChild($settlement);
         $root->appendChild($transaction);
 
@@ -623,9 +645,12 @@ final class ERechnungGenerator {
         $parent->appendChild($this->ubl()->party($dom, $party));
     }
 
+    /**
+     * CII-Partei in XSD-Sequenz (TradePartyType D16B): ID, Name,
+     * DefinedTradeContact, PostalTradeAddress, URIUniversalCommunication,
+     * SpecifiedTaxRegistration.
+     */
     private function addCiiParty(DOMDocument $dom, DOMElement $parent, Party $party): void {
-        $this->addCiiElement($dom, $parent, 'ram:Name', $party->getName());
-
         if ($party->getLegalEntityId() !== null) {
             $id = $this->addCiiElement($dom, $parent, 'ram:ID', $party->getLegalEntityId());
             if ($party->getLegalEntityScheme() !== null) {
@@ -633,19 +658,24 @@ final class ERechnungGenerator {
             }
         }
 
-        if ($party->hasVatId()) {
-            $taxReg = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTaxRegistration');
-            $taxId = $this->addCiiElement($dom, $taxReg, 'ram:ID', $party->getVatId() ?? '');
-            $taxId->setAttribute('schemeID', 'VA');
-            $parent->appendChild($taxReg);
-        }
+        $this->addCiiElement($dom, $parent, 'ram:Name', $party->getName());
 
-        // National tax registration / Steuernummer (BT-32) with schemeID = FC.
-        if ($party->getTaxRegistrationId() !== null) {
-            $taxRegFc = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTaxRegistration');
-            $taxIdFc = $this->addCiiElement($dom, $taxRegFc, 'ram:ID', $party->getTaxRegistrationId());
-            $taxIdFc->setAttribute('schemeID', 'FC');
-            $parent->appendChild($taxRegFc);
+        if ($party->hasContactInfo()) {
+            $contact = $dom->createElementNS(self::RAM_NS, 'ram:DefinedTradeContact');
+            if ($party->getContactName() !== null) {
+                $this->addCiiElement($dom, $contact, 'ram:PersonName', $party->getContactName());
+            }
+            if ($party->getContactPhone() !== null) {
+                $phone = $dom->createElementNS(self::RAM_NS, 'ram:TelephoneUniversalCommunication');
+                $this->addCiiElement($dom, $phone, 'ram:CompleteNumber', $party->getContactPhone());
+                $contact->appendChild($phone);
+            }
+            if ($party->getContactEmail() !== null) {
+                $email = $dom->createElementNS(self::RAM_NS, 'ram:EmailURIUniversalCommunication');
+                $this->addCiiElement($dom, $email, 'ram:URIID', $party->getContactEmail());
+                $contact->appendChild($email);
+            }
+            $parent->appendChild($contact);
         }
 
         if ($party->getPostalAddress() !== null) {
@@ -676,27 +706,24 @@ final class ERechnungGenerator {
             $parent->appendChild($uriComm);
         }
 
-        if ($party->hasContactInfo()) {
-            $contact = $dom->createElementNS(self::RAM_NS, 'ram:DefinedTradeContact');
-            if ($party->getContactName() !== null) {
-                $this->addCiiElement($dom, $contact, 'ram:PersonName', $party->getContactName());
-            }
-            if ($party->getContactPhone() !== null) {
-                $phone = $dom->createElementNS(self::RAM_NS, 'ram:TelephoneUniversalCommunication');
-                $this->addCiiElement($dom, $phone, 'ram:CompleteNumber', $party->getContactPhone());
-                $contact->appendChild($phone);
-            }
-            if ($party->getContactEmail() !== null) {
-                $email = $dom->createElementNS(self::RAM_NS, 'ram:EmailURIUniversalCommunication');
-                $this->addCiiElement($dom, $email, 'ram:URIID', $party->getContactEmail());
-                $contact->appendChild($email);
-            }
-            $parent->appendChild($contact);
+        if ($party->hasVatId()) {
+            $taxReg = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTaxRegistration');
+            $taxId = $this->addCiiElement($dom, $taxReg, 'ram:ID', $party->getVatId() ?? '');
+            $taxId->setAttribute('schemeID', 'VA');
+            $parent->appendChild($taxReg);
+        }
+
+        // National tax registration / Steuernummer (BT-32) with schemeID = FC.
+        if ($party->getTaxRegistrationId() !== null) {
+            $taxRegFc = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTaxRegistration');
+            $taxIdFc = $this->addCiiElement($dom, $taxRegFc, 'ram:ID', $party->getTaxRegistrationId());
+            $taxIdFc->setAttribute('schemeID', 'FC');
+            $parent->appendChild($taxRegFc);
         }
     }
 
-    private function createUblAllowanceCharge(DOMDocument $dom, AllowanceCharge $ac, string $currency): DOMElement {
-        return $this->ubl()->allowanceCharge($dom, $ac, $currency);
+    private function createUblAllowanceCharge(DOMDocument $dom, AllowanceCharge $ac, string $currency, bool $withTax = true): DOMElement {
+        return $this->ubl()->allowanceCharge($dom, $ac, $currency, $withTax);
     }
 
     private function createUblInvoiceLine(DOMDocument $dom, InvoiceLine $line, string $currency, string $lineTag): DOMElement {
@@ -726,8 +753,9 @@ final class ERechnungGenerator {
 
         // OrderLineReference
         // ItemAllowanceCharge
+        // Positionsrabatte/-zuschläge ohne cac:TaxCategory (UBL-CR-558) — wie im CII-Zweig.
         foreach ($line->getAllowanceCharges() as $ac) {
-            $acElem = $this->createUblAllowanceCharge($dom, $ac, $currency);
+            $acElem = $this->createUblAllowanceCharge($dom, $ac, $currency, withTax: false);
             $lineElem->appendChild($acElem);
         }
 
@@ -797,18 +825,19 @@ final class ERechnungGenerator {
         $lineItem->appendChild($assocDoc);
 
         // SpecifiedTradeProduct
+        // XSD-Sequenz TradeProductType: GlobalID vor SellerAssignedID/BuyerAssignedID.
         $product = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTradeProduct');
-        if ($line->getSellersItemId() !== null) {
-            $this->addCiiElement($dom, $product, 'ram:SellerAssignedID', $line->getSellersItemId());
-        }
-        if ($line->getBuyersItemId() !== null) {
-            $this->addCiiElement($dom, $product, 'ram:BuyerAssignedID', $line->getBuyersItemId());
-        }
         if ($line->getStandardItemId() !== null) {
             $globalId = $this->addCiiElement($dom, $product, 'ram:GlobalID', $line->getStandardItemId());
             if ($line->getStandardItemScheme() !== null) {
                 $globalId->setAttribute('schemeID', $line->getStandardItemScheme());
             }
+        }
+        if ($line->getSellersItemId() !== null) {
+            $this->addCiiElement($dom, $product, 'ram:SellerAssignedID', $line->getSellersItemId());
+        }
+        if ($line->getBuyersItemId() !== null) {
+            $this->addCiiElement($dom, $product, 'ram:BuyerAssignedID', $line->getBuyersItemId());
         }
         $this->addCiiElement($dom, $product, 'ram:Name', $line->getItemName());
         if ($line->getItemDescription() !== null) {

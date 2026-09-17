@@ -164,6 +164,18 @@ final class Party {
     }
 
     /**
+     * Kennung der Partei (BT-29 beim Verkäufer, BT-46 beim Käufer), optional
+     * mit ISO-6523-Schema. Ohne USt-IdNr. erfüllt sie die Pflicht BR-CO-26 —
+     * z. B. bei Kleinunternehmern die Steuernummer.
+     */
+    public function withIdentifier(string $identifier, ?string $scheme = null): self {
+        $clone = clone $this;
+        $clone->legalEntityId = $identifier;
+        $clone->legalEntityScheme = $scheme;
+        return $clone;
+    }
+
+    /**
      * Creates a party with endpoint information.
      */
     public function withEndpoint(string $endpointId, string $scheme): self {

@@ -204,7 +204,7 @@ final class ERechnungParser {
             buyer: $buyer,
             currency: $currency,
             profile: $profile,
-            dueDate: $this->getUblDate("{$root}/cbc:DueDate"),
+            dueDate: $this->getUblDate("{$root}/cbc:DueDate") ?? $this->getUblDate("{$root}/cac:PaymentMeans/cbc:PaymentDueDate"),
             taxPointDate: $this->getUblDate("{$root}/cbc:TaxPointDate"),
             buyerReference: $this->getUblValue("{$root}/cbc:BuyerReference"),
             orderReference: $this->getUblValue("{$root}/cac:OrderReference/cbc:ID"),
@@ -324,7 +324,8 @@ final class ERechnungParser {
             contractReference: $this->getCiiValue("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement/ram:ContractReferencedDocument/ram:IssuerAssignedID"),
             paymentMeansCode: $paymentCode ? PaymentMeansCode::fromCode($paymentCode) : null,
             paymentTerms: $paymentTermsNote !== null ? $this->paymentTermsFromNote($paymentTermsNote) : null,
-            deliveryDate: $deliveryDateStr ? $this->parseCiiDate($deliveryDateStr) : null
+            deliveryDate: $deliveryDateStr ? $this->parseCiiDate($deliveryDateStr) : null,
+            precedingInvoiceReference: $this->getCiiValue("{$settlement}/ram:InvoiceReferencedDocument/ram:IssuerAssignedID")
         );
 
         // Verwendungszweck (BT-83).
@@ -432,8 +433,15 @@ final class ERechnungParser {
 
         $address = $this->parseUblAddress("{$xpath}/cac:PostalAddress");
 
-        $vatId = $this->getUblValue("{$xpath}/cac:PartyTaxScheme/cbc:CompanyID");
-        $taxId = $this->getUblValue("{$xpath}/cac:PartyLegalEntity/cbc:CompanyID");
+        // Nach Steuerschema unterscheiden: ohne USt-IdNr. stand sonst die
+        // Steuernummer (Schema FC) als USt-IdNr. im Ergebnis.
+        $vatId = $this->getUblValue("{$xpath}/cac:PartyTaxScheme[cac:TaxScheme/cbc:ID='VAT']/cbc:CompanyID");
+        $taxId = $this->getUblValue("{$xpath}/cac:PartyTaxScheme[cac:TaxScheme/cbc:ID!='VAT']/cbc:CompanyID")
+            ?? $this->getUblValue("{$xpath}/cac:PartyLegalEntity/cbc:CompanyID");
+
+        $identifier = $this->getUblValue("{$xpath}/cac:PartyIdentification/cbc:ID");
+        $identifierNode = $this->firstNode("{$xpath}/cac:PartyIdentification/cbc:ID");
+        $identifierScheme = $identifierNode instanceof \DOMElement ? ($identifierNode->getAttribute('schemeID') ?: null) : null;
 
         $endpointId = $this->getUblValue("{$xpath}/cbc:EndpointID");
         $endpointScheme = null;
@@ -451,6 +459,8 @@ final class ERechnungParser {
             postalAddress: $address,
             vatId: $vatId,
             taxRegistrationId: $taxId,
+            legalEntityId: $identifier,
+            legalEntityScheme: $identifierScheme,
             endpointId: $endpointId,
             endpointScheme: $endpointScheme,
             contactName: $contactName,
@@ -663,7 +673,13 @@ final class ERechnungParser {
             country: $this->getCiiValue("{$xpath}/ram:PostalTradeAddress/ram:CountryID")
         ) : null;
 
-        $vatId = $this->getCiiValue("{$xpath}/ram:SpecifiedTaxRegistration/ram:ID");
+        $vatId = $this->getCiiValue("{$xpath}/ram:SpecifiedTaxRegistration/ram:ID[@schemeID='VA']")
+            ?? $this->getCiiValue("{$xpath}/ram:SpecifiedTaxRegistration/ram:ID[not(@schemeID)]");
+        $taxId = $this->getCiiValue("{$xpath}/ram:SpecifiedTaxRegistration/ram:ID[@schemeID='FC']");
+
+        $identifier = $this->getCiiValue("{$xpath}/ram:ID");
+        $identifierNode = $this->firstNode("{$xpath}/ram:ID");
+        $identifierScheme = $identifierNode instanceof \DOMElement ? ($identifierNode->getAttribute('schemeID') ?: null) : null;
 
         $endpointId = $this->getCiiValue("{$xpath}/ram:URIUniversalCommunication/ram:URIID");
         $endpointScheme = null;
@@ -680,6 +696,9 @@ final class ERechnungParser {
             name: $name,
             postalAddress: $address,
             vatId: $vatId,
+            taxRegistrationId: $taxId,
+            legalEntityId: $identifier,
+            legalEntityScheme: $identifierScheme,
             endpointId: $endpointId,
             endpointScheme: $endpointScheme,
             contactName: $contactName,

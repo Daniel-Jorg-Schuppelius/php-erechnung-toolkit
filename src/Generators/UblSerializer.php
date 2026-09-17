@@ -159,9 +159,11 @@ final class UblSerializer {
     }
 
     /**
-     * Builds a cac:AllowanceCharge element (document or line level).
+     * Builds a cac:AllowanceCharge element (document or line level). Line-level
+     * allowances pass `$withTax = false`: EN 16931 carries no tax category there
+     * (UBL-CR-558).
      */
-    public function allowanceCharge(DOMDocument $dom, AllowanceCharge $ac, string $currency): DOMElement {
+    public function allowanceCharge(DOMDocument $dom, AllowanceCharge $ac, string $currency, bool $withTax = true): DOMElement {
         $elem = $dom->createElementNS(self::CAC_NS, 'cac:AllowanceCharge');
 
         $this->element($dom, $elem, 'cbc:ChargeIndicator', $ac->isCharge() ? 'true' : 'false');
@@ -185,7 +187,7 @@ final class UblSerializer {
             $base->setAttribute('currencyID', $currency);
         }
 
-        if ($ac->getTaxCategory() !== null) {
+        if ($withTax && $ac->getTaxCategory() !== null) {
             $taxCategory = $dom->createElementNS(self::CAC_NS, 'cac:TaxCategory');
             $this->element($dom, $taxCategory, 'cbc:ID', $ac->getTaxCategory()->value);
             if ($ac->getTaxPercent() !== null) {

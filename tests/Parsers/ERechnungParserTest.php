@@ -18,12 +18,14 @@ use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
 use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType};
 use ERechnungToolkit\Generators\ERechnungGenerator;
 use ERechnungToolkit\Parsers\ERechnungParser;
-use Tests\Contracts\BaseTestCase;
+use Tests\Contracts\{BaseTestCase, XRechnungDocuments};
 
 /**
  * Tests for E-Rechnung Parser.
  */
 class ERechnungParserTest extends BaseTestCase {
+    use XRechnungDocuments;
+
     private ERechnungParser $parser;
     private ERechnungGenerator $generator;
 
@@ -521,5 +523,40 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertNotNull($monetaryTotal);
         $this->assertSame('314.86', $monetaryTotal->getLineExtensionAmount()->getAmount());
         $this->assertSame('336.90', $monetaryTotal->getPayableAmount()->getAmount());
+    }
+    public function test_cii_credit_note_roundtrip_keeps_preceding_invoice_and_party_details(): void {
+        $parsed = $this->parser->parse($this->generator->generateCii($this->fullXRechnung(creditNote: true)));
+
+        $this->assertSame(InvoiceType::CREDIT_NOTE, $parsed->getInvoiceType());
+        $this->assertSame('XR-2026-0815', $parsed->getPrecedingInvoiceReference());
+        $this->assertSame(ERechnungProfile::XRECHNUNG, $parsed->getProfile());
+        // Nach der Umstellung auf die XSD-Reihenfolge liest der Parser weiter alles.
+        $seller = $parsed->getSeller();
+        $this->assertSame('DE123456789', $seller->getVatId());
+        $this->assertSame('Max Müller', $seller->getContactName());
+        $this->assertSame('rechnung@verkaeufer.de', $seller->getEndpointId());
+        $this->assertSame('Berlin', $seller->getPostalAddress()?->getCity());
+        $this->assertSame('04011000-12345-67', $parsed->getBuyer()->getEndpointId());
+    }
+
+    public function test_ubl_credit_note_roundtrip_keeps_due_date_from_payment_means(): void {
+        $xml = $this->generator->generateUbl($this->fullXRechnung(creditNote: true));
+        $parsed = $this->parser->parse($xml);
+
+        $this->assertDoesNotMatchRegularExpression('#<cbc:DueDate[\s>]#', $xml);
+        $this->assertMatchesRegularExpression('#<cbc:PaymentDueDate[^>]*>2026-10-17</cbc:PaymentDueDate>#', $xml);
+        $this->assertSame('2026-10-17', $parsed->getDueDate()?->format('Y-m-d'));
+        $this->assertSame('XR-2026-0815', $parsed->getPrecedingInvoiceReference());
+    }
+
+    public function test_small_business_roundtrip_keeps_tax_number_apart_from_vat_id(): void {
+        foreach (['ubl' => $this->generator->generateUbl(...), 'cii' => $this->generator->generateCii(...)] as $syntax => $generate) {
+            $seller = $this->parser->parse($generate($this->smallBusinessXRechnung()))->getSeller();
+
+            // Vorher stand im UBL-Zweig die Steuernummer als USt-IdNr. im Ergebnis.
+            $this->assertNull($seller->getVatId(), $syntax);
+            $this->assertSame('201/987/65432', $seller->getTaxRegistrationId(), $syntax);
+            $this->assertSame('201/987/65432', $seller->getLegalEntityId(), $syntax);
+        }
     }
 }

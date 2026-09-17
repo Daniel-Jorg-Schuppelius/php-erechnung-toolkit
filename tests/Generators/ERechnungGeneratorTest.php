@@ -449,4 +449,47 @@ class ERechnungGeneratorTest extends BaseTestCase {
         $this->assertStringContainsString('Muster GmbH Konto', $cii);
         $this->assertStringContainsString('AccountName', $cii);
     }
+    public function test_ubl_line_allowance_carries_no_tax_category_but_document_allowance_does(): void {
+        $xml = $this->generator->generateUbl($this->withLineAndDocumentDiscount());
+
+        $dom = new DOMDocument;
+        $dom->loadXML($xml);
+        $xpath = new DOMXPath($dom);
+        $xpath->registerNamespace('ubl', 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2');
+        $xpath->registerNamespace('cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2');
+
+        $this->assertSame(1, $this->countNodes($xpath, '/ubl:Invoice/cac:InvoiceLine/cac:AllowanceCharge'));
+        $this->assertSame(0, $this->countNodes($xpath, '/ubl:Invoice/cac:InvoiceLine/cac:AllowanceCharge/cac:TaxCategory'));
+        $this->assertSame(1, $this->countNodes($xpath, '/ubl:Invoice/cac:AllowanceCharge/cac:TaxCategory'));
+    }
+
+    private function countNodes(DOMXPath $xpath, string $query): int {
+        $nodes = $xpath->query($query);
+        $this->assertNotFalse($nodes, $query);
+
+        return $nodes->length;
+    }
+
+    private function withLineAndDocumentDiscount(): Document {
+        $euro = \CommonToolkit\Enums\CurrencyCode::Euro;
+        $line = new \ERechnungToolkit\Entities\InvoiceLine(
+            id: '1',
+            quantity: 2.0,
+            unitCode: \ERechnungToolkit\Enums\UnitCode::PIECE,
+            netAmount: \CommonToolkit\ValueObjects\Money::of('180.00', $euro),
+            itemName: 'Ware',
+            unitPrice: \CommonToolkit\ValueObjects\Money::of('100.00', $euro),
+            taxCategory: \ERechnungToolkit\Enums\TaxCategory::STANDARD,
+            taxPercent: 19.0,
+        );
+        $line->addAllowanceCharge(\ERechnungToolkit\Entities\AllowanceCharge::discount(\CommonToolkit\ValueObjects\Money::of('20.00', $euro)));
+
+        return ERechnungDocumentBuilder::create('INV-2026-002')
+            ->withIssueDate(new DateTimeImmutable('2026-09-17'))
+            ->withSeller('Muster GmbH', 'DE123456789')
+            ->withBuyer('Kunde AG')
+            ->addInvoiceLine($line)
+            ->addDiscount(10.00)
+            ->build();
+    }
 }

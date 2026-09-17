@@ -60,6 +60,8 @@ final class ERechnungDocumentBuilder {
     private ?string $sellerAccountHolderName = null;
     private ?string $sellerEndpointId = null;
     private ?string $sellerEndpointScheme = null;
+    private ?string $sellerIdentifier = null;
+    private ?string $sellerIdentifierScheme = null;
 
     private ?string $buyerName = null;
     private ?string $buyerVatId = null;
@@ -244,6 +246,19 @@ final class ERechnungDocumentBuilder {
     public function withSellerEndpoint(string $endpointId, string $scheme = '0204'): self {
         $this->sellerEndpointId = $endpointId;
         $this->sellerEndpointScheme = $scheme;
+        return $this;
+    }
+
+    /**
+     * Verkäuferkennung (BT-29), optional mit ISO-6523-Schema.
+     *
+     * EN 16931 verlangt BT-29, BT-30 oder die USt-IdNr. BT-31 (BR-CO-26).
+     * Wer keine USt-IdNr. hat — typisch der Kleinunternehmer nach § 19 UStG —,
+     * erfüllt die Regel über diese Kennung, etwa mit der Steuernummer.
+     */
+    public function withSellerIdentifier(string $identifier, ?string $scheme = null): self {
+        $this->sellerIdentifier = $identifier;
+        $this->sellerIdentifierScheme = $scheme;
         return $this;
     }
 
@@ -510,6 +525,8 @@ final class ERechnungDocumentBuilder {
             postalAddress: $this->sellerAddress,
             vatId: $this->sellerVatId,
             taxRegistrationId: $this->sellerTaxId,
+            legalEntityId: $this->sellerIdentifier,
+            legalEntityScheme: $this->sellerIdentifierScheme,
             endpointId: $this->sellerEndpointId,
             endpointScheme: $this->sellerEndpointScheme,
             contactName: $this->sellerContactName,

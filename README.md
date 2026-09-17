@@ -202,6 +202,37 @@ use ERechnungToolkit\Validators\UblSchemaValidator;
 $errors = (new UblSchemaValidator)->validate($document->toUblXml()); // [] = valid
 ```
 
+`CiiSchemaValidator` does the same for UN/CEFACT CII (`rsm:CrossIndustryInvoice`,
+XRechnung-CII and ZUGFeRD/Factur-X) against the bundled CII D16B schema. D16B is
+the superset of the Factur-X profile schemas, so a narrow profile (MINIMUM,
+BASIC WL) can still carry elements it does not allow.
+
+```php
+use ERechnungToolkit\Validators\CiiSchemaValidator;
+
+$errors = (new CiiSchemaValidator)->validate($document->toCiiXml()); // [] = valid
+```
+
+**XRechnung in both syntaxes.** `generateUbl()` and `generateCii()` produce an
+XRechnung that the KoSIT validator accepts without warnings — including credit
+notes (BT-25), line and document allowances and tax-exempt invoices
+(`tests/Generators/XRechnungConformanceTest.php`). UBL stays the common choice;
+use CII when a recipient asks for it.
+
+**Small businesses without a VAT ID (§ 19 UStG).** EN 16931 rule BR-CO-26 requires
+the seller identifier (BT-29), the legal registration identifier (BT-30) or the VAT
+identifier (BT-31). A tax number alone (BT-32) is not enough — KoSIT rejects the
+invoice. Pass the tax number as seller identifier as well:
+
+```php
+$document = ERechnungDocumentBuilder::xrechnung('XR-2026-0818', $leitwegId)
+    ->withSeller('Kleinbetrieb Anna Schmidt', '', '201/987/65432') // no VAT ID, tax number BT-32
+    ->withSellerIdentifier('201/987/65432')                       // BT-29
+    ->withTaxExemptionReason('Kein Ausweis von Umsatzsteuer, da Kleinunternehmer gemäß § 19 UStG')
+    // …
+    ->build();
+```
+
 **Business rules (EN16931 / XRechnung)** — validate UBL/CII against XML Schema, the
 EN16931 Schematron rules and the XRechnung CIUS using the official [KoSIT validator](https://github.com/itplr-kosit/validator).
 Both the validator jar (`tools/kosit/validator.jar`) and its configuration
