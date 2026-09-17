@@ -14,6 +14,16 @@ PHP library for creating, parsing and validating electronic invoices (XRechnung,
 - **UBL 2.1**: Universal Business Language
 - **UN/CEFACT CII D16B**: Cross Industry Invoice
 
+### Beyond E-Invoicing
+
+The toolkit also covers the exchange formats that surround an invoice in the construction and wholesale trades. None of these were listed here before, although parsers and generators have shipped for some time:
+
+- **GAEB**: DA XML 3.x (`GaebDaXmlParser` / `GaebDaXmlGenerator`), the older families GAEB 90 (`d8x`) and GAEB 2000 (`p8x`), plus quantity/costing phases (`GaebCostingParser`) — bills of quantities, tenders and awards ([docs](docs/GAEB/README.md))
+- **DATANORM 4/5**: `DatanormParser` / `DatanormGenerator` for article and price catalogues, including the DA-11 price-update variant (`Da11Parser` / `Da11Generator`)
+- **BMEcat**: `BmecatParser` for supplier catalogues
+- **UGL**: `UglParser`, `UglInvoiceParser` and `UglGenerator` — the German trade data exchange used between wholesalers and craft businesses
+- **openTRANS**: `OpenTransOrderParser` / `OpenTransOrderGenerator` for orders and order responses
+
 ## Installation
 
 ```bash
@@ -343,3 +353,7 @@ AGPL-3.0-or-later
 ## Author
 
 Daniel Jörg Schuppelius - [schuppelius.org](https://schuppelius.org)
+
+## Versions
+
+Releases are tagged in Git; `git tag --sort=-v:refname` lists them (latest: v0.13). There is no separate changelog file — the tags and the commit history are the record.
