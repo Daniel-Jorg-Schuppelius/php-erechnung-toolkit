@@ -127,7 +127,10 @@ class SbdhTest extends BaseTestCase {
         $actual->loadXML($payload);
 
         $this->assertSame('Invoice', $actual->documentElement?->localName);
-        $this->assertTrue($expected->documentElement?->isEqualNode($actual->documentElement) ?? false);
+        // Kanonisches XML statt isEqualNode() — das gibt es erst ab PHP 8.3,
+        // das Toolkit läuft ab 8.2. Exklusive C14N ignoriert Namensraum-
+        // Deklarationen, die der Umschlag beim Herauslösen mitgibt.
+        $this->assertSame($expected->documentElement?->C14N(true), $actual->documentElement?->C14N(true));
     }
 
     public function test_header_can_be_parsed_standalone(): void {
