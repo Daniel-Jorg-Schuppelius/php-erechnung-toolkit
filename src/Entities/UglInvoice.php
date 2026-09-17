@@ -17,7 +17,7 @@ use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 
 /**
- * Inbound UGL 5.0 invoice (Satzart RGD) — wholesaler → craftsman.
+ * Inbound UGL 5.0 invoice (Satzart RGD) — wholesaler -> craftsman.
  *
  * A lightweight value object for *reading* a UGL invoice for reconciliation
  * against a purchase order. The toolkit deliberately does NOT generate UGL

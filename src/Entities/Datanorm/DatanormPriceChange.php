@@ -20,7 +20,7 @@ use ERechnungToolkit\Enums\DatanormPriceIndicator;
  * One article price from a DATPREIS P-record.
  *
  * A DATANORM 4 P-record transports up to three of these per line and no price
- * unit (the unit amount from the article master applies → `priceUnitAmount`
+ * unit (the unit amount from the article master applies -> `priceUnitAmount`
  * is null); DATANORM 5 sends one per line with an explicit price unit.
  * Either a discount group or up to three article-specific discounts may
  * accompany a list price — the discounts then replace the group's values for

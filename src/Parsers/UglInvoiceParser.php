@@ -22,7 +22,7 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * Parser for inbound UGL 5.0 invoices (Satzart RGD), wholesaler → craftsman.
+ * Parser for inbound UGL 5.0 invoices (Satzart RGD), wholesaler -> craftsman.
  *
  * Maps the RGD header and the article positions (POA across one or more KOP
  * Vorgänge) onto a {@see UglInvoice} for reconciliation against a purchase order.
@@ -34,7 +34,7 @@ final class UglInvoiceParser {
 
     private const ENCODING = 'ISO-8859-1';
 
-    /** UGL Mengeneinheit → UN/ECE unit code. */
+    /** UGL Mengeneinheit -> UN/ECE unit code. */
     private const UNIT_MAP = [
         'ST' => 'H87',
         'STK' => 'H87',
@@ -136,7 +136,7 @@ final class UglInvoiceParser {
     }
 
     /**
-     * Betragsfeld mit impliziten Nachkommastellen → Money (kein float-Zwischenschritt).
+     * Betragsfeld mit impliziten Nachkommastellen -> Money (kein float-Zwischenschritt).
      */
     private function money(string $record, int $from, int $to, int $decimals, CurrencyCode $currency): Money {
         $raw = trim(substr($record, $from - 1, $to - $from + 1));

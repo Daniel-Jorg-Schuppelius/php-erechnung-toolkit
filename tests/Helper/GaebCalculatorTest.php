@@ -57,7 +57,7 @@ class GaebCalculatorTest extends BaseTestCase {
         );
     }
 
-    /** Menge × EP wird kaufmännisch auf zwei Stellen gerundet, nicht abgeschnitten. */
+    /** Menge x EP wird kaufmännisch auf zwei Stellen gerundet, nicht abgeschnitten. */
     public function test_item_total_is_the_rounded_product(): void {
         $item = $this->item('001.0010', quantity: '3.000', unitPrice: '10.005');
 
@@ -96,9 +96,9 @@ class GaebCalculatorTest extends BaseTestCase {
                 new GaebSection(reference: '001.001', parentReference: '001'),
             ],
             items: [
-                // 3 × 10,005 = 30,02 (gerundet) im Unterabschnitt
+                // 3 x 10,005 = 30,02 (gerundet) im Unterabschnitt
                 $this->item('001.001.0010', sectionReference: '001.001', quantity: '3.000', unitPrice: '10.005'),
-                // 2 × 5,00 = 10,00 direkt im Abschnitt
+                // 2 x 5,00 = 10,00 direkt im Abschnitt
                 $this->item('001.0010', sectionReference: '001', quantity: '2.000', unitPrice: '5.000'),
                 // nicht angeboten: bleibt draußen
                 $this->item('001.0020', sectionReference: '001', quantity: '9.000', unitPrice: '99.000', notOffered: true),

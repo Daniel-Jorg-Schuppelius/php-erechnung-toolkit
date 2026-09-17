@@ -22,7 +22,7 @@ use Tests\Contracts\BaseTestCase;
  *
  * Die **Kostenarten stehen im Kopf**, die **Kostenansätze an der Position** —
  * ein Betrieb schlägt nach Kostenart zu, nicht je Position. Die dokumentierte
- * Umrechnung lautet `KW = Menge × Wert ÷ Leistung`; ohne Leistung steht der
+ * Umrechnung lautet `KW = Menge x Wert ÷ Leistung`; ohne Leistung steht der
  * Wert für sich, denn durch eine angenommene Leistung zu teilen veränderte die
  * Kalkulation still.
  */

@@ -183,7 +183,7 @@ final class ERechnungParser {
         // Seller
         $seller = $this->parseUblParty("{$root}/cac:AccountingSupplierParty/cac:Party");
 
-        // Zahlungsverbindung (BG-17): PayeeFinancialAccount → Seller-Bankdaten.
+        // Zahlungsverbindung (BG-17): PayeeFinancialAccount -> Seller-Bankdaten.
         $iban = $this->getUblValue("{$root}/cac:PaymentMeans/cac:PayeeFinancialAccount/cbc:ID");
         if ($iban !== null && $iban !== '') {
             $seller = $seller->withBankingInfo(
@@ -284,7 +284,7 @@ final class ERechnungParser {
         // Seller
         $seller = $this->parseCiiParty("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement/ram:SellerTradeParty");
 
-        // Zahlungsverbindung (BG-17): PayeePartyCreditorFinancialAccount → Seller-Bankdaten.
+        // Zahlungsverbindung (BG-17): PayeePartyCreditorFinancialAccount -> Seller-Bankdaten.
         $settlement = "{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeSettlement";
         $iban = $this->getCiiValue("{$settlement}/ram:SpecifiedTradeSettlementPaymentMeans/ram:PayeePartyCreditorFinancialAccount/ram:IBANID");
         if ($iban !== null && $iban !== '') {
@@ -832,7 +832,7 @@ final class ERechnungParser {
     // === Common Helpers ===
 
     /**
-     * XML-Betrag → Money, ohne float-Zwischenschritt (fehlendes Element = 0).
+     * XML-Betrag -> Money, ohne float-Zwischenschritt (fehlendes Element = 0).
      */
     private function money(?string $value, CurrencyCode $currency): Money {
         return Money::ofNullable($value, $currency) ?? Money::zero($currency);

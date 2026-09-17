@@ -268,7 +268,7 @@ final class BmecatParser {
      * Normalisiert einen Roh-Betrag präzisionswahrend auf {@see Money} mit
      * Skala 4 (kaufmännische Rundung über Money statt float-Roundtrip).
      * Exponentialnotation geht über den float-Pfad, da bcmath sie nicht
-     * versteht und Lieferanten-Exporte sie liefern können; Nicht-Zahlen → null.
+     * versteht und Lieferanten-Exporte sie liefern können; Nicht-Zahlen -> null.
      */
     private function money(string $raw, CurrencyCode $currency): ?Money {
         if ($raw === '') {
@@ -286,7 +286,7 @@ final class BmecatParser {
         return Money::of($normalized, $currency, self::PRICE_SCALE);
     }
 
-    /** Mengenwert (LOWER_BOUND) als float; Nicht-Zahlen → null. */
+    /** Mengenwert (LOWER_BOUND) als float; Nicht-Zahlen -> null. */
     private function quantity(string $raw): ?float {
         if ($raw === '') {
             return null;

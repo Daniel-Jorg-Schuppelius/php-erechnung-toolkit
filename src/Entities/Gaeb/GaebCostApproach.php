@@ -16,7 +16,7 @@ namespace ERechnungToolkit\Entities\Gaeb;
  * One cost approach of an item (GAEB X52) — what a single kind of cost
  * contributes to this item.
  *
- * The documented conversion is `KW = Qty × Value ÷ Performance`: the
+ * The documented conversion is `KW = Qty x Value ÷ Performance`: the
  * performance divides the calculated cost. Where no performance is stated the
  * value stands for itself; dividing by an assumed one would silently change
  * the calculation.

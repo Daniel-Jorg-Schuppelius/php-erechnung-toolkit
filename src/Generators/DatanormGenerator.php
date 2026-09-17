@@ -41,10 +41,10 @@ final class DatanormGenerator {
 
     private const EOL = "\r\n";
 
-    /** Unit amount → DATANORM 4 price unit code. */
+    /** Unit amount -> DATANORM 4 price unit code. */
     private const V4_PRICE_UNIT_CODES = [1 => '0', 10 => '1', 100 => '2', 1000 => '3'];
 
-    /** Common ISO (UN/ECE) unit codes → DATANORM 4 free-text units. */
+    /** Common ISO (UN/ECE) unit codes -> DATANORM 4 free-text units. */
     private const V4_UNIT_MAP = [
         'PCE' => 'Stck',
         'C62' => 'Stck',
@@ -542,7 +542,7 @@ final class DatanormGenerator {
         return $records;
     }
 
-    /** Money → whole-currency-unit field (DATANORM 4 day prices), empty when unset. */
+    /** Money -> whole-currency-unit field (DATANORM 4 day prices), empty when unset. */
     private function whole(?Money $price): string {
         if ($price === null) {
             return '';
@@ -557,7 +557,7 @@ final class DatanormGenerator {
      * with the field separator.
      *
      * @param  list<string>  $fields
-     * @param  array<int, int>  $maxLengths  field index → max length
+     * @param  array<int, int>  $maxLengths  field index -> max length
      */
     private function record(array $fields, DatanormVersion $version, array $maxLengths = []): string {
         $encoded = [];
@@ -577,7 +577,7 @@ final class DatanormGenerator {
         return $maxLength !== null ? substr($encoded, 0, $maxLength) : $encoded;
     }
 
-    /** Money → minor-unit field (`199,95` → `19995`), `0` when no price is set. */
+    /** Money -> minor-unit field (`199,95` -> `19995`), `0` when no price is set. */
     private function minor(?Money $price): string {
         if ($price === null) {
             return '0';

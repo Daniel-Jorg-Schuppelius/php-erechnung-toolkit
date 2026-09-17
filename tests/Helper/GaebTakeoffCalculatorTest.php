@@ -34,23 +34,23 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
         return new GaebTakeoffLine(kind: $kind, factor: $factor, formula: $formula, values: $values, address: '0001B0');
     }
 
-    /** Rechteck: 3,250 m × 1,250 m = 4,0625 m². */
+    /** Rechteck: 3,250 m x 1,250 m = 4,0625 m². */
     public function test_rectangle_and_volume(): void {
         $this->assertEqualsWithDelta(4.0625, (float) $this->calculator->line($this->line('04', ['3250', '1250'])), 0.0001);
         $this->assertEqualsWithDelta(8.125, (float) $this->calculator->line($this->line('04', ['3250', '1250', '2000'])), 0.0001);
     }
 
-    /** Dreieck aus Grundseite und Höhe: 12,330 × 4,560 / 2. */
+    /** Dreieck aus Grundseite und Höhe: 12,330 x 4,560 / 2. */
     public function test_triangle_from_base_and_height(): void {
         $this->assertEqualsWithDelta(28.1124, (float) $this->calculator->line($this->line('01', ['12330', '4560'])), 0.0001);
     }
 
-    /** Trapez: (2,330 + 2,850) / 2 × 1,250. */
+    /** Trapez: (2,330 + 2,850) / 2 x 1,250. */
     public function test_trapezium(): void {
         $this->assertEqualsWithDelta(3.2375, (float) $this->calculator->line($this->line('05', ['2330', '2850', '1250'])), 0.0001);
     }
 
-    /** Prisma mit drei Höhen: 4 × 3 × (2+2+2) / 6. */
+    /** Prisma mit drei Höhen: 4 x 3 x (2+2+2) / 6. */
     public function test_prism_with_three_heights(): void {
         $line = $this->line('13', ['4000', '3000', '2000', '2000', '2000']);
         $this->assertEqualsWithDelta(12.0, (float) $this->calculator->line($line), 0.0001);
@@ -67,7 +67,7 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
         $this->assertEqualsWithDelta(38.0, (float) $this->calculator->line($this->line('15', $values)), 0.0001);
     }
 
-    /** Deckfläche 0 macht den Stumpf zur vollen Pyramide: 12 × 6 / 3 = 24. */
+    /** Deckfläche 0 macht den Stumpf zur vollen Pyramide: 12 x 6 / 3 = 24. */
     public function test_truncated_pyramid_without_top_is_a_full_pyramid(): void {
         $line = $this->line('15', ['4000', '3000', '6000', '0', '0']);
         $this->assertEqualsWithDelta(24.0, (float) $this->calculator->line($line), 0.0001);
@@ -75,7 +75,7 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
 
     /**
      * Koordinatenformeln laufen über mehrere Sätze bis zum abschließenden `=`;
-     * die offene Kette (0|0) → (10|0) → (10|10) → (0|10) misst 30 m.
+     * die offene Kette (0|0) -> (10|0) -> (10|10) -> (0|10) misst 30 m.
      */
     public function test_polygon_length_spans_several_lines(): void {
         $item = new GaebItem(reference: '1', takeoffLines: [
@@ -86,7 +86,7 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
         $this->assertEqualsWithDelta(30.0, $this->calculator->total($item)['quantity'], 0.0001);
     }
 
-    /** Dieselben vier Punkte als geschlossenes Vieleck: 10 × 10 = 100 m². */
+    /** Dieselben vier Punkte als geschlossenes Vieleck: 10 x 10 = 100 m². */
     public function test_gauss_area_over_coordinates(): void {
         $item = new GaebItem(reference: '1', takeoffLines: [
             new GaebTakeoffLine(formula: '22', values: ['0', '0', '10000', '0']),
@@ -110,7 +110,7 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
      * Formel 25 nach REB: je Station ein Trapez `F = (a+b)/2 · h`, zwischen den
      * Stationen die Trapezregel. Werte der BVBS-Prüfdatei:
      * F = 5,0625 / 4,2435 / 5,109 bei 750, 760 und 770 m
-     * → 10·(5,0625+4,2435)/2 + 10·(4,2435+5,109)/2 = 93,2925.
+     * -> 10·(5,0625+4,2435)/2 + 10·(4,2435+5,109)/2 = 93,2925.
      */
     public function test_stationed_trapezoidal_profiles(): void {
         $item = new GaebItem(reference: '1', takeoffLines: [
@@ -122,7 +122,7 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
         $this->assertEqualsWithDelta(93.2925, $this->calculator->total($item)['quantity'], 0.0001);
     }
 
-    /** Formel 23 nimmt die Flächen fertig entgegen: 25 m × (100 + 60) / 2. */
+    /** Formel 23 nimmt die Flächen fertig entgegen: 25 m x (100 + 60) / 2. */
     public function test_cross_section_profiles(): void {
         $item = new GaebItem(reference: '1', takeoffLines: [
             new GaebTakeoffLine(formula: '23', values: ['12000', '100000']),
@@ -180,7 +180,7 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
 
     /** Der Winkel steht in Gon: 100 Gon sind ein rechter Winkel. */
     public function test_triangle_with_angle_in_gon(): void {
-        // 4 × 3 / 2 × sin(100 gon) = 6
+        // 4 x 3 / 2 x sin(100 gon) = 6
         $this->assertEqualsWithDelta(6.0, (float) $this->calculator->line($this->line('02', ['4000', '3000', '100000'])), 0.0001);
     }
 
@@ -311,7 +311,7 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
 
         $result = $this->calculator->total($item);
 
-        // 35,0 × 46,0 = 1610,0 — einmal als Zwischensumme, einmal übernommen.
+        // 35,0 x 46,0 = 1610,0 — einmal als Zwischensumme, einmal übernommen.
         $this->assertEqualsWithDelta(3220.0, $result['quantity'], 0.0001);
     }
 
@@ -321,7 +321,7 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
      * zusätzlichen Wert am Ende.
      */
     public function test_area_formulas_become_volumes_with_a_height(): void {
-        // Dreieck 12,330 × 4,560 / 2 = 28,1124 m², mal Höhe 2,000 m
+        // Dreieck 12,330 x 4,560 / 2 = 28,1124 m², mal Höhe 2,000 m
         $this->assertEqualsWithDelta(56.2248, (float) $this->calculator->line($this->line('01', ['12330', '4560', '2000'])), 0.0001);
         // Trapez mal Höhe
         $this->assertEqualsWithDelta(6.475, (float) $this->calculator->line($this->line('05', ['2330', '2850', '1250', '2000'])), 0.0001);
@@ -329,7 +329,7 @@ class GaebTakeoffCalculatorTest extends BaseTestCase {
 
     /** Kreissektor und Zylindersektor: der Vollkreis misst 400 Gon. */
     public function test_circle_sector_and_cylinder(): void {
-        // r = 4,220 m, 45 gon → r²·π·45/400
+        // r = 4,220 m, 45 gon -> r²·π·45/400
         $this->assertEqualsWithDelta(6.2940, (float) $this->calculator->line($this->line('07', ['4220', '45000'])), 0.0001);
         $this->assertEqualsWithDelta(12.5880, (float) $this->calculator->line($this->line('07', ['4220', '45000', '2000'])), 0.0001);
         // Voller Kreis: 400 gon ergeben π·r²

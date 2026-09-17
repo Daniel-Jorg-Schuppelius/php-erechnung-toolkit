@@ -30,12 +30,12 @@ use ERRORToolkit\Traits\ErrorLog;
  * mapped here, so a single order can be emitted as XBestellung, Order-X *and*
  * openTRANS without rebuilding the document.
  *
- * Mapping highlights (openTRANS ← Order):
- *  - ORDER_HEADER/ORDER_INFO/ORDER_ID            ← getId()
- *  - PARTIES/PARTY[buyer|supplier]               ← getBuyer()/getSeller()
- *  - ORDER_ITEM/PRODUCT_ID/SUPPLIER_PID          ← line sellersItemId
- *  - PRODUCT_PRICE_FIX/PRICE_AMOUNT              ← line unitPrice
- *  - ORDER_SUMMARY/TOTAL_AMOUNT                  ← getPayableAmount()
+ * Mapping highlights (openTRANS <- Order):
+ *  - ORDER_HEADER/ORDER_INFO/ORDER_ID            <- getId()
+ *  - PARTIES/PARTY[buyer|supplier]               <- getBuyer()/getSeller()
+ *  - ORDER_ITEM/PRODUCT_ID/SUPPLIER_PID          <- line sellersItemId
+ *  - PRODUCT_PRICE_FIX/PRICE_AMOUNT              <- line unitPrice
+ *  - ORDER_SUMMARY/TOTAL_AMOUNT                  <- getPayableAmount()
  *
  * @see https://www.opentrans.org
  */
@@ -231,7 +231,7 @@ final class OpenTransOrderGenerator {
         return $summary;
     }
 
-    /** Best available stable identifier for a party (endpoint → VAT → name). */
+    /** Best available stable identifier for a party (endpoint -> VAT -> name). */
     private function partyId(Party $party): string {
         return $party->getEndpointId() ?? $party->getVatId() ?? $party->getName();
     }
@@ -260,7 +260,7 @@ final class OpenTransOrderGenerator {
         return number_format((float) ($value ?? 0), 2, '.', '');
     }
 
-    /** Quantity without trailing zeros (e.g. 5.0 → "5", 1.5 → "1.5"). */
+    /** Quantity without trailing zeros (e.g. 5.0 -> "5", 1.5 -> "1.5"). */
     private function number(float $value): string {
         $formatted = rtrim(rtrim(number_format($value, 4, '.', ''), '0'), '.');
 

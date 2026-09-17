@@ -35,13 +35,13 @@ final class DatanormCatalog {
     /** @var list<DatanormProductGroup> */
     private array $productGroups = [];
 
-    /** @var array<string, DatanormDiscountGroup> code → group */
+    /** @var array<string, DatanormDiscountGroup> code -> group */
     private array $discountGroups = [];
 
     /** @var list<DatanormPriceChange> */
     private array $priceChanges = [];
 
-    /** @var array<string, DatanormTextBlock> number → block */
+    /** @var array<string, DatanormTextBlock> number -> block */
     private array $textBlocks = [];
 
     /** @var list<DatanormGraphicReference> */
@@ -180,7 +180,7 @@ final class DatanormCatalog {
         $this->discountGroups[$group->getCode()] = $group;
     }
 
-    /** @return array<string, DatanormDiscountGroup> code → group */
+    /** @return array<string, DatanormDiscountGroup> code -> group */
     public function getDiscountGroups(): array {
         return $this->discountGroups;
     }
@@ -205,7 +205,7 @@ final class DatanormCatalog {
         $this->textBlocks[$block->getNumber() . '#' . $block->getUsage()] = $block;
     }
 
-    /** @return array<string, DatanormTextBlock> "number#usage" → block */
+    /** @return array<string, DatanormTextBlock> "number#usage" -> block */
     public function getTextBlocks(): array {
         return $this->textBlocks;
     }

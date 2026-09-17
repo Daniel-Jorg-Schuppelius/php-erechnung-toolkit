@@ -63,7 +63,7 @@ class DatanormPriceCalculatorTest extends BaseTestCase {
     }
 
     public function test_specification_example_chain_rounds_only_at_the_end(): void {
-        // Spec example: list 49,95 with 30 % / 10 % / 5 % → 29,90.
+        // Spec example: list 49,95 with 30 % / 10 % / 5 % -> 29,90.
         $list = Money::ofMinor(4995, CurrencyCode::Euro, 2);
 
         $net = DatanormPriceCalculator::netPrice($list, [

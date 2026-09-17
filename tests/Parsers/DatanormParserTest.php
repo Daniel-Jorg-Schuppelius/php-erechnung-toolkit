@@ -62,7 +62,7 @@ class DatanormParserTest extends BaseTestCase {
         self::assertSame('ROHR-15', $rohr->getArticleNumber());
         self::assertSame('Kupferrohr 15x1 halbhart', $rohr->getName());
         self::assertSame(DatanormPriceIndicator::ListPrice, $rohr->getPriceIndicator());
-        // Price unit CODE 2 → per 100 units, never a divisor of 2.
+        // Price unit CODE 2 -> per 100 units, never a divisor of 2.
         self::assertSame(100, $rohr->getPriceUnitAmount());
         self::assertSame('189.50', $rohr->getPrice()?->getAmount());
         self::assertSame('R010', $rohr->getDiscountGroup());
@@ -346,11 +346,11 @@ class DatanormParserTest extends BaseTestCase {
 
         $german = $surcharges[1];
         self::assertSame('german', $german->getMethod());
-        // Basis 150,00 × 0,010 = 1,50 €/kg enthalten; DEL 2,00 €/kg →
-        // 0,50 € Differenz × (4,30 × 0,010 = 0,043 kg) = 0,0215 €/Einheit.
+        // Basis 150,00 x 0,010 = 1,50 €/kg enthalten; DEL 2,00 €/kg ->
+        // 0,50 € Differenz x (4,30 x 0,010 = 0,043 kg) = 0,0215 €/Einheit.
         $surcharge = $german->germanSurchargePerPriceUnit(\CommonToolkit\ValueObjects\Money::of('2', \CommonToolkit\Enums\CurrencyCode::Euro, 2));
         self::assertSame('0.0215', $surcharge?->getAmount());
-        // DEL unter der Basis → kein Abschlag, Zuschlag 0.
+        // DEL unter der Basis -> kein Abschlag, Zuschlag 0.
         self::assertSame('0.0000', $german->germanSurchargePerPriceUnit(\CommonToolkit\ValueObjects\Money::of('1', \CommonToolkit\Enums\CurrencyCode::Euro, 2))?->getAmount());
 
         $workTimes = $article->getWorkTimes();
@@ -382,7 +382,7 @@ class DatanormParserTest extends BaseTestCase {
         self::assertSame('german', $surcharges[1]->getMethod());
         self::assertSame(7.2, $surcharges[1]->getWeight());
 
-        // 50 AW × 0,6 = 30 Minuten (N5/1: 500 → 50,0 AW).
+        // 50 AW x 0,6 = 30 Minuten (N5/1: 500 -> 50,0 AW).
         self::assertSame(30.0, $article->getWorkTimes()[0]->getMinutes());
     }
 

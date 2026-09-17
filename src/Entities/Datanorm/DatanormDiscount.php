@@ -17,7 +17,7 @@ use ERechnungToolkit\Enums\DatanormDiscountKind;
 /**
  * A single DATANORM discount step: a percentage discount or surcharge, or a
  * multiplication factor. Value semantics: percent for `Discount`/`Surcharge`
- * (20.0 = 20 %), plain factor for `Factor` (0.9 = ×0.9).
+ * (20.0 = 20 %), plain factor for `Factor` (0.9 = x0.9).
  */
 final class DatanormDiscount {
     public function __construct(

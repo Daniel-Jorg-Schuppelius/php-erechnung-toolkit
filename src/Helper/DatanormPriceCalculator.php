@@ -30,7 +30,7 @@ final class DatanormPriceCalculator {
     /** Internal working scale, rounded to currency decimals only at chain end. */
     private const WORK_SCALE = 6;
 
-    /** DATANORM 4 price unit code → units the price refers to. */
+    /** DATANORM 4 price unit code -> units the price refers to. */
     private const V4_PRICE_UNITS = [0 => 1, 1 => 10, 2 => 100, 3 => 1000];
 
     private function __construct() {

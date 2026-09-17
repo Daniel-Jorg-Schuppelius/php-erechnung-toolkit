@@ -20,7 +20,7 @@ use ERechnungToolkit\Generators\DespatchAdviceGenerator;
 /**
  * Despatch advice document (UBL DespatchAdvice — Peppol BIS Despatch Advice).
  *
- * The "Lieferschein" of the procurement chain (order → despatch advice →
+ * The "Lieferschein" of the procurement chain (order -> despatch advice ->
  * invoice). The **supplier** is the document sender (cac:DespatchSupplierParty),
  * the **customer** is the recipient (cac:DeliveryCustomerParty). Lines reference
  * the originating order line, which makes it the natural basis for a goods

@@ -30,7 +30,7 @@ use ERRORToolkit\Traits\ErrorLog;
 final class UblSchemaValidator {
     use ErrorLog;
 
-    /** @var array<string, string> Wurzel-localName ⇒ Maindoc-XSD */
+    /** @var array<string, string> Wurzel-localName => Maindoc-XSD */
     private const SCHEMA = [
         'Invoice' => 'UBL-Invoice-2.1.xsd',
         'CreditNote' => 'UBL-CreditNote-2.1.xsd',

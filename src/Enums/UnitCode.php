@@ -32,7 +32,7 @@ enum UnitCode: string {
      * (Fachjargon wie „lfm", Ziffernschreibweisen wie „m2"/„m3",
      * ausgeschriebene Formen).
      *
-     * @var array<string, string> Freitext (lowercase, ohne Schlusspunkt) → Code
+     * @var array<string, string> Freitext (lowercase, ohne Schlusspunkt) -> Code
      */
     public const TEXT_ALIAS_CODES = [
         'std' => 'HUR',
@@ -263,7 +263,7 @@ enum UnitCode: string {
     /**
      * Löst eine Freitext-Mengeneinheit auf („Stk.", „lfm", „qm", „Stunden").
      *
-     * Auflösungsreihenfolge: direkter ISO-Code → Wortliste → Abkürzung aus
+     * Auflösungsreihenfolge: direkter ISO-Code -> Wortliste -> Abkürzung aus
      * {@see abbreviation()}. Groß-/Kleinschreibung und ein Schlusspunkt sind
      * egal; nicht Erkanntes liefert `null` statt eines geratenen Codes — ein
      * falscher Einheitencode fällt erst beim Empfänger der Rechnung auf.

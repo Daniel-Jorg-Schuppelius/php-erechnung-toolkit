@@ -25,9 +25,9 @@ use ERechnungToolkit\Enums\DatanormPriceIndicator;
  *    material day price lies within [fromDayPrice, toDayPrice].
  *  - **german** (DATANORM 5 flag 3, DATANORM 4 flag 4): the surcharge is
  *    calculated from the day quotation (DEL-Notiz for copper): the article
- *    price already contains `includedBasePrice` (× `baseFactor` → per kg);
+ *    price already contains `includedBasePrice` (x `baseFactor` -> per kg);
  *    the difference to the day price is multiplied by the raw material
- *    weight (`weight` × `weightFactor` → per price unit). A day price below
+ *    weight (`weight` x `weightFactor` -> per price unit). A day price below
  *    the included base yields no deduction (per specification).
  */
 final class DatanormRawMaterialSurcharge {

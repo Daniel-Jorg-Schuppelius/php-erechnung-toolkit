@@ -27,7 +27,7 @@ use InvalidArgumentException;
  * the mask that says how the nine digit ordinal number is split into levels.
  *
  * Column layout, verified against the public GAEB test files (33 of 34 priced
- * items reproduce quantity × unit price = total exactly):
+ * items reproduce quantity x unit price = total exactly):
  *
  * | Record | Columns | Field |
  * | --- | --- | --- |

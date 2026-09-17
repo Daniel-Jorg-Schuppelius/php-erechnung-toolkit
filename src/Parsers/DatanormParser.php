@@ -61,7 +61,7 @@ final class DatanormParser {
     /** @var array<string, DatanormArticle> */
     private array $articles = [];
 
-    /** @var array<string, list<array{indicator: string, text: string, block: string}>> article number → dimension parts */
+    /** @var array<string, list<array{indicator: string, text: string, block: string}>> article number -> dimension parts */
     private array $dimensionParts = [];
 
     private ?DatanormCatalog $catalog = null;
@@ -758,7 +758,7 @@ final class DatanormParser {
 
         // Rohstoffzuschläge (Kupfer & Co., Elektro-Branche): V5-Flags 2/3,
         // V4-Flags 3/4 — international (Tagespreis-Fenster) bzw. deutsch
-        // (DEL-Notiz × Gewichtsanteil).
+        // (DEL-Notiz x Gewichtsanteil).
         $surcharge = match (true) {
             $version === DatanormVersion::V5 && $workingFlag === 2 => $this->rawMaterialV5International($catalog, $articleNumber, $fields),
             $version === DatanormVersion::V5 && $workingFlag === 3 => $this->rawMaterialV5German($catalog, $articleNumber, $fields),
@@ -799,7 +799,7 @@ final class DatanormParser {
         );
     }
 
-    /** DATANORM 5 working flag 3: german raw material surcharge (DEL quotation × weight). */
+    /** DATANORM 5 working flag 3: german raw material surcharge (DEL quotation x weight). */
     /** @param list<string> $fields */
     private function rawMaterialV5German(DatanormCatalog $catalog, string $articleNumber, array $fields): DatanormRawMaterialSurcharge {
         return new DatanormRawMaterialSurcharge(
@@ -893,7 +893,7 @@ final class DatanormParser {
         ));
     }
 
-    /** Ganzzahliges Preisfeld (DATANORM-4-Tagespreise) → Money, scale 2. */
+    /** Ganzzahliges Preisfeld (DATANORM-4-Tagespreise) -> Money, scale 2. */
     private function wholeMoney(DatanormCatalog $catalog, ?string $raw): ?Money {
         $raw = $raw !== null ? trim($raw) : '';
         if ($raw === '' || !ctype_digit($raw) || (int) $raw === 0) {
@@ -1030,7 +1030,7 @@ final class DatanormParser {
         return [$priceUnitAmount, $this->moneyFromMinor($catalog, $priceRaw)];
     }
 
-    /** `N6/2`-style minor-unit value → Money, null for empty/zero/non-numeric. */
+    /** `N6/2`-style minor-unit value -> Money, null for empty/zero/non-numeric. */
     private function moneyFromMinor(DatanormCatalog $catalog, ?string $raw): ?Money {
         $raw = $raw !== null ? trim($raw) : '';
         if ($raw === '' || !ctype_digit($raw) || (int) $raw === 0) {
@@ -1044,7 +1044,7 @@ final class DatanormParser {
      * Reads discount kind/value pairs into a discount chain.
      *
      * @param  list<string>  $fields
-     * @param  list<array{0: int, 1: int}>  $pairs  kind index → value index
+     * @param  list<array{0: int, 1: int}>  $pairs  kind index -> value index
      * @return list<DatanormDiscount>
      */
     private function discountChain(array $fields, array $pairs): array {
@@ -1065,7 +1065,7 @@ final class DatanormParser {
         return $discounts;
     }
 
-    /** Discount/surcharge values are N2/2 percent (2000 → 20.0), factors N1/3 (1200 → 1.2). */
+    /** Discount/surcharge values are N2/2 percent (2000 -> 20.0), factors N1/3 (1200 -> 1.2). */
     private function discountValue(DatanormDiscountKind $kind, string $raw): float {
         $value = (int) preg_replace('/\D/', '', $raw);
 

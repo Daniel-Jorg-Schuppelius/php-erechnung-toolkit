@@ -54,7 +54,7 @@ final class GaebSchemaValidator {
 
     private readonly string $schemaDir;
 
-    /** @var array<string, array<string, array<string, string>>>|null Phase ⇒ Version ⇒ Ausgabe ⇒ Dateipfad */
+    /** @var array<string, array<string, array<string, string>>>|null Phase => Version => Ausgabe => Dateipfad */
     private ?array $schemas = null;
 
     public function __construct(?string $schemaDir = null) {
@@ -275,7 +275,7 @@ final class GaebSchemaValidator {
      * Ausgaben derselben Version bleiben nebeneinander stehen — welche gilt,
      * sagt das `VersDate` des Dokuments.
      *
-     * @return array<string, array<string, array<string, string>>> Phase ⇒ Version ⇒ Ausgabe ⇒ Dateipfad
+     * @return array<string, array<string, array<string, string>>> Phase => Version => Ausgabe => Dateipfad
      */
     public function availableSchemas(): array {
         if ($this->schemas !== null) {

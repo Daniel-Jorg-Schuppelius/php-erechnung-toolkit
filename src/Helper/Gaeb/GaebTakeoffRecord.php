@@ -30,7 +30,7 @@ use ERechnungToolkit\Entities\Gaeb\GaebTakeoffLine;
  *    22  Vorzeichen des Faktors
  * 23-28  Faktor
  * 29-30  Formelnummer
- * 31-67  fünf Wertfelder (9 + 4×7), rechtsbündig; Formel 91: Ausdruck ab 31
+ * 31-67  fünf Wertfelder (9 + 4x7), rechtsbündig; Formel 91: Ausdruck ab 31
  *    68  Rechenzeichen des Folgewertes bzw. Abschluss `=`
  * 69-74  Adresse
  * ```

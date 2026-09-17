@@ -57,7 +57,7 @@ class UglParserTest extends BaseTestCase {
         $this->assertSame('Heizungspumpe', $line->getItemName());
         $this->assertSame('ART-4711', $line->getSellersItemId());
         $this->assertSame(5.0, $line->getQuantity());
-        // UGL kennt nur „ST" → C62/H87 normalisieren auf H87 (Stück).
+        // UGL kennt nur „ST" -> C62/H87 normalisieren auf H87 (Stück).
         $this->assertSame(UnitCode::UNIT_H87, $line->getUnitCode());
         $this->assertSame('120.00', $line->getUnitPrice()->getAmount());
         $this->assertSame('600.00', $line->getNetAmount()->getAmount());

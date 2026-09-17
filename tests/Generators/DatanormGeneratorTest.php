@@ -243,7 +243,7 @@ class DatanormGeneratorTest extends BaseTestCase {
             self::assertSame(0.01, $surcharges[0]->getDayPriceFactor(), $version->name);
             self::assertTrue($surcharges[0]->appliesToDayPrice(Money::of('1.75', CurrencyCode::Euro, 2)), $version->name);
             self::assertSame(DatanormRawMaterialSurcharge::METHOD_GERMAN, $surcharges[1]->getMethod(), $version->name);
-            // DEL 2,00 €/kg: (2,00 − 1,50) × 0,043 kg = 0,0215 €/Einheit.
+            // DEL 2,00 €/kg: (2,00 − 1,50) x 0,043 kg = 0,0215 €/Einheit.
             self::assertSame('0.0215', $surcharges[1]->germanSurchargePerPriceUnit(Money::of('2', CurrencyCode::Euro, 2))?->getAmount(), $version->name);
 
             $workTimes = $roundTripped->getWorkTimes();
@@ -334,7 +334,7 @@ class DatanormGeneratorTest extends BaseTestCase {
         );
         $catalog->addArticle(new DatanormArticle(
             articleNumber: 'X-1',
-            shortDescription1: 'Rohr; 15×1 – 2 m für 5 €',
+            shortDescription1: 'Rohr; 15x1 – 2 m für 5 €',
             priceIndicator: DatanormPriceIndicator::NetPrice,
             price: Money::ofMinor(500, CurrencyCode::Euro, 2)
         ));
@@ -342,7 +342,7 @@ class DatanormGeneratorTest extends BaseTestCase {
         $output = $this->generator->generateArticleFile($catalog);
 
         // The field-internal semicolon must be replaced, dash and euro transliterated.
-        $expectedName = iconv('UTF-8', 'CP850', 'Rohr, 15×1 - 2 m für 5 EUR');
+        $expectedName = iconv('UTF-8', 'CP850', 'Rohr, 15x1 - 2 m für 5 EUR');
         $expectedDescription = iconv('UTF-8', 'CP850', 'Größen-Katalog');
         self::assertNotFalse($expectedName);
         self::assertNotFalse($expectedDescription);

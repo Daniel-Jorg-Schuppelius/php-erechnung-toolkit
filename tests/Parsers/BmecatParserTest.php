@@ -241,7 +241,7 @@ XML;
 
         $article = $catalog->getArticles()[0];
         // Paritäts-Referenz App-Test: Basispreis '2.0000' (Bound 1), zwei
-        // Staffeln (Bounds 10 + 100), Staffel 10 → '1.8000'.
+        // Staffeln (Bounds 10 + 100), Staffel 10 -> '1.8000'.
         self::assertSame('2.0000', $article->getPrice()?->getAmount()?->getAmount());
         self::assertCount(3, $article->getPrices());
 

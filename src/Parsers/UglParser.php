@@ -38,7 +38,7 @@ final class UglParser {
 
     private const ENCODING = 'ISO-8859-1';
 
-    /** UGL Mengeneinheit → UN/ECE unit code. */
+    /** UGL Mengeneinheit -> UN/ECE unit code. */
     private const UNIT_MAP = [
         'ST' => 'H87',
         'STK' => 'H87',
@@ -227,7 +227,7 @@ final class UglParser {
 
     /** Reads a numeric field with implicit decimals. */
     /**
-     * Betragsfeld mit impliziten Nachkommastellen → Money (kein float-Zwischenschritt).
+     * Betragsfeld mit impliziten Nachkommastellen -> Money (kein float-Zwischenschritt).
      */
     private function money(string $record, int $from, int $to, int $decimals, CurrencyCode $currency): Money {
         $raw = trim(substr($record, $from - 1, $to - $from + 1));

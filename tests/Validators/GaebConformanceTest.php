@@ -328,7 +328,7 @@ class GaebConformanceTest extends BaseTestCase {
     }
 
     /**
-     * X → D → X: Der Weg über GAEB 90 **verliert** die Zuordnungen — und sagt
+     * X -> D -> X: Der Weg über GAEB 90 **verliert** die Zuordnungen — und sagt
      * es (Feature 109, MVP-649).
      *
      * Das Altformat kennt keine Katalogzuordnung; sie stillschweigend fallen

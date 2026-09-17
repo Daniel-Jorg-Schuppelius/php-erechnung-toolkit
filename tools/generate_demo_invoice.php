@@ -39,7 +39,7 @@ $seller = new Party(
     bankName: "Commerzbank"
 );
 
-echo "✓ Verkäufer: {$seller->getName()}\n";
+echo "OK Verkäufer: {$seller->getName()}\n";
 
 // Käufer anlegen
 $buyer = new Party(
@@ -54,7 +54,7 @@ $buyer = new Party(
     endpointScheme: "0204"
 );
 
-echo "✓ Käufer: {$buyer->getName()}\n";
+echo "OK Käufer: {$buyer->getName()}\n";
 
 // Dokument erstellen
 $doc = new Document(
@@ -82,7 +82,7 @@ foreach ($lines as $line) {
     $doc->addLine($line);
 }
 
-echo "✓ " . count($lines) . " Positionen hinzugefügt\n";
+echo "OK " . count($lines) . " Positionen hinzugefügt\n";
 
 // Summen berechnen
 $net = 850 + 299 + 149 + 36 + 59; // 1393.00
@@ -106,16 +106,16 @@ $doc->setTaxTotal(new TaxTotal(
 $doc->addNote("Zahlbar innerhalb von 30 Tagen ohne Abzug.");
 $doc->addNote("Lieferung erfolgte am " . (new DateTimeImmutable)->format('d.m.Y') . ".");
 
-echo "✓ Summen: Netto {$net} EUR, MwSt {$tax} EUR, Brutto {$gross} EUR\n";
-echo "✓ Hinweise: " . count($doc->getNotes()) . " Notizen hinzugefügt\n";
-echo "✓ Profil: " . $doc->getProfile()->name . "\n\n";
+echo "OK Summen: Netto {$net} EUR, MwSt {$tax} EUR, Brutto {$gross} EUR\n";
+echo "OK Hinweise: " . count($doc->getNotes()) . " Notizen hinzugefügt\n";
+echo "OK Profil: " . $doc->getProfile()->name . "\n\n";
 
 // HTML-Vorschau generieren
 $htmlFile = str_replace('.pdf', '.html', $outputFile);
 $htmlGenerator = new ERechnungToolkit\Generators\InvoiceHtmlGenerator;
 $html = $htmlGenerator->generate($doc);
 file_put_contents($htmlFile, $html);
-echo "✓ HTML-Vorschau: {$htmlFile}\n\n";
+echo "OK HTML-Vorschau: {$htmlFile}\n\n";
 
 // PDF generieren
 echo "Generiere PDF...\n";
@@ -127,6 +127,6 @@ $pdf = $generator->generate($doc);
 file_put_contents($outputFile, $pdf);
 
 $size = round(strlen($pdf) / 1024, 1);
-echo "\n✓ PDF gespeichert: {$outputFile}\n";
+echo "\nOK PDF gespeichert: {$outputFile}\n";
 echo "  Größe: {$size} KB\n";
 echo "\nFertig!\n";

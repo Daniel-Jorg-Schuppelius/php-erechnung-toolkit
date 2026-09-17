@@ -24,7 +24,7 @@ final class DatanormTextBlock {
     public const USAGE_LONGTEXT = 1;
     public const USAGE_INSERT = 2;
 
-    /** @param array<int, string> $lines line number → text */
+    /** @param array<int, string> $lines line number -> text */
     public function __construct(
         private readonly string $number,
         private readonly int $usage,
@@ -43,7 +43,7 @@ final class DatanormTextBlock {
         $this->lines[$lineNumber] = $text;
     }
 
-    /** @return array<int, string> line number → text, sorted by line number */
+    /** @return array<int, string> line number -> text, sorted by line number */
     public function getLines(): array {
         $lines = $this->lines;
         ksort($lines);

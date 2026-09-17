@@ -136,8 +136,8 @@ class UglGeneratorTest extends BaseTestCase {
                 note: 'Bitte vormontiert liefern'
             ))
             ->build();
-        $order->addAllowanceCharge(AllowanceCharge::shipping(Money::of('20.00', CurrencyCode::Euro)));                  // FREIGHT → Typ 07
-        $order->addAllowanceCharge(AllowanceCharge::surcharge(Money::of('5.00', CurrencyCode::Euro), 'Mindermengenzuschlag')); // → Typ 99
+        $order->addAllowanceCharge(AllowanceCharge::shipping(Money::of('20.00', CurrencyCode::Euro)));                  // FREIGHT -> Typ 07
+        $order->addAllowanceCharge(AllowanceCharge::surcharge(Money::of('5.00', CurrencyCode::Euro), 'Mindermengenzuschlag')); // -> Typ 99
 
         $records = $this->records($this->generator->generateOrder($order));
 

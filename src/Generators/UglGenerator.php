@@ -28,7 +28,7 @@ use ERRORToolkit\Traits\ErrorLog;
  * with an implicit decimal point; alphanumeric fields are left-aligned, space-
  * padded.
  *
- * This generator maps the shared {@see Order} entity onto a craftsman→wholesaler
+ * This generator maps the shared {@see Order} entity onto a craftsman->wholesaler
  * order (Anfrageart `BE` = Lieferauftrag): one KOP header, one POA per line, one
  * END trailer. The buyer is the craftsman (sender), the seller the wholesaler.
  *
@@ -49,7 +49,7 @@ final class UglGenerator {
     /** Anfrageart `BE` = Lieferauftrag des Handwerkers beim Großhandel (purchase order). */
     public const TYPE_ORDER = 'BE';
 
-    /** UN/ECE unit code → UGL Mengeneinheit (3 chars). */
+    /** UN/ECE unit code -> UGL Mengeneinheit (3 chars). */
     private const UNIT_MAP = [
         'H87' => 'ST',  // Stück / piece
         'C62' => 'ST',  // one
@@ -224,7 +224,7 @@ final class UglGenerator {
         $type = match ($charge->getReasonCode()) {
             AllowanceChargeReasonCode::FREIGHT => '07', // Fracht
             AllowanceChargeReasonCode::PACKING => '01', // Verpackung
-            default => '99',                            // nicht definiert → Bezeichnung Pflicht
+            default => '99',                            // nicht definiert -> Bezeichnung Pflicht
         };
 
         return [$type, (string) ($charge->getReason() ?? '')];
