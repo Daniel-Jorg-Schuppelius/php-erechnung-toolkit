@@ -108,6 +108,27 @@ class ZugferdPdfParserTest extends BaseTestCase {
         $this->assertNull($document);
     }
 
+    public function test_string_entry_points_reject_empty_content(): void {
+        $this->assertFalse($this->parser->isZugferdPdfContent(''));
+        $this->assertNull($this->parser->parseString(''));
+        $this->assertNull($this->parser->extractXmlFromString(''));
+    }
+
+    public function test_parse_string_returns_null_for_plain_pdf_and_leaves_no_temp_file(): void {
+        if (!$this->parser->isAvailable()) {
+            $this->markTestSkipped('PDF Toolkit is not installed');
+        }
+
+        $path = $this->createTempPdf();
+        $content = (string) file_get_contents($path);
+        unlink($path);
+        $before = glob(sys_get_temp_dir() . '/zugferd_*') ?: [];
+
+        $this->assertFalse($this->parser->isZugferdPdfContent($content));
+        $this->assertNull($this->parser->parseString($content));
+        $this->assertSame($before, glob(sys_get_temp_dir() . '/zugferd_*') ?: []);
+    }
+
     /**
      * Creates a minimal PDF for testing.
      */

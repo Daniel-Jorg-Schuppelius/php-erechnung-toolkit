@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "8fe1dd30a47481d9d4bca3ced1f7732d",
+    "content-hash": "2862991cb1221f31b9d810cfbd11ef43",
     "packages": [
         {
             "name": "dschuppelius/php-common-toolkit",
-            "version": "v1.35.1",
+            "version": "v1.36.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/DSchuppelius/php-common-toolkit.git",
-                "reference": "1f541cbd0ea0f669951fe52c7c498a32ca761e2c"
+                "reference": "1499ca7f641d6d690fcb2355b1693518b31fd137"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/DSchuppelius/php-common-toolkit/zipball/1f541cbd0ea0f669951fe52c7c498a32ca761e2c",
-                "reference": "1f541cbd0ea0f669951fe52c7c498a32ca761e2c",
+                "url": "https://api.github.com/repos/DSchuppelius/php-common-toolkit/zipball/1499ca7f641d6d690fcb2355b1693518b31fd137",
+                "reference": "1499ca7f641d6d690fcb2355b1693518b31fd137",
                 "shasum": ""
             },
             "require": {
@@ -27,7 +27,8 @@
                 "ext-intl": "*",
                 "ext-zip": "*",
                 "maxmind-db/reader": "^1.11",
-                "php": ">=8.1 <8.6"
+                "php": ">=8.1 <8.6",
+                "symfony/process": "^6.4 || ^7.0 || ^8.0"
             },
             "require-dev": {
                 "laravel/pint": "^1.27",
@@ -53,9 +54,9 @@
             "description": "Project description.",
             "support": {
                 "issues": "https://github.com/DSchuppelius/php-common-toolkit/issues",
-                "source": "https://github.com/DSchuppelius/php-common-toolkit/tree/v1.35.1"
+                "source": "https://github.com/DSchuppelius/php-common-toolkit/tree/v1.36.0"
             },
-            "time": "2026-09-17T14:55:07+00:00"
+            "time": "2026-09-18T10:22:20+00:00"
         },
         {
             "name": "dschuppelius/php-config-toolkit",
@@ -436,6 +437,71 @@
                 "source": "https://github.com/php-fig/log/tree/3.0.2"
             },
             "time": "2024-09-11T13:17:53+00:00"
+        },
+        {
+            "name": "symfony/process",
+            "version": "v7.4.19",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/symfony/process.git",
+                "reference": "ed0ae095b86994d370d5791612e55984f15aa30e"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/symfony/process/zipball/ed0ae095b86994d370d5791612e55984f15aa30e",
+                "reference": "ed0ae095b86994d370d5791612e55984f15aa30e",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.2"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Symfony\\Component\\Process\\": ""
+                },
+                "exclude-from-classmap": [
+                    "/Tests/"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Fabien Potencier",
+                    "email": "fabien@symfony.com"
+                },
+                {
+                    "name": "Symfony Community",
+                    "homepage": "https://symfony.com/contributors"
+                }
+            ],
+            "description": "Executes commands in sub-processes",
+            "homepage": "https://symfony.com",
+            "support": {
+                "source": "https://github.com/symfony/process/tree/v7.4.19"
+            },
+            "funding": [
+                {
+                    "url": "https://symfony.com/sponsor",
+                    "type": "custom"
+                },
+                {
+                    "url": "https://github.com/fabpot",
+                    "type": "github"
+                },
+                {
+                    "url": "https://github.com/nicolas-grekas",
+                    "type": "github"
+                },
+                {
+                    "url": "https://tidelift.com/funding/github/packagist/symfony/symfony",
+                    "type": "tidelift"
+                }
+            ],
+            "time": "2026-09-02T12:38:34+00:00"
         }
     ],
     "packages-dev": [
@@ -3073,5 +3139,5 @@
     "platform-overrides": {
         "php": "8.2.0"
     },
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.9.0"
 }

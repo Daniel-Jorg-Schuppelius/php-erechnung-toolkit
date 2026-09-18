@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Parsers;
 
+use CommonToolkit\Helper\FileSystem\File;
 use ERechnungToolkit\Entities\Document;
 use ERRORToolkit\Traits\ErrorLog;
 use Throwable;
@@ -111,6 +112,64 @@ final class ZugferdPdfParser {
         ]);
 
         return $xml;
+    }
+
+    /**
+     * Prüft PDF-Inhalt aus dem Speicher (Mail-Anhang, Upload, API) auf eine
+     * eingebettete Rechnung — die Temp-Datei, die der Reader braucht, bleibt
+     * im Toolkit.
+     *
+     * @param string $pdfContent PDF-Bytes
+     * @return bool True wenn eine eingebettete Rechnung gefunden wurde
+     */
+    public function isZugferdPdfContent(string $pdfContent): bool {
+        if ($pdfContent === '' || !$this->isAvailable()) {
+            return false;
+        }
+
+        return File::withTemp($pdfContent, fn (string $path): bool => $this->getReader()->isZugferdPdf($path), 'zugferd_', 'pdf');
+    }
+
+    /**
+     * Extrahiert die XML-Rechnung aus PDF-Inhalt im Speicher.
+     *
+     * @param string $pdfContent PDF-Bytes
+     * @return string|null XML-Inhalt oder null bei Fehler
+     */
+    public function extractXmlFromString(string $pdfContent): ?string {
+        if ($pdfContent === '') {
+            return $this->logErrorAndReturn(null, 'Empty PDF content');
+        }
+        if (!$this->isAvailable()) {
+            return $this->logErrorAndReturn(null, 'ZUGFeRD PDF parsing requires dschuppelius/php-pdf-toolkit. Install with: composer require dschuppelius/php-pdf-toolkit');
+        }
+
+        return File::withTemp($pdfContent, fn (string $path): ?string => $this->extractXml($path), 'zugferd_', 'pdf');
+    }
+
+    /**
+     * Parst PDF-Inhalt im Speicher zu einem Document.
+     *
+     * Anders als {@see parseFile()} ist ein PDF ohne eingebettete Rechnung
+     * hier kein Fehler: dann kommt null ohne Fehlerprotokoll — eingehende
+     * Kanäle liefern normale PDFs und ZUGFeRD-PDFs gemischt.
+     *
+     * @param string $pdfContent PDF-Bytes
+     * @return Document|null Das geparste Document oder null
+     */
+    public function parseString(string $pdfContent): ?Document {
+        if ($pdfContent === '' || !$this->isAvailable()) {
+            return null;
+        }
+
+        return File::withTemp($pdfContent, function (string $path): ?Document {
+            if (!$this->getReader()->isZugferdPdf($path)) {
+                $this->logDebug('PDF enthält keine eingebettete Rechnung');
+                return null;
+            }
+
+            return $this->parseFile($path);
+        }, 'zugferd_', 'pdf');
     }
 
     /**

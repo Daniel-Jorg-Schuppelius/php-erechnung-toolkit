@@ -29,7 +29,7 @@
     "php": ">=8.2 <8.6",
     "ext-dom": "*",
     "ext-libxml": "*",
-    "dschuppelius/php-common-toolkit": "^1.20",
+    "dschuppelius/php-common-toolkit": "^1.36",
     "psr/http-client": "^1.0",
     "psr/http-factory": "^1.0"
   },
