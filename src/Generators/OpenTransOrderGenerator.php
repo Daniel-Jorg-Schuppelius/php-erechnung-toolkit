@@ -12,11 +12,10 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Generators;
 
-use CommonToolkit\ValueObjects\Money;
-use DateTimeImmutable;
-use DOMDocument;
 use DOMElement;
-use ERechnungToolkit\Entities\{Order, OrderLine, Party};
+use ERechnungToolkit\Contracts\OpenTransNamespaceInterface;
+use ERechnungToolkit\Entities\{Order, OrderLine};
+use ERechnungToolkit\Traits\OpenTransWriterTrait;
 use ERRORToolkit\Traits\ErrorLog;
 
 /**
@@ -39,13 +38,9 @@ use ERRORToolkit\Traits\ErrorLog;
  *
  * @see https://www.opentrans.org
  */
-final class OpenTransOrderGenerator {
+final class OpenTransOrderGenerator implements OpenTransNamespaceInterface {
     use ErrorLog;
-
-    public const OT_NS = 'http://www.opentrans.org/XMLSchema/2.1';
-    public const BMECAT_NS = 'http://www.bmecat.org/bmecat/2005';
-
-    private DOMDocument $dom;
+    use OpenTransWriterTrait;
 
     /**
      * Generates an openTRANS 2.1 ORDER XML string for the given order.
@@ -53,14 +48,8 @@ final class OpenTransOrderGenerator {
     public function generateOrder(Order $order): string {
         $this->logDebug('Generating openTRANS ORDER XML', ['id' => $order->getId()]);
 
-        $this->dom = new DOMDocument('1.0', 'UTF-8');
-        $this->dom->formatOutput = true;
-
-        $root = $this->dom->createElementNS(self::OT_NS, 'ORDER');
-        $root->setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:bmecat', self::BMECAT_NS);
-        $root->setAttribute('version', '2.1');
+        $root = $this->openTransRoot('ORDER');
         $root->setAttribute('type', 'standard');
-        $this->dom->appendChild($root);
 
         $root->appendChild($this->header($order));
         $root->appendChild($this->itemList($order));
@@ -74,10 +63,7 @@ final class OpenTransOrderGenerator {
     private function header(Order $order): DOMElement {
         $header = $this->ot('ORDER_HEADER');
 
-        $controlInfo = $this->ot('CONTROL_INFO');
-        $this->otText($controlInfo, 'GENERATOR_INFO', 'ERechnungToolkit');
-        $this->otText($controlInfo, 'GENERATION_DATE', (new DateTimeImmutable)->format('Y-m-d\TH:i:s'));
-        $header->appendChild($controlInfo);
+        $header->appendChild($this->controlInfo());
 
         $info = $this->ot('ORDER_INFO');
         $this->otText($info, 'ORDER_ID', $order->getId());
@@ -88,7 +74,7 @@ final class OpenTransOrderGenerator {
         }
 
         $info->appendChild($this->parties($order));
-        $info->appendChild($this->partiesReference($order));
+        $info->appendChild($this->partiesReference($order->getBuyer(), $order->getSeller()));
         $this->otText($info, 'CURRENCY', $order->getCurrency()->value);
 
         $header->appendChild($info);
@@ -102,73 +88,6 @@ final class OpenTransOrderGenerator {
         $parties->appendChild($this->party($order->getSeller(), 'supplier'));
 
         return $parties;
-    }
-
-    private function party(Party $party, string $role): DOMElement {
-        $node = $this->ot('PARTY');
-
-        $partyId = $this->dom->createElementNS(self::BMECAT_NS, 'bmecat:PARTY_ID', $this->partyId($party));
-        $partyId->setAttribute('type', $role . '_specific');
-        $node->appendChild($partyId);
-
-        $this->otText($node, 'PARTY_ROLE', $role);
-
-        $address = $this->ot('ADDRESS');
-        $this->bmecatText($address, 'NAME', $party->getName());
-
-        if ($party->getContactName() !== null) {
-            $contact = $this->dom->createElementNS(self::BMECAT_NS, 'bmecat:CONTACT_DETAILS');
-            $this->bmecatText($contact, 'CONTACT_NAME', $party->getContactName());
-            if ($party->getContactPhone() !== null) {
-                $this->bmecatText($contact, 'PHONE', $party->getContactPhone());
-            }
-            if ($party->getContactEmail() !== null) {
-                $this->bmecatText($contact, 'EMAILS', $party->getContactEmail());
-            }
-            $address->appendChild($contact);
-        }
-
-        $postal = $party->getPostalAddress();
-        if ($postal !== null) {
-            if ($postal->getStreetName() !== null) {
-                $street = $postal->getStreetName();
-                if ($postal->getBuildingNumber() !== null) {
-                    $street .= ' ' . $postal->getBuildingNumber();
-                }
-                $this->bmecatText($address, 'STREET', $street);
-            }
-            if ($postal->getPostalCode() !== null) {
-                $this->bmecatText($address, 'ZIP', $postal->getPostalCode());
-            }
-            if ($postal->getCity() !== null) {
-                $this->bmecatText($address, 'CITY', $postal->getCity());
-            }
-            if ($postal->getCountryCode() !== null) {
-                $this->bmecatText($address, 'COUNTRY_CODED', $postal->getCountryCode());
-            }
-        }
-
-        if ($party->getVatId() !== null) {
-            $this->bmecatText($address, 'VAT_ID', $party->getVatId());
-        }
-
-        $node->appendChild($address);
-
-        return $node;
-    }
-
-    private function partiesReference(Order $order): DOMElement {
-        $ref = $this->ot('ORDER_PARTIES_REFERENCE');
-
-        $buyerRef = $this->dom->createElementNS(self::BMECAT_NS, 'bmecat:BUYER_IDREF', $this->partyId($order->getBuyer()));
-        $buyerRef->setAttribute('type', 'buyer_specific');
-        $ref->appendChild($buyerRef);
-
-        $supplierRef = $this->dom->createElementNS(self::BMECAT_NS, 'bmecat:SUPPLIER_IDREF', $this->partyId($order->getSeller()));
-        $supplierRef->setAttribute('type', 'supplier_specific');
-        $ref->appendChild($supplierRef);
-
-        return $ref;
     }
 
     private function itemList(Order $order): DOMElement {
@@ -229,41 +148,5 @@ final class OpenTransOrderGenerator {
         $this->otText($summary, 'TOTAL_AMOUNT', $this->amount($order->getPayableAmount()));
 
         return $summary;
-    }
-
-    /** Best available stable identifier for a party (endpoint -> VAT -> name). */
-    private function partyId(Party $party): string {
-        return $party->getEndpointId() ?? $party->getVatId() ?? $party->getName();
-    }
-
-    private function ot(string $name): DOMElement {
-        return $this->dom->createElementNS(self::OT_NS, $name);
-    }
-
-    private function otText(DOMElement $parent, string $name, string $value): void {
-        $node = $this->dom->createElementNS(self::OT_NS, $name);
-        $node->appendChild($this->dom->createTextNode($value));
-        $parent->appendChild($node);
-    }
-
-    private function bmecatText(DOMElement $parent, string $name, string $value): void {
-        $node = $this->dom->createElementNS(self::BMECAT_NS, 'bmecat:' . $name);
-        $node->appendChild($this->dom->createTextNode($value));
-        $parent->appendChild($node);
-    }
-
-    private function amount(Money|float|int|null $value): string {
-        if ($value instanceof Money) {
-            return $value->getAmount();
-        }
-
-        return number_format((float) ($value ?? 0), 2, '.', '');
-    }
-
-    /** Quantity without trailing zeros (e.g. 5.0 -> "5", 1.5 -> "1.5"). */
-    private function number(float $value): string {
-        $formatted = rtrim(rtrim(number_format($value, 4, '.', ''), '0'), '.');
-
-        return $formatted === '' ? '0' : $formatted;
     }
 }

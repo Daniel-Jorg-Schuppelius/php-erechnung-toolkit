@@ -13,7 +13,8 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Enums;
 
 /**
- * Despatch advice conformance profile (Peppol BIS Despatch Advice).
+ * Despatch advice conformance profile: Peppol BIS Despatch Advice (UBL) or
+ * openTRANS 2.1 DISPATCHNOTIFICATION.
  *
  * The enum value is the ProfileID; the document URNs are returned by
  * {@see self::customizationId()} and {@see self::profileId()}.
@@ -24,18 +25,24 @@ enum DespatchAdviceProfile: string {
     /** Peppol BIS Despatch Advice 3. */
     case PEPPOL_DESPATCH_ADVICE = 'urn:fdc:peppol.eu:poacc:bis:despatch_advice:3';
 
+    /** openTRANS 2.1 DISPATCHNOTIFICATION (no UBL customization). */
+    case OPENTRANS_DISPATCHNOTIFICATION = 'opentrans:2.1:dispatchnotification';
+
     /**
      * Returns the cbc:CustomizationID emitted in the UBL DespatchAdvice.
      */
     public function customizationId(): string {
-        return 'urn:fdc:peppol.eu:poacc:trns:despatch_advice:3';
+        return match ($this) {
+            self::PEPPOL_DESPATCH_ADVICE => 'urn:fdc:peppol.eu:poacc:trns:despatch_advice:3',
+            self::OPENTRANS_DISPATCHNOTIFICATION => $this->value,
+        };
     }
 
     /**
      * Returns the cbc:ProfileID emitted in the UBL DespatchAdvice.
      */
     public function profileId(): string {
-        return 'urn:fdc:peppol.eu:poacc:bis:despatch_advice:3';
+        return $this->value;
     }
 
     /**
@@ -44,6 +51,7 @@ enum DespatchAdviceProfile: string {
     public function label(): string {
         return match ($this) {
             self::PEPPOL_DESPATCH_ADVICE => 'Peppol BIS Despatch Advice',
+            self::OPENTRANS_DISPATCHNOTIFICATION => 'openTRANS 2.1 DISPATCHNOTIFICATION',
         };
     }
 }
