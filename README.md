@@ -22,6 +22,7 @@ The toolkit also covers the exchange formats that surround an invoice in the con
 - **DATANORM 4/5**: `DatanormParser` / `DatanormGenerator` for article and price catalogues, including the DA-11 price-update variant (`Da11Parser` / `Da11Generator`)
 - **BMEcat**: `BmecatParser` for supplier catalogues
 - **UGL**: `UglParser`, `UglInvoiceParser` and `UglGenerator` — the German trade data exchange used between wholesalers and craft businesses
+- **IDS-Connect**: `IdsCartParser` / `IdsCartGenerator` for the wholesale shop cart (`Warenkorb`, actions WKE/WKS) and `IdsConnectRequest::formFields()` for the shop jump (WKE, WKS, ADL); raw-material shares, item characters and the return flag included. Parsing is DTD-free and namespace-agnostic
 - **openTRANS 2.1**: `OpenTransOrderParser` / `OpenTransOrderGenerator` (ORDER), `OpenTransOrderResponseParser` / `OpenTransOrderResponseGenerator` (ORDERRESPONSE onto `OrderResponse`) and `OpenTransDispatchNotificationParser` / `OpenTransDispatchNotificationGenerator` (DISPATCHNOTIFICATION onto the shared `DespatchAdvice`, like the Peppol despatch advice). Element order follows openTRANS 2.1; no XSD validation is bundled
 
 ## Installation
