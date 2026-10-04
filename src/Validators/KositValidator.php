@@ -222,7 +222,7 @@ final class KositValidator implements ValidatorInterface {
         $previous = libxml_use_internal_errors(true);
         try {
             $dom = new DOMDocument;
-            if (!$dom->loadXML($reportXml)) {
+            if (!$dom->loadXML($reportXml, LIBXML_NONET)) {
                 self::logErrorAndThrow(RuntimeException::class, 'KoSIT-Report konnte nicht geparst werden.');
             }
         } finally {

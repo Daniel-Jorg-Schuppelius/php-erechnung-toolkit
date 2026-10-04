@@ -77,7 +77,7 @@ final class GaebSchemaValidator {
         $previous = libxml_use_internal_errors(true);
         try {
             $dom = new DOMDocument;
-            if (!$dom->loadXML($xml)) {
+            if (!$dom->loadXML($xml, LIBXML_NONET)) {
                 return null;
             }
 
@@ -178,7 +178,7 @@ final class GaebSchemaValidator {
         $previous = libxml_use_internal_errors(true);
         try {
             $dom = new DOMDocument;
-            if (!$dom->loadXML($xml)) {
+            if (!$dom->loadXML($xml, LIBXML_NONET)) {
                 return $this->collectErrors('XML konnte nicht geladen werden.');
             }
 

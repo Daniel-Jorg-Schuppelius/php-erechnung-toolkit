@@ -58,7 +58,7 @@ final class ERechnungParser {
 
         // Suppress warnings and handle errors properly
         $internalErrors = libxml_use_internal_errors(true);
-        $loaded = $this->dom->loadXML($xml);
+        $loaded = $this->dom->loadXML($xml, LIBXML_NONET);
 
         if (!$loaded) {
             $errors = libxml_get_errors();

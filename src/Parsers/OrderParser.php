@@ -50,7 +50,7 @@ final class OrderParser {
         $this->dom = new DOMDocument;
 
         $internalErrors = libxml_use_internal_errors(true);
-        $loaded = $this->dom->loadXML($xml);
+        $loaded = $this->dom->loadXML($xml, LIBXML_NONET);
         if (!$loaded) {
             $errors = libxml_get_errors();
             libxml_clear_errors();
