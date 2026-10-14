@@ -388,4 +388,4 @@ Daniel Jörg Schuppelius - [schuppelius.org](https://schuppelius.org)
 
 ## Versions
 
-Releases are tagged in Git; `git tag --sort=-v:refname` lists them (latest: v0.13). There is no separate changelog file — the tags and the commit history are the record.
+Releases are tagged in Git; `git tag --sort=-v:refname` lists them (latest: v0.17.2). There is no separate changelog file — the tags and the commit history are the record.
