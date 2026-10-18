@@ -21,7 +21,7 @@ use DOMNode;
 use DOMXPath;
 use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, MonetaryTotal, Party, PaymentTerms, PostalAddress, TaxSubtotal, TaxTotal};
 use ERechnungToolkit\Enums\{AllowanceChargeReasonCode, ERechnungProfile, InvoiceType, PaymentMeansCode, TaxCategory, UnitCode};
-use ERechnungToolkit\Exceptions\UnsupportedFormatException;
+use ERechnungToolkit\Exceptions\{MalformedXmlException, UnsupportedFormatException};
 use ERRORToolkit\Traits\ErrorLog;
 use Exception;
 use InvalidArgumentException;
@@ -110,11 +110,11 @@ final class ERechnungParser {
             libxml_clear_errors();
             libxml_use_internal_errors($internalErrors);
 
-            $errorMsg = 'Failed to parse XML';
-            if (!empty($errors)) {
-                $errorMsg .= ': ' . $errors[0]->message;
-            }
-            $this->logErrorAndThrow(RuntimeException::class, $errorMsg);
+            // Kein XML ist für Eingangskanäle Alltag (PDF oder Text unter XML-Namen) — der Aufrufer entscheidet über den Schweregrad.
+
+            $this->logInfo('Input is not well-formed XML', ['error' => isset($errors[0]) ? trim($errors[0]->message) : null]);
+
+            throw MalformedXmlException::fromLibxml($errors);
         }
 
         libxml_use_internal_errors($internalErrors);

@@ -16,9 +16,13 @@ use CommonToolkit\Enums\CurrencyCode;
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
 use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, PaymentMeansCode};
-use ERechnungToolkit\Exceptions\UnsupportedFormatException;
+use ERechnungToolkit\Exceptions\{MalformedXmlException, UnsupportedFormatException};
 use ERechnungToolkit\Generators\ERechnungGenerator;
 use ERechnungToolkit\Parsers\ERechnungParser;
+use ERRORToolkit\Factories\ConsoleLoggerFactory;
+use ERRORToolkit\LoggerRegistry;
+use Psr\Log\AbstractLogger;
+use Stringable;
 use Tests\Contracts\{BaseTestCase, XRechnungDocuments};
 
 /**
@@ -442,10 +446,27 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals('5.00', $documentAllowances[0]->getAmount()->getAmount());
     }
 
-    public function test_parse_invalid_xml_throws_exception(): void {
-        $this->expectException(\Exception::class);
+    /** Kein XML (PDF oder Text unter XML-Namen) ist für Eingangskanäle Alltag: typisierte Exception, kein Fehlerprotokoll. */
+    public function test_parse_invalid_xml_throws_malformed_xml_exception_without_error_log(): void {
+        $logger = new class extends AbstractLogger {
+            /** @var list<array{0: string, 1: string}> */
+            public array $records = [];
 
-        $this->parser->parse('This is not valid XML');
+            public function log($level, string|Stringable $message, array $context = []): void {
+                $this->records[] = [(string) $level, (string) $message];
+            }
+        };
+        LoggerRegistry::setLogger($logger);
+        try {
+            $this->parser->parse('This is not valid XML');
+            $this->fail('MalformedXmlException erwartet');
+        } catch (MalformedXmlException $e) {
+            $this->assertStringStartsWith('Failed to parse XML: Start tag expected', $e->getMessage());
+        } finally {
+            LoggerRegistry::setLogger(ConsoleLoggerFactory::getLogger());
+        }
+        $noise = array_values(array_filter($logger->records, static fn (array $r): bool => in_array($r[0], ['warning', 'error'], true)));
+        $this->assertSame([], $noise, 'Nicht-XML ist kein Fehler des Parsers');
     }
 
     public function test_parse_unknown_format_throws_exception(): void {

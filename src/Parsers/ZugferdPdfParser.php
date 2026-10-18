@@ -14,7 +14,7 @@ namespace ERechnungToolkit\Parsers;
 
 use CommonToolkit\Helper\FileSystem\File;
 use ERechnungToolkit\Entities\Document;
-use ERechnungToolkit\Exceptions\UnsupportedFormatException;
+use ERechnungToolkit\Exceptions\{MalformedXmlException, UnsupportedFormatException};
 use ERRORToolkit\Traits\ErrorLog;
 use Throwable;
 
@@ -184,8 +184,8 @@ final class ZugferdPdfParser {
 
         try {
             return $parser->parse($xml);
-        } catch (UnsupportedFormatException $e) {
-            // Eingangskanäle liefern auch PDFs mit fremder XML unter Rechnungs-Dateinamen — kein Fehler, kein Stacktrace.
+        } catch (UnsupportedFormatException|MalformedXmlException $e) {
+            // Eingangskanäle liefern auch PDFs mit fremder oder kaputter XML unter Rechnungs-Dateinamen — kein Fehler, kein Stacktrace.
             return $this->logWarningAndReturn(null, 'Embedded XML is not a supported E-Rechnung format', ['error' => $e->getMessage()]);
         } catch (Throwable $e) {
             return $this->logErrorAndReturn(null, 'Failed to parse ZUGFeRD XML', [

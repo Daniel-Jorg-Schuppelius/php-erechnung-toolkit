@@ -13,6 +13,10 @@ declare(strict_types=1);
 namespace Tests\Parsers;
 
 use ERechnungToolkit\Parsers\ZugferdPdfParser;
+use ERRORToolkit\Factories\ConsoleLoggerFactory;
+use ERRORToolkit\LoggerRegistry;
+use Psr\Log\AbstractLogger;
+use Stringable;
 use Tests\Contracts\BaseTestCase;
 
 /**
@@ -103,9 +107,26 @@ class ZugferdPdfParserTest extends BaseTestCase {
         $this->assertEquals('ZF-TEST-001', $document->getId());
     }
 
+    /** Kaputte XML unter Rechnungs-Dateinamen: null mit Warnung, ohne Fehler und Stacktrace. */
     public function test_parse_xml_with_invalid_xml(): void {
-        $document = $this->parser->parseXml('invalid xml content');
+        $logger = new class extends AbstractLogger {
+            /** @var list<array{0: string, 1: string}> */
+            public array $records = [];
+
+            public function log($level, string|Stringable $message, array $context = []): void {
+                $this->records[] = [(string) $level, (string) $message];
+            }
+        };
+        LoggerRegistry::setLogger($logger);
+        try {
+            $document = $this->parser->parseXml('invalid xml content');
+        } finally {
+            LoggerRegistry::setLogger(ConsoleLoggerFactory::getLogger());
+        }
+
         $this->assertNull($document);
+        $this->assertSame([], array_values(array_filter($logger->records, static fn (array $r): bool => $r[0] === 'error')));
+        $this->assertNotSame([], array_filter($logger->records, static fn (array $r): bool => $r[0] === 'warning'));
     }
 
     /** Fremde XML unter Rechnungs-Dateinamen: null ohne Fehlerprotokoll (Warnung statt Stacktrace). */

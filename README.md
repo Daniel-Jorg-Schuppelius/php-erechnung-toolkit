@@ -102,6 +102,14 @@ foreach ($document->getLines() as $line) {
 }
 ```
 
+Input that is not an e-invoice is reported with typed exceptions and without an
+error log entry, so intake channels (mail, upload, PDF attachments) decide the
+severity themselves: `MalformedXmlException` when libxml cannot load the input
+(binary data, plain text, truncated file) and `UnsupportedFormatException` for
+well-formed XML with an unknown root element. Both extend `RuntimeException`;
+the same applies to the Order-X, UBL Order, Despatch Advice, BMEcat and
+openTRANS parsers.
+
 ## Supported Profiles
 
 | Profile | Description |

@@ -15,6 +15,7 @@ namespace Tests\Parsers;
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\OrderBuilder;
 use ERechnungToolkit\Enums\{OrderProfile, UnitCode};
+use ERechnungToolkit\Exceptions\MalformedXmlException;
 use ERechnungToolkit\Parsers\OrderParser;
 use RuntimeException;
 use Tests\Contracts\BaseTestCase;
@@ -75,7 +76,7 @@ class OrderParserTest extends BaseTestCase {
     }
 
     public function test_parse_rejects_invalid_xml(): void {
-        $this->expectException(RuntimeException::class);
+        $this->expectException(MalformedXmlException::class);
         $this->parser->parse('not xml at all');
     }
 }

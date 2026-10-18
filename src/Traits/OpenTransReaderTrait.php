@@ -18,6 +18,7 @@ use DOMElement;
 use DOMNode;
 use DOMXPath;
 use ERechnungToolkit\Entities\{Party, PostalAddress};
+use ERechnungToolkit\Exceptions\MalformedXmlException;
 use Exception;
 use InvalidArgumentException;
 use RuntimeException;
@@ -41,11 +42,9 @@ trait OpenTransReaderTrait {
             $errors = libxml_get_errors();
             libxml_clear_errors();
             libxml_use_internal_errors($internalErrors);
-            $message = 'Failed to parse XML';
-            if (!empty($errors)) {
-                $message .= ': ' . $errors[0]->message;
-            }
-            $this->logErrorAndThrow(RuntimeException::class, $message);
+            // Kein XML ist für Eingangskanäle Alltag (PDF oder Text unter XML-Namen) — der Aufrufer entscheidet über den Schweregrad.
+            $this->logInfo('Input is not well-formed XML', ['error' => isset($errors[0]) ? trim($errors[0]->message) : null]);
+            throw MalformedXmlException::fromLibxml($errors);
         }
         libxml_use_internal_errors($internalErrors);
 
