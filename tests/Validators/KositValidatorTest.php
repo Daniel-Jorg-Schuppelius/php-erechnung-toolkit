@@ -14,6 +14,10 @@ namespace Tests\Validators;
 
 use ERechnungToolkit\Enums\ValidationSeverity;
 use ERechnungToolkit\Validators\KositValidator;
+use ERRORToolkit\Factories\ConsoleLoggerFactory;
+use ERRORToolkit\LoggerRegistry;
+use Psr\Log\AbstractLogger;
+use Stringable;
 use Tests\Contracts\BaseTestCase;
 use ZipArchive;
 
@@ -46,7 +50,39 @@ class KositValidatorTest extends BaseTestCase {
         $this->assertTrue($result->isValid(), 'Gültige XRechnung sollte valide sein');
         $this->assertTrue($result->isAccepted(), 'Gültige XRechnung sollte zur Annahme empfohlen werden');
         $this->assertStringContainsString('XRechnung', (string) $result->getScenarioName());
+        $this->assertTrue($result->isScenarioMatched());
         $this->assertSame([], $result->getErrors());
+    }
+
+    /**
+     * ZUGFeRD 1.0 trifft kein Szenario der XRechnung-Konfiguration: abgelehnt,
+     * aber ohne Regelmeldungen - und ohne Warnung über den Exit-Code 1.
+     */
+    public function test_document_without_matching_scenario_is_rejected_without_messages_or_warning(): void {
+        $this->requireValidator();
+
+        $logger = new class extends AbstractLogger {
+            /** @var list<array{0: string, 1: string}> */
+            public array $records = [];
+
+            public function log($level, string|Stringable $message, array $context = []): void {
+                $this->records[] = [(string) $level, (string) $message];
+            }
+        };
+        LoggerRegistry::setLogger($logger);
+        try {
+            $result = $this->validator->validateFile(__DIR__ . '/../resources/zugferd_1p0_comfort_einfach.xml');
+        } finally {
+            LoggerRegistry::setLogger(ConsoleLoggerFactory::getLogger());
+        }
+
+        $this->assertFalse($result->isScenarioMatched());
+        $this->assertFalse($result->isValid());
+        $this->assertFalse($result->isAccepted());
+        $this->assertNull($result->getScenarioName());
+        $this->assertSame([], $result->getMessages());
+        $noise = array_values(array_filter($logger->records, static fn (array $r): bool => in_array($r[0], ['warning', 'error'], true)));
+        $this->assertSame([], $noise, 'Exit-Code 1 ist das Urteil, keine Warnung');
     }
 
     public function test_invalid_invoice_is_rejected(): void {

@@ -34,6 +34,10 @@ use RuntimeException;
  * Die Schematron-Regeln liegen als XSLT 2.0 vor und sind in reinem PHP
  * (libxslt = XSLT 1.0) nicht ausführbar - daher der externe Java-Prozess.
  *
+ * Der Exit-Code des Validators ist sein Urteil (0 = alle angenommen, 1 = mindestens
+ * ein Dokument abgelehnt oder nicht lesbar) und wird nicht bewertet; maßgeblich ist der
+ * Report. Fehlt ein passendes Szenario, meldet das Ergebnis {@see ValidationResult::isScenarioMatched()}.
+ *
  * Voraussetzungen:
  * - Java-Laufzeit; Verfügbarkeit via {@see KositCommandHelper::isJavaAvailable()}
  *   (Toolkit-PATH-Auflösung), Aufruf via {@see Java::execute()} (java -jar)
@@ -155,7 +159,8 @@ final class KositValidator implements ValidatorInterface {
             );
             Java::execute(
                 (string) $this->jarPath,
-                ['-r', $this->repositoryDir, '-s', $this->scenariosFile, '-o', $outputDir, ...$inputs]
+                ['-r', $this->repositoryDir, '-s', $this->scenariosFile, '-o', $outputDir, ...$inputs],
+                expectedResultCode: null,
             );
 
             $results = [];
@@ -196,11 +201,11 @@ final class KositValidator implements ValidatorInterface {
             $arguments = ['-r', $this->repositoryDir, '-s', $this->scenariosFile, '-o', $outputDir, $inputFile];
         }
 
-        // Aufruf über die Java-Runtime des Common-Toolkit (java -jar ...).
-        // Der Exit-Code wird bewusst nicht ausgewertet: der Validator liefert für
-        // abgelehnte (aber korrekt verarbeitete) Dokumente einen Exit-Code != 0.
+        // Aufruf über die Java-Runtime des Common-Toolkit (java -jar ...). Der
+        // Exit-Code ist das Urteil des Validators (1 = abgelehnt) und wird nicht
+        // bewertet - sonst stünde je abgelehntem Dokument eine Warnung im Log.
         // Maßgeblich ist allein der erzeugte Report.
-        $output = Java::execute((string) $this->jarPath, $arguments);
+        $output = Java::execute((string) $this->jarPath, $arguments, expectedResultCode: null);
 
         $reportFile = $outputDir . DIRECTORY_SEPARATOR
             . pathinfo($inputFile, PATHINFO_FILENAME) . '-report.xml';
@@ -247,6 +252,8 @@ final class KositValidator implements ValidatorInterface {
         if ($scenarioName === '') {
             $scenarioName = null;
         }
+        $unmatchedNodes = $xpath->query('//*[local-name()="noScenarioMatched"]');
+        $scenarioMatched = $unmatchedNodes === false || $unmatchedNodes->length === 0;
 
         $messages = [];
         foreach ($xpath->query('//*[local-name()="message"]') ?: [] as $messageNode) {
@@ -269,7 +276,7 @@ final class KositValidator implements ValidatorInterface {
             );
         }
 
-        return new ValidationResult($valid, $accepted, $messages, $scenarioName, $reportXml);
+        return new ValidationResult($valid, $accepted, $messages, $scenarioName, $reportXml, $scenarioMatched);
     }
 
     private function createWorkDir(): string {

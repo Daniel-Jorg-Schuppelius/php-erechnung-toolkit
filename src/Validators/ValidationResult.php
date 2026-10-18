@@ -31,6 +31,7 @@ final class ValidationResult {
         private readonly array $messages = [],
         private readonly ?string $scenarioName = null,
         private readonly ?string $rawReport = null,
+        private readonly bool $scenarioMatched = true,
     ) {}
 
     /**
@@ -53,6 +54,16 @@ final class ValidationResult {
     /** Name des angewandten Validierungsszenarios (z.B. "EN16931 XRechnung (UBL Invoice)"). */
     public function getScenarioName(): ?string {
         return $this->scenarioName;
+    }
+
+    /**
+     * False, wenn der Validator kein Prüfszenario für das Dokument fand
+     * (fremdes oder veraltetes Format, etwa ZUGFeRD 1.0): das Urteil ist dann
+     * reject ohne einzelne Regelmeldungen - die Konfiguration kennt das Format
+     * nicht, geprüft wurde nur die XML-Wohlgeformtheit.
+     */
+    public function isScenarioMatched(): bool {
+        return $this->scenarioMatched;
     }
 
     /** @return ValidationMessage[] */

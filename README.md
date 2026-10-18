@@ -274,8 +274,15 @@ if ($validator->isAvailable()) {
 
 `ValidationResult` exposes the conformance verdict (`isValid()`), the
 accept/reject recommendation (`isAccepted()`), all rule messages by severity
-(`getErrors()`, `getWarnings()`, `getMessages()`) and the raw KoSIT report
-(`getRawReport()`).
+(`getErrors()`, `getWarnings()`, `getMessages()`), whether a validation
+scenario matched at all (`isScenarioMatched()` - false for formats the
+configuration does not know, e.g. ZUGFeRD 1.0: rejected without any rule
+message) and the raw KoSIT report (`getRawReport()`).
+
+The validator's exit code is its verdict (1 = at least one document rejected)
+and is deliberately not treated as a failure: the call runs with
+`expectedResultCode: null` (common-toolkit >= 2.11), so a rejected invoice
+produces no warning in the log.
 
 ## Peppol
 
