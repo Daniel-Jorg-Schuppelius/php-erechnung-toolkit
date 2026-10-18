@@ -60,20 +60,20 @@
         },
         {
             "name": "dschuppelius/php-config-toolkit",
-            "version": "v0.5.10",
+            "version": "v0.5.13",
             "source": {
                 "type": "git",
                 "url": "https://github.com/DSchuppelius/php-config-toolkit.git",
-                "reference": "405236ec4135ea577b7910244ae9ab6b9f9e4e81"
+                "reference": "bef6ff6ab0dbc25888a9d4d8a20d2f6182ce685b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/DSchuppelius/php-config-toolkit/zipball/405236ec4135ea577b7910244ae9ab6b9f9e4e81",
-                "reference": "405236ec4135ea577b7910244ae9ab6b9f9e4e81",
+                "url": "https://api.github.com/repos/DSchuppelius/php-config-toolkit/zipball/bef6ff6ab0dbc25888a9d4d8a20d2f6182ce685b",
+                "reference": "bef6ff6ab0dbc25888a9d4d8a20d2f6182ce685b",
                 "shasum": ""
             },
             "require": {
-                "dschuppelius/php-error-toolkit": "^2.1",
+                "dschuppelius/php-error-toolkit": "^2.8.1",
                 "php": ">=8.0 <8.6"
             },
             "require-dev": {
@@ -105,20 +105,20 @@
                 "issues": "https://github.com/DSchuppelius/php-config-toolkit/issues",
                 "source": "https://github.com/DSchuppelius/php-config-toolkit"
             },
-            "time": "2026-09-25T12:33:25+00:00"
+            "time": "2026-10-18T11:05:16+00:00"
         },
         {
             "name": "dschuppelius/php-error-toolkit",
-            "version": "v2.7.3",
+            "version": "v2.8.3",
             "source": {
                 "type": "git",
                 "url": "https://github.com/DSchuppelius/php-error-toolkit.git",
-                "reference": "c0e815416a986fa73ea2ed99c74704420b84f484"
+                "reference": "07b700b9ffaa847264ac2b78f133ba8e206d5c7d"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/DSchuppelius/php-error-toolkit/zipball/c0e815416a986fa73ea2ed99c74704420b84f484",
-                "reference": "c0e815416a986fa73ea2ed99c74704420b84f484",
+                "url": "https://api.github.com/repos/DSchuppelius/php-error-toolkit/zipball/07b700b9ffaa847264ac2b78f133ba8e206d5c7d",
+                "reference": "07b700b9ffaa847264ac2b78f133ba8e206d5c7d",
                 "shasum": ""
             },
             "require": {
@@ -156,15 +156,18 @@
             "authors": [
                 {
                     "name": "Daniel Joerg Schuppelius",
-                    "email": "info@schuppelius.org"
+                    "email": "info@schuppelius.org",
+                    "homepage": "https://schuppelius.org",
+                    "role": "Developer"
                 }
             ],
             "description": "Logging and error handling foundation for the Schuppelius PHP toolkits (PSR-3 loggers, global error handler, LoggerRegistry, Laravel bridge)",
+            "homepage": "https://github.com/DSchuppelius/php-error-toolkit",
             "support": {
                 "issues": "https://github.com/DSchuppelius/php-error-toolkit/issues",
-                "source": "https://github.com/DSchuppelius/php-error-toolkit/tree/v2.7.3"
+                "source": "https://github.com/DSchuppelius/php-error-toolkit"
             },
-            "time": "2026-09-16T08:41:01+00:00"
+            "time": "2026-10-18T11:01:57+00:00"
         },
         {
             "name": "maxmind-db/reader",
@@ -443,16 +446,16 @@
         },
         {
             "name": "symfony/process",
-            "version": "v7.4.19",
+            "version": "v7.4.21",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/process.git",
-                "reference": "ed0ae095b86994d370d5791612e55984f15aa30e"
+                "reference": "e5247f4a5e0797d232ad8e8e6803aeb341843c83"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/process/zipball/ed0ae095b86994d370d5791612e55984f15aa30e",
-                "reference": "ed0ae095b86994d370d5791612e55984f15aa30e",
+                "url": "https://api.github.com/repos/symfony/process/zipball/e5247f4a5e0797d232ad8e8e6803aeb341843c83",
+                "reference": "e5247f4a5e0797d232ad8e8e6803aeb341843c83",
                 "shasum": ""
             },
             "require": {
@@ -484,7 +487,7 @@
             "description": "Executes commands in sub-processes",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/process/tree/v7.4.19"
+                "source": "https://github.com/symfony/process/tree/v7.4.21"
             },
             "funding": [
                 {
@@ -504,7 +507,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-09-02T12:38:34+00:00"
+            "time": "2026-10-08T16:56:12+00:00"
         }
     ],
     "packages-dev": [
