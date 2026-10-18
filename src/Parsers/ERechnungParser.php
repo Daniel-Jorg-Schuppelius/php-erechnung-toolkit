@@ -21,6 +21,7 @@ use DOMNode;
 use DOMXPath;
 use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, MonetaryTotal, Party, PaymentTerms, PostalAddress, TaxSubtotal, TaxTotal};
 use ERechnungToolkit\Enums\{AllowanceChargeReasonCode, ERechnungProfile, InvoiceType, PaymentMeansCode, TaxCategory, UnitCode};
+use ERechnungToolkit\Exceptions\UnsupportedFormatException;
 use ERRORToolkit\Traits\ErrorLog;
 use Exception;
 use InvalidArgumentException;
@@ -31,7 +32,8 @@ use RuntimeException;
  *
  * Supports:
  * - UBL 2.1 (Universal Business Language) - XRechnung
- * - UN/CEFACT CII D16B (Cross Industry Invoice) - ZUGFeRD/Factur-X
+ * - UN/CEFACT CII D16B (Cross Industry Invoice) - ZUGFeRD 2.x/Factur-X
+ * - ZUGFeRD 1.0 (CrossIndustryDocument, 2014) - read-only legacy dialect of CII
  */
 final class ERechnungParser {
     use ErrorLog;
@@ -44,11 +46,54 @@ final class ERechnungParser {
     private const RAM_NS = 'urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100';
     private const UDT_NS = 'urn:un:unece:uncefact:data:standard:UnqualifiedDataType:100';
 
+    // ZUGFeRD 1.0 (2014): CII-D09B-Dialekt mit eigenem Wurzelelement; wird nur gelesen.
+    private const ZF1_NS = 'urn:ferd:CrossIndustryDocument:invoice:1p0';
+    private const ZF1_RAM_NS = 'urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:12';
+    private const ZF1_UDT_NS = 'urn:un:unece:uncefact:data:standard:UnqualifiedDataType:15';
+
+    /** Elementnamen, in denen sich CII D16B (ZUGFeRD 2.x/Factur-X) und ZUGFeRD 1.0 unterscheiden. */
+    private const CII_PATHS = [
+        'root' => 'rsm:CrossIndustryInvoice',
+        'context' => 'rsm:ExchangedDocumentContext',
+        'header' => 'rsm:ExchangedDocument',
+        'transaction' => 'rsm:SupplyChainTradeTransaction',
+        'agreement' => 'ram:ApplicableHeaderTradeAgreement',
+        'delivery' => 'ram:ApplicableHeaderTradeDelivery',
+        'settlement' => 'ram:ApplicableHeaderTradeSettlement',
+        'summation' => 'ram:SpecifiedTradeSettlementHeaderMonetarySummation',
+        'percent' => 'ram:RateApplicablePercent',
+        'referenceId' => 'ram:IssuerAssignedID',
+        'lineAgreement' => 'ram:SpecifiedLineTradeAgreement',
+        'lineDelivery' => 'ram:SpecifiedLineTradeDelivery',
+        'lineSettlement' => 'ram:SpecifiedLineTradeSettlement',
+        'lineSummation' => 'ram:SpecifiedTradeSettlementLineMonetarySummation',
+    ];
+
+    private const ZF1_PATHS = [
+        'root' => 'rsm:CrossIndustryDocument',
+        'context' => 'rsm:SpecifiedExchangedDocumentContext',
+        'header' => 'rsm:HeaderExchangedDocument',
+        'transaction' => 'rsm:SpecifiedSupplyChainTradeTransaction',
+        'agreement' => 'ram:ApplicableSupplyChainTradeAgreement',
+        'delivery' => 'ram:ApplicableSupplyChainTradeDelivery',
+        'settlement' => 'ram:ApplicableSupplyChainTradeSettlement',
+        'summation' => 'ram:SpecifiedTradeSettlementMonetarySummation',
+        'percent' => 'ram:ApplicablePercent',
+        'referenceId' => 'ram:ID',
+        'lineAgreement' => 'ram:SpecifiedSupplyChainTradeAgreement',
+        'lineDelivery' => 'ram:SpecifiedSupplyChainTradeDelivery',
+        'lineSettlement' => 'ram:SpecifiedSupplyChainTradeSettlement',
+        'lineSummation' => 'ram:SpecifiedTradeSettlementMonetarySummation',
+    ];
+
     private DOMDocument $dom;
     private DOMXPath $xpath;
     private bool $isUbl = false;
     private bool $isCii = false;
+    private bool $isZugferd1 = false;
     private bool $isCreditNote = false;
+    /** @var array<string, string> */
+    private array $cii = self::CII_PATHS;
 
     /**
      * Parses an E-Rechnung document from XML string.
@@ -85,7 +130,10 @@ final class ERechnungParser {
             return $this->parseCii();
         }
 
-        $this->logErrorAndThrow(RuntimeException::class, 'Unknown E-Rechnung format. Expected UBL or CII.');
+        // Fremdes oder unbekanntes Wurzelelement ist für Eingangskanäle Alltag — der Aufrufer entscheidet über den Schweregrad.
+        $root = $this->dom->documentElement;
+        $this->logInfo('Unknown E-Rechnung format', ['namespace' => $root?->namespaceURI, 'root' => $root?->localName]);
+        throw UnsupportedFormatException::forRoot($root?->namespaceURI, $root?->localName);
     }
 
     /**
@@ -112,6 +160,7 @@ final class ERechnungParser {
         // Reset format flags for reuse of parser instance
         $this->isUbl = false;
         $this->isCii = false;
+        $this->isZugferd1 = false;
         $this->isCreditNote = false;
 
         $root = $this->dom->documentElement;
@@ -131,6 +180,9 @@ final class ERechnungParser {
             $this->isCreditNote = true;
         } elseif ($ns === self::CII_NS && $localName === 'CrossIndustryInvoice') {
             $this->isCii = true;
+        } elseif ($ns === self::ZF1_NS && $localName === 'CrossIndustryDocument') {
+            $this->isCii = true;
+            $this->isZugferd1 = true;
         }
     }
 
@@ -149,9 +201,10 @@ final class ERechnungParser {
             $this->xpath->registerNamespace('cac', self::CAC_NS);
             $this->xpath->registerNamespace('cbc', self::CBC_NS);
         } elseif ($this->isCii) {
-            $this->xpath->registerNamespace('rsm', self::CII_NS);
-            $this->xpath->registerNamespace('ram', self::RAM_NS);
-            $this->xpath->registerNamespace('udt', self::UDT_NS);
+            $this->cii = $this->isZugferd1 ? self::ZF1_PATHS : self::CII_PATHS;
+            $this->xpath->registerNamespace('rsm', $this->isZugferd1 ? self::ZF1_NS : self::CII_NS);
+            $this->xpath->registerNamespace('ram', $this->isZugferd1 ? self::ZF1_RAM_NS : self::RAM_NS);
+            $this->xpath->registerNamespace('udt', $this->isZugferd1 ? self::ZF1_UDT_NS : self::UDT_NS);
         }
     }
 
@@ -260,32 +313,36 @@ final class ERechnungParser {
      * Parses a CII document.
      */
     private function parseCii(): Document {
-        $root = '/rsm:CrossIndustryInvoice';
+        $p = $this->cii;
+        $root = "/{$p['root']}";
+        $header = "{$root}/{$p['header']}";
+        $transaction = "{$root}/{$p['transaction']}";
+        $agreement = "{$transaction}/{$p['agreement']}";
+        $settlement = "{$transaction}/{$p['settlement']}";
 
         // Basic fields
-        $id = $this->getCiiValue("{$root}/rsm:ExchangedDocument/ram:ID") ?? '';
+        $id = $this->getCiiValue("{$header}/ram:ID") ?? '';
 
-        $issueDateStr = $this->getCiiValue("{$root}/rsm:ExchangedDocument/ram:IssueDateTime/udt:DateTimeString");
+        $issueDateStr = $this->getCiiValue("{$header}/ram:IssueDateTime/udt:DateTimeString");
         $issueDate = $this->parseCiiDate($issueDateStr);
         if ($issueDate === null) {
             $this->logErrorAndThrow(RuntimeException::class, 'Missing or invalid ram:IssueDateTime');
         }
 
-        $typeCode = $this->getCiiValue("{$root}/rsm:ExchangedDocument/ram:TypeCode");
+        $typeCode = $this->getCiiValue("{$header}/ram:TypeCode");
         $invoiceType = InvoiceType::fromCode($typeCode ?? '') ?? InvoiceType::INVOICE;
         $this->isCreditNote = $invoiceType->isCredit();
 
-        $profileId = $this->getCiiValue("{$root}/rsm:ExchangedDocumentContext/ram:GuidelineSpecifiedDocumentContextParameter/ram:ID");
+        $profileId = $this->getCiiValue("{$root}/{$p['context']}/ram:GuidelineSpecifiedDocumentContextParameter/ram:ID");
         $profile = $this->detectProfile($profileId);
 
-        $currencyCode = $this->getCiiValue("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeSettlement/ram:InvoiceCurrencyCode");
+        $currencyCode = $this->getCiiValue("{$settlement}/ram:InvoiceCurrencyCode");
         $currency = CurrencyCode::tryFrom($currencyCode ?? '') ?? CurrencyCode::Euro;
 
         // Seller
-        $seller = $this->parseCiiParty("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement/ram:SellerTradeParty");
+        $seller = $this->parseCiiParty("{$agreement}/ram:SellerTradeParty");
 
         // Zahlungsverbindung (BG-17): PayeePartyCreditorFinancialAccount -> Seller-Bankdaten.
-        $settlement = "{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeSettlement";
         $iban = $this->getCiiValue("{$settlement}/ram:SpecifiedTradeSettlementPaymentMeans/ram:PayeePartyCreditorFinancialAccount/ram:IBANID");
         if ($iban !== null && $iban !== '') {
             $seller = $seller->withBankingInfo(
@@ -295,7 +352,7 @@ final class ERechnungParser {
         }
 
         // Buyer
-        $buyer = $this->parseCiiParty("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement/ram:BuyerTradeParty");
+        $buyer = $this->parseCiiParty("{$agreement}/ram:BuyerTradeParty");
 
         // Payment means
         $paymentCode = $this->getCiiValue("{$settlement}/ram:SpecifiedTradeSettlementPaymentMeans/ram:TypeCode");
@@ -307,7 +364,7 @@ final class ERechnungParser {
         $paymentTermsNote = $this->getCiiValue("{$settlement}/ram:SpecifiedTradePaymentTerms/ram:Description");
 
         // Delivery date
-        $deliveryDateStr = $this->getCiiValue("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeDelivery/ram:ActualDeliverySupplyChainEvent/ram:OccurrenceDateTime/udt:DateTimeString");
+        $deliveryDateStr = $this->getCiiValue("{$transaction}/{$p['delivery']}/ram:ActualDeliverySupplyChainEvent/ram:OccurrenceDateTime/udt:DateTimeString");
 
         // Create document
         $document = new Document(
@@ -319,13 +376,13 @@ final class ERechnungParser {
             currency: $currency,
             profile: $profile,
             dueDate: $dueDateStr ? $this->parseCiiDate($dueDateStr) : null,
-            buyerReference: $this->getCiiValue("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement/ram:BuyerReference"),
-            orderReference: $this->getCiiValue("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement/ram:BuyerOrderReferencedDocument/ram:IssuerAssignedID"),
-            contractReference: $this->getCiiValue("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeAgreement/ram:ContractReferencedDocument/ram:IssuerAssignedID"),
+            buyerReference: $this->getCiiValue("{$agreement}/ram:BuyerReference"),
+            orderReference: $this->getCiiValue("{$agreement}/ram:BuyerOrderReferencedDocument/{$p['referenceId']}"),
+            contractReference: $this->getCiiValue("{$agreement}/ram:ContractReferencedDocument/{$p['referenceId']}"),
             paymentMeansCode: $paymentCode ? PaymentMeansCode::fromCode($paymentCode) : null,
             paymentTerms: $paymentTermsNote !== null ? $this->paymentTermsFromNote($paymentTermsNote) : null,
             deliveryDate: $deliveryDateStr ? $this->parseCiiDate($deliveryDateStr) : null,
-            precedingInvoiceReference: $this->getCiiValue("{$settlement}/ram:InvoiceReferencedDocument/ram:IssuerAssignedID")
+            precedingInvoiceReference: $this->getCiiValue("{$settlement}/ram:InvoiceReferencedDocument/{$p['referenceId']}")
         );
 
         // Verwendungszweck (BT-83).
@@ -335,7 +392,7 @@ final class ERechnungParser {
         }
 
         // Notes
-        foreach ($this->nodes("{$root}/rsm:ExchangedDocument/ram:IncludedNote/ram:Content") as $noteNode) {
+        foreach ($this->nodes("{$header}/ram:IncludedNote/ram:Content") as $noteNode) {
             $document->addNote($noteNode->textContent);
         }
 
@@ -348,7 +405,7 @@ final class ERechnungParser {
         }
 
         // Lines
-        foreach ($this->nodes("{$root}/rsm:SupplyChainTradeTransaction/ram:IncludedSupplyChainTradeLineItem") as $lineNode) {
+        foreach ($this->nodes("{$transaction}/ram:IncludedSupplyChainTradeLineItem") as $lineNode) {
             if (!$lineNode instanceof DOMElement) {
                 continue;
             }
@@ -356,13 +413,13 @@ final class ERechnungParser {
         }
 
         // Tax Total
-        $taxTotal = $this->parseCiiTaxTotal("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeSettlement", $currency);
+        $taxTotal = $this->parseCiiTaxTotal($settlement, $currency);
         if ($taxTotal !== null) {
             $document->setTaxTotal($taxTotal);
         }
 
         // Monetary Total
-        $document->setMonetaryTotal($this->parseCiiMonetaryTotal("{$root}/rsm:SupplyChainTradeTransaction/ram:ApplicableHeaderTradeSettlement/ram:SpecifiedTradeSettlementHeaderMonetarySummation", $currency));
+        $document->setMonetaryTotal($this->parseCiiMonetaryTotal("{$settlement}/{$p['summation']}", $currency));
 
         return $document;
     }
@@ -714,7 +771,7 @@ final class ERechnungParser {
 
         $quantity = 0.0;
         $unitCode = UnitCode::PIECE;
-        $qtyNode = $this->firstNode('ram:SpecifiedLineTradeDelivery/ram:BilledQuantity', $node);
+        $qtyNode = $this->firstNode("{$this->cii['lineDelivery']}/ram:BilledQuantity", $node);
         if ($qtyNode !== null) {
             $quantity = (float) $qtyNode->textContent;
             if ($qtyNode instanceof \DOMElement) {
@@ -723,21 +780,21 @@ final class ERechnungParser {
         }
 
         $unitPrice = $this->money(
-            $this->firstText('ram:SpecifiedLineTradeAgreement/ram:NetPriceProductTradePrice/ram:ChargeAmount', $node),
+            $this->firstText("{$this->cii['lineAgreement']}/ram:NetPriceProductTradePrice/ram:ChargeAmount", $node),
             $currency
         );
 
         $netAmount = $this->money(
-            $this->firstText('ram:SpecifiedLineTradeSettlement/ram:SpecifiedTradeSettlementLineMonetarySummation/ram:LineTotalAmount', $node),
+            $this->firstText("{$this->cii['lineSettlement']}/{$this->cii['lineSummation']}/ram:LineTotalAmount", $node),
             $currency
         );
 
         $taxCategoryCode = 'S';
         $taxPercent = 0.0;
-        $taxNode = $this->firstNode('ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax', $node);
+        $taxNode = $this->firstNode("{$this->cii['lineSettlement']}/ram:ApplicableTradeTax", $node);
         if ($taxNode !== null) {
             $taxCategoryCode = $this->firstText('ram:CategoryCode', $taxNode) ?? 'S';
-            $taxPercent = (float) ($this->firstText('ram:RateApplicablePercent', $taxNode) ?? '0');
+            $taxPercent = (float) ($this->firstText($this->cii['percent'], $taxNode) ?? '0');
         }
 
         $sellersItemId = $this->firstText('ram:SpecifiedTradeProduct/ram:SellerAssignedID', $node);
@@ -756,7 +813,7 @@ final class ERechnungParser {
         );
 
         // Positionsrabatte/-zuschläge (BG-27/BG-28).
-        foreach ($this->nodes('ram:SpecifiedLineTradeSettlement/ram:SpecifiedTradeAllowanceCharge', $node) as $acNode) {
+        foreach ($this->nodes("{$this->cii['lineSettlement']}/ram:SpecifiedTradeAllowanceCharge", $node) as $acNode) {
             if ($acNode instanceof DOMElement) {
                 $line->addAllowanceCharge($this->parseCiiAllowanceCharge($acNode, $currency));
             }
@@ -774,7 +831,7 @@ final class ERechnungParser {
         $reasonCode = $this->getNodeValue($node, 'ram:ReasonCode');
         $percentage = $this->getNodeValue($node, 'ram:CalculationPercent');
         $taxCategoryCode = $this->getNodeValue($node, 'ram:CategoryTradeTax/ram:CategoryCode');
-        $taxPercent = $this->getNodeValue($node, 'ram:CategoryTradeTax/ram:RateApplicablePercent');
+        $taxPercent = $this->getNodeValue($node, "ram:CategoryTradeTax/{$this->cii['percent']}");
 
         return new AllowanceCharge(
             chargeIndicator: $chargeIndicator,
@@ -798,7 +855,7 @@ final class ERechnungParser {
             $taxAmount = $this->money($this->getNodeValue($taxNode, 'ram:CalculatedAmount'), $currency);
             $taxableAmount = $this->money($this->getNodeValue($taxNode, 'ram:BasisAmount'), $currency);
             $categoryCode = $this->getNodeValue($taxNode, 'ram:CategoryCode');
-            $percent = (float) ($this->getNodeValue($taxNode, 'ram:RateApplicablePercent') ?? '0');
+            $percent = (float) ($this->getNodeValue($taxNode, $this->cii['percent']) ?? '0');
             $exemptionReason = $this->getNodeValue($taxNode, 'ram:ExemptionReason');
 
             $subtotals[] = new TaxSubtotal(
@@ -843,7 +900,28 @@ final class ERechnungParser {
         return $first !== null ? trim($first->textContent) : null;
     }
 
+    /**
+     * ZUGFeRD 1.0 kennt BASIC, COMFORT und EXTENDED; Vorabfassungen schrieben
+     * andere URNs mit demselben Stufennamen.
+     */
+    private function detectZugferd1Profile(?string $profileId): ERechnungProfile {
+        $exact = ERechnungProfile::tryFrom((string) $profileId);
+        if ($exact?->isLegacy() === true) {
+            return $exact;
+        }
+
+        $lower = strtolower((string) $profileId);
+        return match (true) {
+            str_contains($lower, 'extended') => ERechnungProfile::ZUGFERD1_EXTENDED,
+            str_contains($lower, 'comfort') => ERechnungProfile::ZUGFERD1_COMFORT,
+            default => ERechnungProfile::ZUGFERD1_BASIC,
+        };
+    }
+
     private function detectProfile(?string $profileId): ERechnungProfile {
+        if ($this->isZugferd1) {
+            return $this->detectZugferd1Profile($profileId);
+        }
         if ($profileId === null) {
             return ERechnungProfile::EN16931;
         }

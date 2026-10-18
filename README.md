@@ -6,6 +6,7 @@ PHP library for creating, parsing and validating electronic invoices (XRechnung,
 
 - **XRechnung**: German e-invoicing standard for public sector
 - **ZUGFeRD 2.x / Factur-X**: Hybrid PDF/A-3 with embedded XML
+- **ZUGFeRD 1.0** (2014, `rsm:CrossIndustryDocument`): read-only legacy dialect — not EN 16931; generators write the 2.x successor profile
 - **EN 16931**: European e-invoicing standard
 - **XBestellung / Peppol BIS Order**: UBL purchase orders ([docs](docs/XBestellung/README.md))
 - **Order-X**: CII purchase orders + hybrid PDF/A-3 (order-side Factur-X)
@@ -112,6 +113,7 @@ foreach ($document->getLines() as $line) {
 | EXTENDED | ZUGFeRD 2.x EXTENDED |
 | XRECHNUNG | XRechnung 3.0 |
 | XRECHNUNG_EXTENSION | XRechnung 3.0 Extension |
+| ZUGFERD1_BASIC / ZUGFERD1_COMFORT / ZUGFERD1_EXTENDED | ZUGFeRD 1.0 (legacy, parse only; `isLegacy()`, `successor()`) |
 
 ### Order Profiles (XBestellung / Peppol BIS Order)
 

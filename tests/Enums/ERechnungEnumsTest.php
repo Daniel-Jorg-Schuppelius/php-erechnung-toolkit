@@ -19,6 +19,17 @@ use Tests\Contracts\BaseTestCase;
  * Tests for E-Rechnung Enums.
  */
 class ERechnungEnumsTest extends BaseTestCase {
+    public function test_zugferd_1_0_profiles_are_legacy_and_map_to_their_successor(): void {
+        $this->assertTrue(ERechnungProfile::ZUGFERD1_COMFORT->isLegacy());
+        $this->assertTrue(ERechnungProfile::ZUGFERD1_COMFORT->isZugferd());
+        $this->assertFalse(ERechnungProfile::EN16931->isLegacy());
+        $this->assertSame(ERechnungProfile::BASIC, ERechnungProfile::ZUGFERD1_BASIC->successor());
+        $this->assertSame(ERechnungProfile::EN16931, ERechnungProfile::ZUGFERD1_COMFORT->successor());
+        $this->assertSame(ERechnungProfile::EXTENDED, ERechnungProfile::ZUGFERD1_EXTENDED->successor());
+        $this->assertSame(ERechnungProfile::XRECHNUNG, ERechnungProfile::XRECHNUNG->successor());
+        $this->assertSame('ZUGFeRD 1.0 COMFORT', ERechnungProfile::ZUGFERD1_COMFORT->label());
+    }
+
     // InvoiceType Tests
     public function test_invoice_type_values(): void {
         $this->assertEquals('380', InvoiceType::INVOICE->value);

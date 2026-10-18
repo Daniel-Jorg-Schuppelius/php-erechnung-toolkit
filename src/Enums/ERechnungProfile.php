@@ -39,6 +39,15 @@ enum ERechnungProfile: string {
     /** XRechnung 3.0 Extension (conformant) */
     case XRECHNUNG_EXTENSION = 'urn:cen.eu:en16931:2017#conformant#urn:xeinkauf.de:kosit:extension:xrechnung_3.0';
 
+    /** ZUGFeRD 1.0 (2014) - BASIC profile; legacy, read-only, not EN 16931 */
+    case ZUGFERD1_BASIC = 'urn:ferd:CrossIndustryDocument:invoice:1p0:basic';
+
+    /** ZUGFeRD 1.0 (2014) - COMFORT profile; legacy, read-only, not EN 16931 */
+    case ZUGFERD1_COMFORT = 'urn:ferd:CrossIndustryDocument:invoice:1p0:comfort';
+
+    /** ZUGFeRD 1.0 (2014) - EXTENDED profile; legacy, read-only, not EN 16931 */
+    case ZUGFERD1_EXTENDED = 'urn:ferd:CrossIndustryDocument:invoice:1p0:extended';
+
     /**
      * Returns the profile name.
      */
@@ -51,6 +60,30 @@ enum ERechnungProfile: string {
             self::EXTENDED => 'EXTENDED',
             self::XRECHNUNG => 'XRechnung',
             self::XRECHNUNG_EXTENSION => 'XRechnung Extension',
+            self::ZUGFERD1_BASIC => 'ZUGFeRD 1.0 BASIC',
+            self::ZUGFERD1_COMFORT => 'ZUGFeRD 1.0 COMFORT',
+            self::ZUGFERD1_EXTENDED => 'ZUGFeRD 1.0 EXTENDED',
+        };
+    }
+
+    /**
+     * ZUGFeRD 1.0 predates EN 16931 and is no e-invoice under § 14 UStG since
+     * 2025: the parser still reads it, generators write {@see successor()}.
+     */
+    public function isLegacy(): bool {
+        return in_array($this, [self::ZUGFERD1_BASIC, self::ZUGFERD1_COMFORT, self::ZUGFERD1_EXTENDED], true);
+    }
+
+    /**
+     * Current profile of the same scope: the ZUGFeRD 2.x counterpart for a
+     * legacy profile, otherwise the profile itself.
+     */
+    public function successor(): self {
+        return match ($this) {
+            self::ZUGFERD1_BASIC => self::BASIC,
+            self::ZUGFERD1_COMFORT => self::EN16931,
+            self::ZUGFERD1_EXTENDED => self::EXTENDED,
+            default => $this,
         };
     }
 
@@ -71,6 +104,9 @@ enum ERechnungProfile: string {
             self::BASIC,
             self::EN16931,
             self::EXTENDED,
+            self::ZUGFERD1_BASIC,
+            self::ZUGFERD1_COMFORT,
+            self::ZUGFERD1_EXTENDED,
         ], true);
     }
 

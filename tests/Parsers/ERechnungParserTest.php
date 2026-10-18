@@ -15,7 +15,8 @@ namespace Tests\Parsers;
 use CommonToolkit\Enums\CurrencyCode;
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
-use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType};
+use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, PaymentMeansCode};
+use ERechnungToolkit\Exceptions\UnsupportedFormatException;
 use ERechnungToolkit\Generators\ERechnungGenerator;
 use ERechnungToolkit\Parsers\ERechnungParser;
 use Tests\Contracts\{BaseTestCase, XRechnungDocuments};
@@ -448,11 +449,76 @@ class ERechnungParserTest extends BaseTestCase {
     }
 
     public function test_parse_unknown_format_throws_exception(): void {
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('Unknown E-Rechnung format');
+        $this->expectException(UnsupportedFormatException::class);
+        $this->expectExceptionMessage('Unknown E-Rechnung format (root <UnknownRoot> in namespace http://unknown.namespace)');
 
         $xml = '<?xml version="1.0"?><UnknownRoot xmlns="http://unknown.namespace"/>';
         $this->parser->parse($xml);
+    }
+
+    /** ZUGFeRD 1.0 (rsm:CrossIndustryDocument, 2014) — offizielles FeRD-Beispiel „COMFORT Einfach“. */
+    public function test_parse_zugferd_1_0_comfort_sample(): void {
+        $document = $this->parser->parseFile(__DIR__ . '/../resources/zugferd_1p0_comfort_einfach.xml');
+
+        $this->assertSame('471102', $document->getId());
+        $this->assertSame('2013-03-05', $document->getIssueDate()->format('Y-m-d'));
+        $this->assertSame(InvoiceType::INVOICE, $document->getInvoiceType());
+        $this->assertSame(ERechnungProfile::ZUGFERD1_COMFORT, $document->getProfile());
+        $this->assertTrue($document->getProfile()->isLegacy());
+        $this->assertSame(CurrencyCode::Euro, $document->getCurrency());
+        $this->assertSame('2013-04-04', $document->getDueDate()?->format('Y-m-d'));
+        $this->assertSame('2013-03-05', $document->getDeliveryDate()?->format('Y-m-d'));
+        $this->assertSame('2013-471102', $document->getRemittanceInformation());
+        $this->assertSame(PaymentMeansCode::DEBIT_TRANSFER, $document->getPaymentMeansCode());
+        $this->assertCount(2, $document->getNotes());
+
+        $seller = $document->getSeller();
+        $this->assertSame('Lieferant GmbH', $seller->getName());
+        $this->assertSame('DE123456789', $seller->getVatId());
+        $this->assertSame('201/113/40209', $seller->getTaxRegistrationId());
+        $this->assertSame('DE08 7009 0100 1234 5678 90', $seller->getIban());
+        $this->assertSame('GENODEF1M04', $seller->getBic());
+        $this->assertSame('München', $seller->getPostalAddress()?->getCity());
+        $this->assertSame('Kunden AG Mitte', $document->getBuyer()->getName());
+        $this->assertSame('Hans Muster', $document->getBuyer()->getContactName());
+
+        $lines = $document->getLines();
+        $this->assertCount(2, $lines);
+        $this->assertSame('Trennblätter A4', $lines[0]->getItemName());
+        $this->assertSame('TB100A4', $lines[0]->getSellersItemId());
+        $this->assertSame(20.0, $lines[0]->getQuantity());
+        $this->assertSame('9.90', $lines[0]->getUnitPrice()->withScale(2)->getAmount());
+        $this->assertSame('198.00', $lines[0]->getNetAmount()->getAmount());
+        $this->assertSame(19.0, $lines[0]->getTaxPercent());
+        $this->assertSame(7.0, $lines[1]->getTaxPercent());
+
+        $taxTotal = $document->getTaxTotal();
+        $this->assertNotNull($taxTotal);
+        $this->assertSame('56.87', $taxTotal->getTaxAmount()->getAmount());
+        $this->assertCount(2, $taxTotal->getSubtotals());
+        $totals = $document->getMonetaryTotal();
+        $this->assertNotNull($totals);
+        $this->assertSame('473.00', $totals->getLineExtensionAmount()->getAmount());
+        $this->assertSame('529.87', $totals->getTaxInclusiveAmount()->getAmount());
+        $this->assertSame('529.87', $totals->getPayableAmount()->getAmount());
+    }
+
+    /** Altprofile werden nur gelesen: der Generator schreibt das ZUGFeRD-2.x-Gegenstück. */
+    public function test_legacy_zugferd_1_0_profile_is_generated_as_its_successor(): void {
+        $document = ERechnungDocumentBuilder::zugferd('ZF1-2026-001', ERechnungProfile::ZUGFERD1_COMFORT)
+            ->withIssueDate(new DateTimeImmutable('2026-01-22'))
+            ->withSeller('Lieferant GmbH', 'DE123456789')
+            ->withSellerAddress('Lieferantenweg 5', '50667', 'Köln')
+            ->withBuyer('Empfänger AG')
+            ->withBuyerAddress('Empfängerstraße 10', '60311', 'Frankfurt')
+            ->addLine('Ware A', 5, 100.00, 19.0)
+            ->build();
+
+        $xml = $this->generator->generateCii($document);
+
+        $this->assertStringContainsString('<ram:ID>urn:cen.eu:en16931:2017</ram:ID>', $xml);
+        $this->assertStringNotContainsString('1p0:comfort', $xml);
+        $this->assertSame(ERechnungProfile::EN16931, $this->parser->parse($xml)->getProfile());
     }
 
     /**

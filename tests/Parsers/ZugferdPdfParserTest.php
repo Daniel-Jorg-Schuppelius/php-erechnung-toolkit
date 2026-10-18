@@ -108,6 +108,11 @@ class ZugferdPdfParserTest extends BaseTestCase {
         $this->assertNull($document);
     }
 
+    /** Fremde XML unter Rechnungs-Dateinamen: null ohne Fehlerprotokoll (Warnung statt Stacktrace). */
+    public function test_parse_xml_with_unknown_root_returns_null(): void {
+        $this->assertNull($this->parser->parseXml('<?xml version="1.0"?><Katalog xmlns="urn:example:katalog"/>'));
+    }
+
     public function test_string_entry_points_reject_empty_content(): void {
         $this->assertFalse($this->parser->isZugferdPdfContent(''));
         $this->assertNull($this->parser->parseString(''));

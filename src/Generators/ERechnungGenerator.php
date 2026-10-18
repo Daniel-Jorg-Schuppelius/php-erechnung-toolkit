@@ -69,7 +69,7 @@ final class ERechnungGenerator {
         $dom->appendChild($root);
 
         // CustomizationID (Profile)
-        $this->addUblElement($dom, $root, 'cbc:CustomizationID', $document->getProfile()->value);
+        $this->addUblElement($dom, $root, 'cbc:CustomizationID', $document->getProfile()->successor()->value);
 
         // ProfileID
         $this->addUblElement($dom, $root, 'cbc:ProfileID', self::PEPPOL_BILLING_PROCESS);
@@ -366,7 +366,8 @@ final class ERechnungGenerator {
             $context->appendChild($businessProcess);
         }
         $guideline = $dom->createElementNS(self::RAM_NS, 'ram:GuidelineSpecifiedDocumentContextParameter');
-        $this->addCiiElement($dom, $guideline, 'ram:ID', $document->getProfile()->value);
+        // Altprofile (ZUGFeRD 1.0) werden nur gelesen; geschrieben wird stets das ZUGFeRD-2.x-Gegenstück.
+        $this->addCiiElement($dom, $guideline, 'ram:ID', $document->getProfile()->successor()->value);
         $context->appendChild($guideline);
         $root->appendChild($context);
 

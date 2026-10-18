@@ -109,6 +109,9 @@ final class ZugferdPdfGenerator {
             ERechnungProfile::EN16931 => self::LEVEL_EN16931,
             ERechnungProfile::EXTENDED => self::LEVEL_EXTENDED,
             ERechnungProfile::XRECHNUNG, ERechnungProfile::XRECHNUNG_EXTENSION => self::LEVEL_EN16931,
+            ERechnungProfile::ZUGFERD1_BASIC => self::LEVEL_BASIC,
+            ERechnungProfile::ZUGFERD1_COMFORT => self::LEVEL_EN16931,
+            ERechnungProfile::ZUGFERD1_EXTENDED => self::LEVEL_EXTENDED,
         };
     }
 
