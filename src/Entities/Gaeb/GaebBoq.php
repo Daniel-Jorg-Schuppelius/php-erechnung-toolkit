@@ -32,6 +32,7 @@ final class GaebBoq {
      * @param list<GaebCatalog>      $catalogs catalogues the assignments point to
      * @param list<GaebCostType>     $costTypes main cost types (X52 calculation data)
      * @param list<GaebChangeOrder>  $changeOrders addendum heads of the document
+     * @param list<string>           $preamble contractual terms ahead of the bill of quantities (GAEB 90: T0/T1/T9), one text per block
      */
     public function __construct(
         private readonly ?string $version = null,
@@ -45,7 +46,8 @@ final class GaebBoq {
         private readonly CurrencyCode $currency = CurrencyCode::Euro,
         private readonly array $catalogs = [],
         private readonly array $changeOrders = [],
-        private readonly array $costTypes = []
+        private readonly array $costTypes = [],
+        private readonly array $preamble = []
     ) {}
 
     /** GAEB DA XML version, e.g. "3.3". */
@@ -141,6 +143,16 @@ final class GaebBoq {
         }
 
         return null;
+    }
+
+    /**
+     * Contractual terms ahead of the bill of quantities, one text per block.
+     * GAEB 90 carries them as T0/T1/T9 records in front of the opening record.
+     *
+     * @return list<string>
+     */
+    public function getPreamble(): array {
+        return $this->preamble;
     }
 
     public function getTotals(): ?GaebTotals {

@@ -37,6 +37,9 @@ use InvalidArgumentException;
  * | `21` | 3-11 / 12-14 / 24-34 / 35-38 | ordinal number, item kinds, quantity (8,3), unit |
  * | `23` | 3-11 / 13-22 / 23 / 25-36 | ordinal number, unit price (8,2), tenth of a cent, total (10,2) |
  * | `25` / `26` | 3-74 | short text, long text |
+ * | `T0` / `T1` / `T9` | 3-74 | start, text and end of the contractual terms ahead of `00` |
+ * | `20` | - | start of a note; its `25`/`26` records belong to the note, not to the item above |
+ * | `31` | 3-11 | end of the group with this ordinal number |
  * | `99` | last columns | number of items - the reader checks itself against it |
  *
  * The result is the same {@see GaebBoq} the DA XML reader produces, so
@@ -53,7 +56,7 @@ final class Gaeb90Parser {
      *
      * @var list<string>
      */
-    private const KNOWN_TYPES = ['00', '11', '12', '21', '23', '24', '25', '26', '99'];
+    private const KNOWN_TYPES = ['T0', 'T1', 'T9', '00', '11', '12', '20', '21', '23', '24', '25', '26', '31', '99'];
 
     /** Quantities carry three decimals, prices two plus a tenth of a cent. */
     private const QUANTITY_SCALE = 3;
@@ -86,17 +89,71 @@ final class Gaeb90Parser {
         $longTexts = [];
         /** @var array<string, list<array{no: ?string, quantity: ?string, unit: ?string}>> $subs */
         $subs = [];
-        // Solange eine Unterbeschreibung offen ist, gehören Kurz- und Langtext
-        // ihr - nicht mehr der Position darüber.
-        $inSubDescription = false;
+        /** @var array<string, array{reference: string, group: ?string, position: int}> $notes */
+        $notes = [];
+        /** @var array<string, int> $noteNumbers */
+        $noteNumbers = [];
+        /** @var list<list<string>> $preamble */
+        $preamble = [];
+        // Wem Kurz- und Langtext gehören: der Position, ihrer Unterbeschreibung,
+        // einem Hinweistext - oder niemandem. Früher hing jeder 25/26-Satz an der
+        // letzten Position, auch der Text eines Hinweises nach dem Gruppenende.
+        $owner = 'none';
+        $lastNote = null;
+        $openGroup = null;
 
         foreach ($records as $record) {
             $type = mb_substr($record, 0, 2);
             $body = rtrim(mb_substr($record, 2, 72));
 
+            if ($type === 'T0') {
+                $preamble[] = [];
+
+                continue;
+            }
+
+            if ($type === 'T1') {
+                if ($preamble === []) {
+                    $preamble[] = [];
+                }
+                $preamble[count($preamble) - 1][] = $body;
+
+                continue;
+            }
+
             if ($type === '11') {
                 $lastGroup = $this->reference(mb_substr($record, 2, 9), $mask);
                 $labels[$lastGroup] = null;
+                $openGroup = $lastGroup;
+                $owner = 'none';
+
+                continue;
+            }
+
+            if ($type === '31') {
+                $openGroup = $this->parentOf($this->reference(mb_substr($record, 2, 9), $mask));
+                $owner = 'none';
+
+                continue;
+            }
+
+            // Hinweistext: eigene Einheit wie `Remark` in DA XML, mit einer
+            // H-Stufe unter der offenen Gruppe statt einer Ordnungszahl.
+            if ($type === '20') {
+                $key = $openGroup ?? '';
+                $noteNumbers[$key] = ($noteNumbers[$key] ?? 0) + 1;
+                $lastNote = ($openGroup !== null ? $openGroup . '.' : '') . sprintf('H%02d', $noteNumbers[$key]);
+                $notes[$lastNote] = ['reference' => $lastNote, 'group' => $openGroup, 'position' => $counters['item']++];
+                $longTexts[$lastNote] = [];
+                $owner = 'note';
+
+                continue;
+            }
+
+            // Ein Block, den dieser Leser nicht deutet (41/42): seine Texte gehören
+            // nicht der Position davor.
+            if ($type === '41') {
+                $owner = 'none';
 
                 continue;
             }
@@ -110,7 +167,7 @@ final class Gaeb90Parser {
             if ($type === '21') {
                 $reference = $this->reference(mb_substr($record, 2, 9), $mask);
                 $lastItem = $reference;
-                $inSubDescription = false;
+                $owner = 'item';
                 $longTexts[$reference] = [];
                 $items[$reference] = [
                     'reference' => $reference,
@@ -131,23 +188,26 @@ final class Gaeb90Parser {
                     'quantity' => $this->decimal(mb_substr($record, 5, 11), self::QUANTITY_SCALE),
                     'unit' => trim(mb_substr($record, 16, 4)) ?: null,
                 ];
-                $inSubDescription = true;
+                $owner = 'sub';
 
                 continue;
             }
 
-            if ($type === '25' && $lastItem !== null) {
-                // Der Kurztext nach einer Unterbeschreibung gehört ihr; früher
-                // überschrieb er den der Position.
-                if (!$inSubDescription) {
-                    $shortTexts[$lastItem] = trim($body);
-                }
+            // Der Kurztext nach einer Unterbeschreibung gehört ihr; früher
+            // überschrieb er den der Position.
+            $textOwner = match ($owner) {
+                'item' => $lastItem,
+                'note' => $lastNote,
+                default => null,
+            };
+            if ($type === '25' && $textOwner !== null) {
+                $shortTexts[$textOwner] = trim($body);
 
                 continue;
             }
 
-            if ($type === '26' && $lastItem !== null && !$inSubDescription) {
-                $longTexts[$lastItem][] = rtrim($body);
+            if ($type === '26' && $textOwner !== null) {
+                $longTexts[$textOwner][] = rtrim($body);
             }
         }
 
@@ -194,11 +254,28 @@ final class Gaeb90Parser {
             );
         }
 
+        foreach ($notes as $reference => $note) {
+            $long = implode("\n", $longTexts[$reference] ?? []);
+            $entities[] = new GaebItem(
+                reference: $note['reference'],
+                sectionReference: $note['group'],
+                type: GaebItemType::Note,
+                shortText: $shortTexts[$reference] ?? null,
+                longText: trim($long) === '' ? null : $long,
+                position: $note['position'],
+            );
+        }
+        usort($entities, static fn (GaebItem $a, GaebItem $b): int => $a->getPosition() <=> $b->getPosition());
+
         return new GaebBoq(
             phaseCode: $phaseCode,
             sections: $sections,
             items: $entities,
             currency: $currency,
+            preamble: array_values(array_filter(
+                array_map(static fn (array $lines): string => trim(implode("\n", $lines), "\n"), $preamble),
+                static fn (string $text): bool => trim($text) !== ''
+            )),
         );
     }
 

@@ -408,7 +408,38 @@ class GaebConformanceTest extends BaseTestCase {
             if ($stated === null) {
                 continue;
             }
-            $this->assertSame($stated, $parser->parse($content)->countItems(), basename($file) . ': Positionszahl weicht ab.');
+            $positions = array_filter(
+                $parser->parse($content)->getItems(),
+                static fn ($item): bool => $item->getType() !== \ERechnungToolkit\Enums\GaebItemType::Note,
+            );
+            $this->assertSame($stated, count($positions), basename($file) . ': Positionszahl weicht ab (Hinweistexte zählen nicht).');
+        }
+    }
+
+    /**
+     * Jeder Hinweistext (20) der Prüfdateien wird ein eigener Eintrag, jeder
+     * Block vertraglicher Regelungen (T0) ein Text der Vorbemerkungen.
+     */
+    public function test_gaeb_90_reads_notes_and_contractual_terms(): void {
+        $files = $this->files('gaeb90/*.{d81,d82,d83,d84,d86}');
+        $this->skipWithout($files, 'GAEB 90');
+
+        $reader = new GaebReader;
+        $parser = new \ERechnungToolkit\Parsers\Gaeb90Parser;
+
+        foreach ($files as $file) {
+            $raw = (string) file_get_contents($file);
+            if ($reader->detect($raw, basename($file)) !== GaebFormat::Gaeb90) {
+                continue;
+            }
+            $content = $reader->decode($raw, GaebFormat::Gaeb90);
+            $boq = $parser->parse($content);
+            $notes = array_filter($boq->getItems(), static fn ($item): bool => $item->getType() === \ERechnungToolkit\Enums\GaebItemType::Note);
+            $this->assertSame(substr_count("\n" . $content, "\n20"), count($notes), basename($file) . ': Hinweistexte');
+            $this->assertNotSame([], $parser->parse($content)->getItems(), basename($file));
+            if (str_contains($content, "\nT0") || str_starts_with($content, 'T0')) {
+                $this->assertNotSame([], $boq->getPreamble(), basename($file) . ': Vorbemerkungen');
+            }
         }
     }
 }

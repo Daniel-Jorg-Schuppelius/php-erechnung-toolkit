@@ -176,4 +176,66 @@ class Gaeb90ParserTest extends BaseTestCase {
     private function pad(string $record): string {
         return $record . str_repeat(' ', max(0, 80 - mb_strlen($record)));
     }
+
+    /**
+     * Hinweistexte (20) sind eigene Einträge wie `Remark` in DA XML; das
+     * Gruppenende (31) schließt die Gruppe, ein folgender Hinweis gehört der
+     * Gruppe darüber. Bis 0.18 hingen ihre Texte am Langtext der Position
+     * davor - in den amtlichen Prüfdateien 24 bis 25 von gut 30 Hinweisen.
+     */
+    public function test_notes_keep_their_text_and_group_ends_close_the_group(): void {
+        $boq = $this->parser->parse($this->file([
+            'T0',
+            'T1     V E R T R A G L I C H E   R E G E L U N G E N',
+            'T1 Zahlung binnen 30 Tagen.',
+            'T0',
+            'T1 Gewaehrleistung nach VOB/B.',
+            'T9',
+            $this->opening('81'),
+            '20',
+            '26   Hinweis vor allen Gruppen',
+            '1111       N',
+            '12Erdarbeiten',
+            '211111  10 NNN         00000051300m2  ',
+            '25Boden loesen',
+            '26   Oberboden abtragen',
+            '311111',
+            '20',
+            '25Hinweis zur naechsten Gruppe',
+            '26   Der folgende Abschnitt ist optional.',
+            '1112       N',
+            '12Kanal',
+            '411112Ausfuehrungsbeschreibung Kanal',
+            '42  18803465202',
+            '25Fremder Kurztext',
+            '26   Fremder Langtext',
+            '211112  10 NNN         00000002000St  ',
+            '25Schacht setzen',
+            '99                                                                   00002',
+        ]));
+
+        $items = $boq->getItems();
+        $this->assertSame(['H01', '11.11.10', '11.H01', '11.12.10'], array_map(static fn ($i): string => $i->getReference(), $items));
+        $this->assertSame(\ERechnungToolkit\Enums\GaebItemType::Note, $items[0]->getType());
+        $this->assertNull($items[0]->getSectionReference());
+        $this->assertStringContainsString('Hinweis vor allen Gruppen', (string) $items[0]->getLongText());
+
+        $this->assertSame('Boden loesen', $items[1]->getShortText());
+        $this->assertSame('   Oberboden abtragen', $items[1]->getLongText(), 'Der Hinweis nach dem Gruppenende gehört nicht der Position.');
+
+        $this->assertSame('11', $items[2]->getSectionReference());
+        $this->assertSame('Hinweis zur naechsten Gruppe', $items[2]->getShortText());
+        $this->assertStringContainsString('optional', (string) $items[2]->getLongText());
+
+        $this->assertSame('Schacht setzen', $items[3]->getShortText());
+        $this->assertNull($items[3]->getLongText(), 'Texte eines nicht gedeuteten Blocks (41/42) gehören keiner Position.');
+
+        $this->assertCount(2, $boq->getPreamble());
+        $this->assertStringContainsString('Zahlung binnen 30 Tagen.', $boq->getPreamble()[0]);
+        $this->assertStringContainsString('Gewaehrleistung nach VOB/B.', $boq->getPreamble()[1]);
+
+        $this->assertSame(['41' => 1, '42' => 1], $this->parser->unknownRecordTypes($this->file([
+            $this->opening('81'), 'T0', 'T1 x', 'T9', '20', '311111', '411112x', '42  1', '99',
+        ])));
+    }
 }
