@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6323cf7b6a355acbb29e49670ec1123c",
+    "content-hash": "6b4011729ac12459f03a01f3bc7ba698",
     "packages": [
         {
             "name": "dschuppelius/php-common-toolkit",
@@ -516,16 +516,16 @@
     "packages-dev": [
         {
             "name": "daniel-jorg-schuppelius/php-pdf-toolkit",
-            "version": "v0.25.4",
+            "version": "v0.27.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit.git",
-                "reference": "948972d827b3b6790d7a7571326394af2c0db7a4"
+                "reference": "0eed633c28c2bc0c077fd06c94c9017ab13b9548"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Daniel-Jorg-Schuppelius/php-pdf-toolkit/zipball/948972d827b3b6790d7a7571326394af2c0db7a4",
-                "reference": "948972d827b3b6790d7a7571326394af2c0db7a4",
+                "url": "https://api.github.com/repos/Daniel-Jorg-Schuppelius/php-pdf-toolkit/zipball/0eed633c28c2bc0c077fd06c94c9017ab13b9548",
+                "reference": "0eed633c28c2bc0c077fd06c94c9017ab13b9548",
                 "shasum": ""
             },
             "require": {
@@ -569,7 +569,7 @@
                 "issues": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit/issues",
                 "source": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit"
             },
-            "time": "2026-10-15T19:51:23+00:00"
+            "time": "2026-10-19T08:18:12+00:00"
         },
         {
             "name": "dompdf/dompdf",
