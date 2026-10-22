@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "dcb92c7fb321e29b6d4f56ba82c700c3",
+    "content-hash": "6323cf7b6a355acbb29e49670ec1123c",
     "packages": [
         {
             "name": "dschuppelius/php-common-toolkit",
@@ -516,21 +516,21 @@
     "packages-dev": [
         {
             "name": "daniel-jorg-schuppelius/php-pdf-toolkit",
-            "version": "v0.22.1",
+            "version": "v0.25.4",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit.git",
-                "reference": "cb893c252a123df72126cea8343a3eb47879677e"
+                "reference": "948972d827b3b6790d7a7571326394af2c0db7a4"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Daniel-Jorg-Schuppelius/php-pdf-toolkit/zipball/cb893c252a123df72126cea8343a3eb47879677e",
-                "reference": "cb893c252a123df72126cea8343a3eb47879677e",
+                "url": "https://api.github.com/repos/Daniel-Jorg-Schuppelius/php-pdf-toolkit/zipball/948972d827b3b6790d7a7571326394af2c0db7a4",
+                "reference": "948972d827b3b6790d7a7571326394af2c0db7a4",
                 "shasum": ""
             },
             "require": {
                 "dompdf/dompdf": "^3.1",
-                "dschuppelius/php-common-toolkit": "^1.22 || ^2.0",
+                "dschuppelius/php-common-toolkit": "^2.9",
                 "ext-gd": "*",
                 "php": ">=8.2 <8.6",
                 "setasign/fpdf": "^1.8",
@@ -569,7 +569,7 @@
                 "issues": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit/issues",
                 "source": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit"
             },
-            "time": "2026-10-09T19:58:22+00:00"
+            "time": "2026-10-15T19:51:23+00:00"
         },
         {
             "name": "dompdf/dompdf",
