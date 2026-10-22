@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Parsers;
 
-use ERechnungToolkit\Entities\Gaeb\GaebBoq;
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebOrder};
 use ERechnungToolkit\Enums\GaebFormat;
 use ERechnungToolkit\Helper\Gaeb\GaebFormatDetector;
 use InvalidArgumentException;
@@ -56,6 +56,25 @@ final class GaebReader {
                 'File is not a recognised GAEB document' . ($fileName !== null ? ": {$fileName}" : '.')
             ),
         };
+    }
+
+    /**
+     * Reads a trade document (X93 to X97) - in practice the merchant's price
+     * offer (X94) or order confirmation (X97). The trade phases exist only in
+     * DA XML and carry an order instead of a bill of quantity, which is why
+     * {@see read()} returns no items for them.
+     *
+     * @throws InvalidArgumentException If the file is no DA XML trade document
+     */
+    public function readOrder(string $raw, ?string $fileName = null): GaebOrder {
+        $detected = $this->detector->detect($raw, $fileName);
+        if ($detected['format'] !== GaebFormat::DaXml || $detected['phase']?->isTrade() !== true) {
+            throw new InvalidArgumentException(
+                'File is not a GAEB DA XML trade document (X93 to X97)' . ($fileName !== null ? ": {$fileName}" : '.')
+            );
+        }
+
+        return $this->xml->parseOrder($raw);
     }
 
     /** Family of a file without reading it. */

@@ -13,9 +13,11 @@ declare(strict_types=1);
 namespace Tests\Parsers;
 
 use CommonToolkit\ValueObjects\Money;
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebItem, GaebParty};
 use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderInitiator, GaebChangeOrderPhase, GaebChangeOrderStatus, GaebItemType, GaebMarkupType, GaebPhase};
 use ERechnungToolkit\Generators\GaebDaXmlGenerator;
 use ERechnungToolkit\Parsers\GaebDaXmlParser;
+use ERechnungToolkit\Validators\GaebSchemaValidator;
 use InvalidArgumentException;
 use Tests\Contracts\BaseTestCase;
 
@@ -29,6 +31,13 @@ class GaebDaXmlParserTest extends BaseTestCase {
     protected function setUp(): void {
         parent::setUp();
         $this->parser = new GaebDaXmlParser;
+    }
+
+    private function fixture(string $name): string {
+        $content = file_get_contents(__DIR__ . '/../resources/gaeb/' . $name);
+        $this->assertIsString($content);
+
+        return $content;
     }
 
     private function sample(): string {
@@ -390,6 +399,58 @@ XML;
 
         $bid = $generator->generate($boq, GaebPhase::Bid, 'EUR', '2026-01-01');
         $this->assertStringNotContainsString('<COInfo>', $bid);
+    }
+
+    /**
+     * Vorbemerkungen stehen in DA XML als `AddText` im Vergabeblock vor dem LV
+     * (Fachdokumentation 3.3, 4.4.5); die Schlussbemerkung unter `GAEB` und
+     * der Hinweistext im LV gehören nicht dazu.
+     */
+    public function test_reads_preamble_from_additional_texts_of_the_award(): void {
+        $xml = $this->fixture('vorbemerkungen.X83');
+        $this->assertSame([], (new GaebSchemaValidator)->validate($xml), 'Die Beispieldatei muss schemavalide sein.');
+
+        $boq = $this->parser->parse($xml);
+
+        $this->assertSame([
+            "Vorbemerkungen\nDie Baustelle ist werktags von 7:00 bis 17:00 Uhr zugänglich.\nBaustrom und Bauwasser stellt der Auftraggeber kostenlos bereit.",
+            "Baubeschreibung\nZweigeschossiger Massivbau mit Flachdach, Lageplan siehe Skizze:",
+        ], $boq->getPreamble());
+        $this->assertSame(['note', 'standard'], array_map(static fn ($item): string => $item->getType()->value, $boq->getItems()));
+    }
+
+    public function test_reads_bid_comment_permission_of_the_project(): void {
+        $this->assertTrue($this->parser->parse($this->fixture('vorbemerkungen.X83'))->isBidCommentPermitted());
+        $this->assertNull($this->parser->parse($this->sample())->isBidCommentPermitted());
+    }
+
+    /**
+     * `BidCommPerm` gehört zum Projekt (`PrjInfo`), nicht zur Position, und
+     * wird nur geschrieben, wenn das Dokument es nennt und die Phase es kennt:
+     * Das Schema der Angebotsabgabe streicht es aus `PrjInfo`.
+     */
+    public function test_bid_comment_permission_round_trip(): void {
+        $generator = new GaebDaXmlGenerator;
+        $validator = new GaebSchemaValidator;
+
+        foreach ([[true, 'Yes'], [false, 'No']] as [$permitted, $value]) {
+            $boq = new GaebBoq(
+                projectName: 'Kita',
+                items: [new GaebItem(reference: '0010', shortText: 'Baugrube ausheben', quantity: '450.000', unit: 'm3')],
+                bidCommentPermitted: $permitted,
+            );
+
+            $request = $generator->generate($boq, GaebPhase::RequestForBid, 'EUR', '2026-10-22', client: new GaebParty('Stadt Musterstadt', 'Rathausplatz 1', '12345', 'Musterstadt'));
+            $this->assertSame([], $validator->validate($request));
+            $this->assertStringContainsString("<BidCommPerm>{$value}</BidCommPerm>", $request);
+            $this->assertSame($permitted, $this->parser->parse($request)->isBidCommentPermitted());
+
+            $bid = $generator->generate($boq, GaebPhase::Bid, 'EUR', '2026-10-22', contractor: new GaebParty('Musterbau GmbH', 'Werkstraße 5', '12345', 'Musterstadt'));
+            $this->assertSame([], $validator->validate($bid));
+            $this->assertStringNotContainsString('<BidCommPerm>', $bid);
+        }
+
+        $this->assertStringNotContainsString('<BidCommPerm>', $generator->generate($this->parser->parse($this->sample()), GaebPhase::Award, 'EUR', '2026-01-01'));
     }
 
     public function test_rejects_non_gaeb_xml(): void {

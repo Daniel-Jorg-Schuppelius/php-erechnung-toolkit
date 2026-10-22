@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Selbst erstellt nach GAEB DA XML 3.3 (Fachdokumentation Kap. 9, Schema DA97 2021-05, Lib tgOrder): Handel-Auftragsbestätigung des Händlers auf die Bestellung X96 B-2026-0815. Alle Daten erfunden. -->
+<GAEB xmlns="http://www.gaeb.de/GAEB_DA_XML/DA97/3.3">
+  <GAEBInfo>
+    <Version>3.3</Version>
+    <VersDate>2021-05</VersDate>
+    <Date>2026-10-22</Date>
+    <ProgSystem>Fixture</ProgSystem>
+  </GAEBInfo>
+  <Order>
+    <DP>97</DP>
+    <OrderInfo>
+      <OfferNo>AG-26-7731</OfferNo>
+      <PartNo>B-2026-0815</PartNo>
+      <OrderConfNo>AB-26-10544</OrderConfNo>
+      <DeliveryDate>2026-11-09</DeliveryDate>
+      <Cur>EUR</Cur>
+      <VAT>19</VAT>
+    </OrderInfo>
+    <SupplierInfo>
+      <Address>
+        <Name1>Baustoffhandel Rhein-Main</Name1>
+        <Name2>GmbH &amp; Co. KG</Name2>
+        <Street>Hafenstraße 12</Street>
+        <PCode>60327</PCode>
+        <City>Frankfurt am Main</City>
+      </Address>
+      <TaxNo>045 228 30017</TaxNo>
+      <RegNo/>
+    </SupplierInfo>
+    <CustomerInfo>
+      <Address>
+        <Name1>Musterbau GmbH</Name1>
+        <Street>Werkstraße 5</Street>
+        <PCode>12345</PCode>
+        <City>Musterstadt</City>
+      </Address>
+    </CustomerInfo>
+    <OrderItem ID="A-BET-C25-30">
+      <CatalogArtNo>BET-C25-30</CatalogArtNo>
+      <Qty>12.00</Qty>
+      <QU>m3</QU>
+      <Description>
+        <OutlineText><OutlTxt><TextOutlTxt><p><span>Transportbeton C25/30 XC2 F3</span></p></TextOutlTxt></OutlTxt></OutlineText>
+      </Description>
+      <NetPrice>98.50</NetPrice>
+      <DeliveryDate>2026-11-09</DeliveryDate>
+      <VAT>19</VAT>
+      <Weight>28800</Weight>
+      <UW>kg</UW>
+    </OrderItem>
+    <OrderItem ID="A-SCHR-6X60">
+      <EAN>4006381333931</EAN>
+      <ArtNo>SCHR-6X60</ArtNo>
+      <SupplierArtNo>W-88216</SupplierArtNo>
+      <Qty>400</Qty>
+      <QU>St</QU>
+      <Description>
+        <OutlineText><OutlTxt><TextOutlTxt><p><span>Holzbauschraube 6x60</span></p></TextOutlTxt></OutlTxt></OutlineText>
+      </Description>
+      <NetPrice>14.90</NetPrice>
+      <PriceBasis>100</PriceBasis>
+      <DeliveryDate>2026-11-16</DeliveryDate>
+      <VAT>19</VAT>
+    </OrderItem>
+  </Order>
+  <AddText>
+    <DetailAddText><p><span>Teilmenge der Schrauben folgt in KW 47.</span></p></DetailAddText>
+  </AddText>
+</GAEB>

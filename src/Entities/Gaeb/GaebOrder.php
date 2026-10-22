@@ -12,6 +12,8 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Entities\Gaeb;
 
+use ERechnungToolkit\Enums\GaebPhase;
+
 /**
  * A GAEB trade document (X93 price inquiry through X97 order confirmation).
  *
@@ -20,6 +22,10 @@ namespace ERechnungToolkit\Entities\Gaeb;
  * confirmation (X97). The document therefore has no bill of quantity but an
  * order with its own lines - and both sides identify themselves by their tax
  * and commercial register numbers, which trade law requires.
+ *
+ * Each phase names its own document number in `OrderInfo` (Lib 3.3,
+ * tgOrderInfo): `InquiryNo` (X93), `OfferNo` (X94), `PartNo` (X96) and
+ * `OrderConfNo` (X97); a reply repeats the numbers it refers to.
  */
 final class GaebOrder {
     /**
@@ -37,9 +43,15 @@ final class GaebOrder {
         private readonly ?string $orderConfirmationNo = null,
         private readonly ?string $deliveryAddressNote = null,
         private readonly ?string $vatRate = null,
+        private readonly ?string $orderNo = null,
+        private readonly ?GaebPhase $phase = null,
+        private readonly ?string $date = null,
     ) {}
 
-    /** Liefertermin des Auftrags (ISO). Ohne ihn ist eine Bestellung unbestimmt. */
+    /**
+     * Liefertermin des Auftrags (ISO). Ohne ihn ist eine Bestellung unbestimmt;
+     * ein gelesener Beleg ohne `DeliveryDate` liefert eine leere Zeichenkette.
+     */
     public function getDeliveryDate(): string {
         return $this->deliveryDate;
     }
@@ -77,6 +89,21 @@ final class GaebOrder {
 
     public function getOrderConfirmationNo(): ?string {
         return $this->orderConfirmationNo;
+    }
+
+    /** Bestellnummer (`PartNo`, vergeben in X96, in der X97 wiederholt). */
+    public function getOrderNo(): ?string {
+        return $this->orderNo;
+    }
+
+    /** Phase des gelesenen Belegs; beim Schreiben gilt die Phase des Generators. */
+    public function getPhase(): ?GaebPhase {
+        return $this->phase;
+    }
+
+    /** Belegdatum (`GAEBInfo/Date`) des gelesenen Belegs; beim Schreiben gilt `$date` des Generators. */
+    public function getDate(): ?string {
+        return $this->date;
     }
 
     public function getDeliveryAddressNote(): ?string {

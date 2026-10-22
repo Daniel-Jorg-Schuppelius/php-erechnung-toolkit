@@ -270,6 +270,20 @@ enum GaebPhase: string {
         };
     }
 
+    /**
+     * Does the project head of this phase carry the permission for bidder
+     * comments (`PrjInfo/BidCommPerm`)? The schemas of the bid (X84) and the
+     * invoice restrict `PrjInfo` without it; trade, costing and framework
+     * documents have no bill of quantity to comment on.
+     */
+    public function carriesBidCommentPermission(): bool {
+        return match ($this) {
+            self::Universal, self::Lv, self::Estimate, self::RequestForBid,
+            self::SideBid, self::Award, self::AwardConfirmation, self::CalculationData => true,
+            default => false,
+        };
+    }
+
     /** Only the bid may mark an item as not offered (`NotOffered`). */
     public function carriesNotOffered(): bool {
         return $this === self::Bid;

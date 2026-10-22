@@ -15,8 +15,8 @@ namespace ERechnungToolkit\Parsers;
 use CommonToolkit\Enums\CurrencyCode;
 use CommonToolkit\Helper\Data\{NumberHelper, XmlHelper};
 use CommonToolkit\ValueObjects\Money;
-use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalog, GaebCatalogAssignment, GaebChangeOrder, GaebCostApproach, GaebCostType, GaebItem, GaebQuantitySplit, GaebSection, GaebSubDescription, GaebTakeoffLine, GaebTextComplement, GaebTotals, GaebUpComponent};
-use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderInitiator, GaebChangeOrderPhase, GaebChangeOrderStatus, GaebItemType, GaebMarkupType};
+use ERechnungToolkit\Entities\Gaeb\{GaebBoq, GaebCatalog, GaebCatalogAssignment, GaebChangeOrder, GaebCostApproach, GaebCostType, GaebItem, GaebOrder, GaebOrderItem, GaebParty, GaebQuantitySplit, GaebSection, GaebSubDescription, GaebTakeoffLine, GaebTextComplement, GaebTotals, GaebUpComponent};
+use ERechnungToolkit\Enums\{GaebAlternativeBidStatus, GaebChangeOrderInitiator, GaebChangeOrderPhase, GaebChangeOrderStatus, GaebItemType, GaebMarkupType, GaebPhase};
 use ERechnungToolkit\Helper\Gaeb\GaebTakeoffRecord;
 use InvalidArgumentException;
 use SimpleXMLElement;
@@ -47,20 +47,9 @@ final class GaebDaXmlParser {
     private const PRICE_SCALE = 4;
 
     public function parse(string $xml): GaebBoq {
-        // Hardening against XXE and entity expansion: GAEB files have no
-        // document type definition, so a DOCTYPE is rejected outright.
-        if (preg_match('/<!DOCTYPE/i', $xml) === 1) {
-            throw new InvalidArgumentException('GAEB file contains an illegal DOCTYPE declaration.');
-        }
-
+        $root = $this->load($xml);
         $version = $this->extractVersion($xml);
         $phaseCode = $this->extractPhase($xml);
-
-        $root = XmlHelper::safeLoadString($this->stripNamespaces($xml));
-
-        if ($root === false || $root->getName() !== 'GAEB') {
-            throw new InvalidArgumentException('File is not a valid GAEB DA XML document.');
-        }
 
         $boq = $this->findDeep($root, 'BoQ');
         $currency = $this->parseCurrency($root);
@@ -88,7 +77,164 @@ final class GaebDaXmlParser {
             changeOrders: $this->parseChangeOrders($this->findDeep($root, 'AwardInfo')),
             totals: $this->parseTotals($this->findFirst($this->findFirst($boq, 'BoQInfo'), 'Totals'), $currency),
             currency: $currency,
+            preamble: $this->parsePreamble($this->findFirst($root, 'Award')),
+            bidCommentPermitted: $this->yesNo($this->findFirst($this->findFirst($root, 'PrjInfo'), 'BidCommPerm')),
         );
+    }
+
+    /**
+     * Reads a trade document (X93 to X97, root block `Order`). Written for the
+     * merchant's replies to an inquiry and an order - the price offer (X94)
+     * and the order confirmation (X97) - it reads all four trade phases, since
+     * they share one structure (Lib 3.3, tgOrder; the phase schemas differ only
+     * in `DP`).
+     *
+     * @throws InvalidArgumentException If the file is no GAEB DA XML or has no `Order` block
+     */
+    public function parseOrder(string $xml): GaebOrder {
+        $root = $this->load($xml);
+        $order = $this->findFirst($root, 'Order');
+        if ($order === null) {
+            throw new InvalidArgumentException('GAEB file is not a trade document (no Order block).');
+        }
+
+        $info = $this->findFirst($order, 'OrderInfo');
+        $supplier = $this->findFirst($order, 'SupplierInfo');
+        $customer = $this->findFirst($order, 'CustomerInfo');
+        $currency = CurrencyCode::tryFrom(strtoupper((string) $this->ownText($this->findFirst($info, 'Cur')))) ?? CurrencyCode::Euro;
+
+        $items = [];
+        foreach ($order->children() as $child) {
+            if ($child->getName() === 'OrderItem') {
+                $items[] = $this->parseOrderItem($child, $currency);
+            }
+        }
+
+        return new GaebOrder(
+            deliveryDate: $this->ownText($this->findFirst($info, 'DeliveryDate')) ?? '',
+            items: $items,
+            supplier: $this->parseParty($this->findFirst($supplier, 'Address')),
+            supplierTaxNo: $this->ownText($this->findFirst($supplier, 'TaxNo')),
+            supplierRegisterNo: $this->ownText($this->findFirst($supplier, 'RegNo')),
+            customer: $this->parseParty($this->findFirst($customer, 'Address')),
+            inquiryNo: $this->ownText($this->findFirst($info, 'InquiryNo')),
+            offerNo: $this->ownText($this->findFirst($info, 'OfferNo')),
+            orderConfirmationNo: $this->ownText($this->findFirst($info, 'OrderConfNo')),
+            vatRate: $this->cleanNumber($this->ownText($this->findFirst($info, 'VAT'))),
+            orderNo: $this->ownText($this->findFirst($info, 'PartNo')),
+            phase: GaebPhase::fromCode($this->ownText($this->findFirst($order, 'DP')) ?? $this->extractPhase($xml)),
+            date: $this->ownText($this->findFirst($this->findFirst($root, 'GAEBInfo'), 'Date')),
+        );
+    }
+
+    /**
+     * One trade line. `CatalogArtNo` sits in an optional sequence of the
+     * schema; without it the supplier's `ArtNo` identifies the line.
+     */
+    private function parseOrderItem(SimpleXMLElement $item, CurrencyCode $currency): GaebOrderItem {
+        $description = $this->findFirst($item, 'Description');
+
+        return new GaebOrderItem(
+            catalogArticleNo: $this->ownText($this->findFirst($item, 'CatalogArtNo')) ?? $this->ownText($this->findFirst($item, 'ArtNo')) ?? '',
+            description: $this->textOf($this->findDeep($description, 'OutlTxt'), false)
+                ?? $this->textOf($this->findDeep($description, 'DetailTxt'), false),
+            quantity: $this->cleanNumber($this->ownText($this->findFirst($item, 'Qty'))),
+            unit: $this->ownText($this->findFirst($item, 'QU')),
+            price: $this->money($this->ownText($this->findFirst($item, 'NetPrice')), $currency),
+            deliveryDate: $this->ownText($this->findFirst($item, 'DeliveryDate')),
+            weight: $this->cleanNumber($this->ownText($this->findFirst($item, 'Weight'))),
+            weightUnit: $this->ownText($this->findFirst($item, 'UW')),
+            supplierArticleNo: $this->ownText($this->findFirst($item, 'SupplierArtNo')),
+            customerArticleNo: $this->ownText($this->findFirst($item, 'CustomerArtNo')),
+            ean: $this->ownText($this->findFirst($item, 'EAN')),
+            vatRate: $this->cleanNumber($this->ownText($this->findFirst($item, 'VAT'))),
+            priceBasis: $this->cleanNumber($this->ownText($this->findFirst($item, 'PriceBasis'))),
+            externalId: $this->attr($item, 'ID'),
+        );
+    }
+
+    /** Postal address of a trade party (tgAddress: Name1-4, Street, PCode, City). */
+    private function parseParty(?SimpleXMLElement $address): ?GaebParty {
+        if ($address === null) {
+            return null;
+        }
+
+        $names = [];
+        foreach (['Name1', 'Name2', 'Name3', 'Name4'] as $name) {
+            $value = $this->ownText($this->findFirst($address, $name));
+            if ($value !== null) {
+                $names[] = $value;
+            }
+        }
+
+        return new GaebParty(
+            name: implode(' ', $names),
+            street: $this->ownText($this->findFirst($address, 'Street')) ?? '',
+            postalCode: $this->ownText($this->findFirst($address, 'PCode')) ?? '',
+            city: $this->ownText($this->findFirst($address, 'City')) ?? '',
+        );
+    }
+
+    /**
+     * Hardening against XXE and entity expansion: GAEB files have no document
+     * type definition, so a DOCTYPE is rejected outright.
+     */
+    private function load(string $xml): SimpleXMLElement {
+        if (preg_match('/<!DOCTYPE/i', $xml) === 1) {
+            throw new InvalidArgumentException('GAEB file contains an illegal DOCTYPE declaration.');
+        }
+
+        $root = XmlHelper::safeLoadString($this->stripNamespaces($xml));
+        if ($root === false || $root->getName() !== 'GAEB') {
+            throw new InvalidArgumentException('File is not a valid GAEB DA XML document.');
+        }
+
+        return $root;
+    }
+
+    /**
+     * Additional texts of the award block, ahead of the BoQ: preliminary
+     * remarks, building description (Fachdokumentation 3.3, 4.4.5; BVBS test
+     * file X81). One text per block, one line per paragraph. The closing remarks
+     * stand outside the award block (`GAEB/AddText`) and are not a preamble.
+     *
+     * @return list<string>
+     */
+    private function parsePreamble(?SimpleXMLElement $award): array {
+        $preamble = [];
+        foreach ($award?->children() ?? [] as $child) {
+            if ($child->getName() !== 'AddText') {
+                continue;
+            }
+
+            $lines = [];
+            foreach ($this->findFirst($child, 'DetailAddText')?->children() ?? [] as $paragraph) {
+                $text = $this->textOf($paragraph, false);
+                if ($text !== null) {
+                    $lines[] = $text;
+                }
+            }
+            // Die Überschrift steht meist schon als erster Absatz im Langtext.
+            $heading = $this->textOf($this->findFirst($child, 'OutlineAddText'), false);
+            if ($heading !== null && ($lines[0] ?? null) !== $heading) {
+                array_unshift($lines, $heading);
+            }
+
+            if ($lines !== []) {
+                $preamble[] = implode("\n", $lines);
+            }
+        }
+
+        return $preamble;
+    }
+
+    /** Yes/No element as a tri-state: absent or unreadable is null. */
+    private function yesNo(?SimpleXMLElement $node): ?bool {
+        return match (strtolower((string) $this->ownText($node))) {
+            'yes' => true,
+            'no' => false,
+            default => null,
+        };
     }
 
     /**
@@ -475,8 +621,11 @@ final class GaebDaXmlParser {
         return null;
     }
 
-    /** Collect the whole text content of a node (p/span nesting). */
-    private function textOf(?SimpleXMLElement $node): ?string {
+    /**
+     * Collect the whole text content of a node (p/span nesting). Without
+     * images, embedded base64 graphics (`image`) are left out.
+     */
+    private function textOf(?SimpleXMLElement $node, bool $withImages = true): ?string {
         if ($node === null) {
             return null;
         }
@@ -487,7 +636,10 @@ final class GaebDaXmlParser {
             $parts[] = $own;
         }
         foreach ($node->children() as $child) {
-            $childText = $this->textOf($child);
+            if (!$withImages && strtolower($child->getName()) === 'image') {
+                continue;
+            }
+            $childText = $this->textOf($child, $withImages);
             if ($childText !== null && $childText !== '') {
                 $parts[] = $childText;
             }

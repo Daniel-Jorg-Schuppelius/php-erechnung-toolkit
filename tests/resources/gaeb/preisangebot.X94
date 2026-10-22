@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Selbst erstellt nach GAEB DA XML 3.3 (Fachdokumentation Kap. 9, Schema DA94 2021-05, Lib tgOrder): Handel-Preisangebot des Händlers auf die Preisanfrage X93 ANF-2026-0042. Alle Daten erfunden. -->
+<GAEB xmlns="http://www.gaeb.de/GAEB_DA_XML/DA94/3.3">
+  <GAEBInfo>
+    <Version>3.3</Version>
+    <VersDate>2021-05</VersDate>
+    <Date>2026-10-20</Date>
+    <Time>14:05:00</Time>
+    <ProgSystem>Fixture</ProgSystem>
+  </GAEBInfo>
+  <PrjInfo>
+    <NamePrj>Neubau Kita Sonnenblume</NamePrj>
+    <Cur>EUR</Cur>
+  </PrjInfo>
+  <Order>
+    <DP>94</DP>
+    <OrderInfo>
+      <InquiryNo>ANF-2026-0042</InquiryNo>
+      <OfferNo>AG-26-7731</OfferNo>
+      <DeliveryDate>2026-11-09</DeliveryDate>
+      <Cur>EUR</Cur>
+      <OfferFixedPriceDate>2026-11-30</OfferFixedPriceDate>
+      <VAT>19</VAT>
+    </OrderInfo>
+    <SupplierInfo>
+      <IDNo>L-4711</IDNo>
+      <Address>
+        <Name1>Baustoffhandel Rhein-Main</Name1>
+        <Name2>GmbH &amp; Co. KG</Name2>
+        <Street>Hafenstraße 12</Street>
+        <PCode>60327</PCode>
+        <City>Frankfurt am Main</City>
+      </Address>
+      <TaxNo>045 228 30017</TaxNo>
+      <RegNo>HRA 51123</RegNo>
+    </SupplierInfo>
+    <CustomerInfo>
+      <IDNo>K-20931</IDNo>
+      <Address>
+        <Name1>Musterbau GmbH</Name1>
+        <Street>Werkstraße 5</Street>
+        <PCode>12345</PCode>
+        <City>Musterstadt</City>
+      </Address>
+    </CustomerInfo>
+    <OrderItem ID="A-BET-C25-30">
+      <CustomerArtNo>MB-1001</CustomerArtNo>
+      <CatalogArtNo>BET-C25-30</CatalogArtNo>
+      <Qty>12.00</Qty>
+      <QU>m3</QU>
+      <Description>
+        <OutlineText><OutlTxt><TextOutlTxt><p><span>Transportbeton C25/30 XC2 F3</span></p></TextOutlTxt></OutlTxt></OutlineText>
+      </Description>
+      <OfferPrice>112.00</OfferPrice>
+      <NetPrice>98.50</NetPrice>
+      <VAT>19</VAT>
+      <Weight>28800</Weight>
+      <UW>kg</UW>
+    </OrderItem>
+    <OrderItem ID="A-SCHR-6X60">
+      <EAN>4006381333931</EAN>
+      <CatalogArtNo>SCHR-6X60</CatalogArtNo>
+      <Qty>500</Qty>
+      <QU>St</QU>
+      <Description>
+        <CompleteText>
+          <DetailTxt><Text><p><span>Holzbauschraube 6 x 60 mm, Senkkopf, verzinkt, Paket zu 100 Stück</span></p></Text></DetailTxt>
+          <OutlineText><OutlTxt><TextOutlTxt><p><span>Holzbauschraube 6x60</span></p></TextOutlTxt></OutlTxt></OutlineText>
+        </CompleteText>
+      </Description>
+      <NetPrice>14.90</NetPrice>
+      <PriceBasis>100</PriceBasis>
+      <DeliveryDate>2026-11-02</DeliveryDate>
+      <VAT>19</VAT>
+    </OrderItem>
+  </Order>
+</GAEB>

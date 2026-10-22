@@ -68,7 +68,7 @@ Phasen und beantwortet die vier Fragen, die den Unterschied ausmachen:
 | `X89` / `X89B` | Nachtrag / Nachtragsangebot        |   ✓   |   ✓    |   ✓    |
 | `X83Z`/`X84Z`  | Zeitvertrag (Aufforderung/Angebot) |   ✓   |   ✓    |  (✓)   |
 | `X50`–`X52`    | Kostenermittlung nach DIN 276      |   ✓   |   ✓    |   ✓    |
-| `X93`–`X97`    | Handel (Preisanfrage bis Rechnung) |   ✓   |   ✓    |   ✓    |
+| `X93`–`X97`    | Handel (Preisanfrage bis Auftragsbestätigung) |   ✓   |   ✓    |   ✓    |
 
 `carriesTexts()`, `carriesQuantities()`, `carriesPrices()` und
 `isBillOfQuantity()` steuern damit den Preflight: Ein X84 **ohne** Preise ist
@@ -209,6 +209,33 @@ des Elements wäre der Fehler.
 Die Preisanfrage fragt *ohne* Preis; erst das Angebot nennt einen
 (`carriesPrices()`).
 
+**Rücklauf lesen:** `GaebReader::readOrder()` (bzw.
+`GaebDaXmlParser::parseOrder()`) liest ein Handelsdokument in `GaebOrder`.
+Gedacht ist es für die Antworten des Händlers (Fachdokumentation 3.3, Kap. 9):
+das **Preisangebot X94** auf die Preisanfrage X93 und die
+**Auftragsbestätigung X97** auf die Bestellung X96. X94 ist also *kein* Rücklauf
+zur Bestellung, sondern zur Anfrage; Lieferschein (X98) und Händlerrechnung
+(X99) sind in 3.3 noch Beta und werden nicht gelesen. Alle vier Phasen teilen
+sich den Aufbau (`tgOrder`; die Schemata DA94 und DA97 unterscheiden sich nur
+im `DP`), deshalb liest derselbe Weg auch X93 und X96. `read()` liefert für ein
+Handelsdokument nur Kopf und Phase, keine Zeilen.
+
+Jede Phase vergibt ihre eigene Nummer in `OrderInfo`, eine Antwort wiederholt
+die, auf die sie sich bezieht:
+
+| Element | Nummer | vergeben in | Getter |
+| ------- | ------ | ----------- | ------ |
+| `InquiryNo` | Anfragenummer | X93 | `getInquiryNo()` |
+| `OfferNo` | Angebotsnummer | X94 | `getOfferNo()` |
+| `PartNo` | Bestellnummer | X96 | `getOrderNo()` |
+| `OrderConfNo` | Auftragsbestätigungsnummer | X97 | `getOrderConfirmationNo()` |
+
+Zwei Dinge an der Zeile verfälschen sonst still den Abgleich: `PriceBasis`
+(`getPriceBasis()`) sagt, für wie viele Einheiten der Preis gilt — Schrauben
+kosten 14,90 je **100** Stück —, und `OrderItem/@ID` (`getExternalId()`) kommt in
+der Antwort mit der Kennung der Bestellung zurück. `CatalogArtNo` steht im
+Schema in einer optionalen Sequenz; fehlt sie, kennzeichnet `ArtNo` die Zeile.
+
 Zwei Fallen stecken in den Sequenzen selbst: **Nummer und Status eines
 Nachtrags sind eine Pflichtgruppe** (`<xs:sequence minOccurs="0">` mit beiden
 Kindern erforderlich) — eine Nachtragsnummer ohne Status ist nicht darstellbar,
@@ -223,6 +250,23 @@ Preisphase muss außerdem ihre Summe nennen.
 >
 > **Codes enden nicht immer auf Ziffern:** `fromCode()` schneidet nur ein
 > führendes `X`/`D`/`P` ab — `89B`, `86ZR` und `84Z` behalten ihre Buchstaben.
+
+### Vorbemerkungen und Bieterkommentar
+
+Vorbemerkungen und Baubeschreibung stehen in DA XML als **zusätzliche Texte**
+(`AddText`) im Vergabeblock vor dem LV (Fachdokumentation 3.3, 4.4.5; so auch in
+den BVBS-Prüfdateien). `GaebBoq::getPreamble()` liefert sie wie bei GAEB 90
+(T0/T1/T9) als einen Text je Block, einen Absatz je Zeile; eingebettete Grafiken
+bleiben draußen. Nicht dazu gehören die Schlussbemerkungen (`AddText` direkt
+unter `GAEB`) und die Hinweistexte (`Remark`) im LV, die als Einträge vom Typ
+`Note` gelesen werden.
+
+Ob der Bieter kommentieren darf, steht **nicht an der Position**, sondern im
+Projektkopf: `PrjInfo/BidCommPerm` (Lib 3.3, `tgPrjInfo`; in allen Prüf- und
+Musterdateien dort). `GaebBoq::isBidCommentPermitted()` liefert `true`/`false`
+oder `null`, wenn die Datei nichts sagt. Geschrieben wird es nur, wenn das
+Dokument es nennt und die Phase es kennt (`carriesBidCommentPermission()`):
+Das Schema der Angebotsabgabe (X84) und der Rechnung streicht es aus `PrjInfo`.
 
 ## Architektur
 
@@ -506,6 +550,8 @@ nichts validieren.
 - [x] GAEB 90: Unterbeschreibungen (Zeilenart 24) inkl. Textzuordnung
 - [x] Rechnung X89/X89B schreiben (`Invoice`: Kopf, Ersteller, Empfänger, 20 Anteilsarten)
 - [x] Handel X93–X97 schreiben (`Order`: Artikelnummern, Liefertermine, Gewichte)
+- [x] Handel lesen, vor allem den Rücklauf X94/X97 (`GaebReader::readOrder()`), Bestellnummer `PartNo`, Preiseinheit
+- [x] Vorbemerkungen aus DA XML (`AddText` im Vergabeblock) und Freischaltung des Bieterkommentars (`BidCommPerm`)
 - [x] Export-Guard: GAEB-widrige Nachtragsnummern werden benannt statt geschrieben
 - [ ] GAEB-90-Feinwerk: Zeilenart 24, Zuschläge, Lose, T0/T1/T9
 - [ ] `MarkupType`-Semantiken, `COPhase`/`COInfo` auf Kopfebene

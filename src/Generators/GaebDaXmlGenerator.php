@@ -131,6 +131,9 @@ final class GaebDaXmlGenerator {
         if ($phase !== GaebPhase::QuantitySurvey && !$phase->isFrameworkAgreement()) {
             $prj = $dom->createElement('PrjInfo');
             $prj->appendChild($this->textElement($dom, 'NamePrj', $name));
+            if ($boq->isBidCommentPermitted() !== null && $phase->carriesBidCommentPermission()) {
+                $prj->appendChild($dom->createElement('BidCommPerm', $boq->isBidCommentPermitted() ? 'Yes' : 'No'));
+            }
             $root->appendChild($prj);
         }
 
@@ -998,7 +1001,7 @@ final class GaebDaXmlGenerator {
         $el->appendChild($dom->createElement('DP', $phase->value));
 
         $info = $dom->createElement('OrderInfo');
-        foreach (['InquiryNo' => $order?->getInquiryNo(), 'OfferNo' => $order?->getOfferNo(), 'OrderConfNo' => $order?->getOrderConfirmationNo()] as $name => $value) {
+        foreach (['InquiryNo' => $order?->getInquiryNo(), 'OfferNo' => $order?->getOfferNo(), 'PartNo' => $order?->getOrderNo(), 'OrderConfNo' => $order?->getOrderConfirmationNo()] as $name => $value) {
             if ($value !== null) {
                 $info->appendChild($this->textElement($dom, $name, mb_substr($value, 0, 15)));
             }
@@ -1042,7 +1045,7 @@ final class GaebDaXmlGenerator {
         $el = $dom->createElement('OrderItem');
         // Auch die Bestellzeile trägt eine Pflicht-ID (xs:ID); sie wird aus der
         // Artikelnummer abgeleitet, damit wiederholte Exporte gleich bleiben.
-        $el->setAttribute('ID', $this->identifier('A', $item->getCatalogArticleNo()));
+        $el->setAttribute('ID', $item->getExternalId() ?? $this->identifier('A', $item->getCatalogArticleNo()));
 
         if ($item->getEan() !== null) {
             $el->appendChild($dom->createElement('EAN', $item->getEan()));
@@ -1068,6 +1071,9 @@ final class GaebDaXmlGenerator {
         // Die Preisanfrage fragt ohne Preis; erst das Angebot nennt einen.
         if ($phase->carriesPrices() && $item->getPrice() !== null) {
             $el->appendChild($dom->createElement('NetPrice', $this->amount($item->getPrice())));
+            if ($item->getPriceBasis() !== null) {
+                $el->appendChild($dom->createElement('PriceBasis', $this->num($item->getPriceBasis())));
+            }
         }
         $el->appendChild($dom->createElement('DeliveryDate', $item->getDeliveryDate() ?? $order?->getDeliveryDate() ?? '2026-01-01'));
         if ($item->getVatRate() !== null) {

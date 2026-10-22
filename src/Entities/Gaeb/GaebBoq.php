@@ -32,7 +32,8 @@ final class GaebBoq {
      * @param list<GaebCatalog>      $catalogs catalogues the assignments point to
      * @param list<GaebCostType>     $costTypes main cost types (X52 calculation data)
      * @param list<GaebChangeOrder>  $changeOrders addendum heads of the document
-     * @param list<string>           $preamble contractual terms ahead of the bill of quantities (GAEB 90: T0/T1/T9), one text per block
+     * @param list<string>           $preamble contractual terms ahead of the bill of quantities (GAEB 90: T0/T1/T9, DA XML: AddText im Vergabeblock), one text per block
+     * @param bool|null              $bidCommentPermitted `PrjInfo/BidCommPerm`; null = the file does not say
      */
     public function __construct(
         private readonly ?string $version = null,
@@ -47,7 +48,8 @@ final class GaebBoq {
         private readonly array $catalogs = [],
         private readonly array $changeOrders = [],
         private readonly array $costTypes = [],
-        private readonly array $preamble = []
+        private readonly array $preamble = [],
+        private readonly ?bool $bidCommentPermitted = null
     ) {}
 
     /** GAEB DA XML version, e.g. "3.3". */
@@ -147,12 +149,24 @@ final class GaebBoq {
 
     /**
      * Contractual terms ahead of the bill of quantities, one text per block.
-     * GAEB 90 carries them as T0/T1/T9 records in front of the opening record.
+     * GAEB 90 carries them as T0/T1/T9 records in front of the opening record,
+     * DA XML as additional texts (`AddText`) in the award block before the BoQ
+     * (Fachdokumentation 3.3, 4.4.5: Vorbemerkungen, Baubeschreibung).
      *
      * @return list<string>
      */
     public function getPreamble(): array {
         return $this->preamble;
+    }
+
+    /**
+     * Has the client opened the bill of quantities for bidder comments
+     * (`PrjInfo/BidCommPerm`)? The permission belongs to the project, not to an
+     * item, and is set by the client in the request for bid. Null means the
+     * file does not say.
+     */
+    public function isBidCommentPermitted(): ?bool {
+        return $this->bidCommentPermitted;
     }
 
     public function getTotals(): ?GaebTotals {

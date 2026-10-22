@@ -36,6 +36,8 @@ final class GaebOrderItem {
         private readonly ?string $customerArticleNo = null,
         private readonly ?string $ean = null,
         private readonly ?string $vatRate = null,
+        private readonly ?string $priceBasis = null,
+        private readonly ?string $externalId = null,
     ) {}
 
     /** Artikelnummer aus dem Katalog des Lieferanten - die Pflichtkennung. */
@@ -86,5 +88,18 @@ final class GaebOrderItem {
 
     public function getVatRate(): ?string {
         return $this->vatRate;
+    }
+
+    /**
+     * Preiseinheit (`PriceBasis`): der Preis gilt für so viele Mengeneinheiten,
+     * z. B. 100 bei Schrauben. Null heißt je Einheit.
+     */
+    public function getPriceBasis(): ?string {
+        return $this->priceBasis;
+    }
+
+    /** Kennung der Zeile (`OrderItem/@ID`); eine Antwort wiederholt die der Bestellung. */
+    public function getExternalId(): ?string {
+        return $this->externalId;
     }
 }

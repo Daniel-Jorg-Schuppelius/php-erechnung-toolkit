@@ -442,4 +442,33 @@ class GaebConformanceTest extends BaseTestCase {
             }
         }
     }
+
+    /**
+     * In DA XML stehen die Vorbemerkungen als `AddText` im Vergabeblock: je
+     * Block ein Text, eingebettete Grafiken bleiben draußen. Die Freischaltung
+     * des Bieterkommentars steht in `PrjInfo` (alle Prüf- und Musterdateien).
+     */
+    public function test_da_xml_reads_preamble_and_bid_comment_permission(): void {
+        $files = array_merge(
+            $this->files('pruefdateien/extracted/*.{x81,x83,x86,X81,X83,X86}'),
+            $this->files('musterdateien/*.{X81,X83,X86}'),
+        );
+        $this->skipWithout($files, 'DA-XML-Vorbemerkungen');
+
+        $reader = new GaebReader;
+        foreach ($files as $file) {
+            $xml = (string) file_get_contents($file);
+            $boq = $reader->read($xml, basename($file));
+
+            $blocks = preg_match('#<Award>(.*?)<BoQ[ >]#s', $xml, $award) === 1 ? substr_count($award[1], '<AddText>') : 0;
+            $this->assertCount($blocks, $boq->getPreamble(), basename($file) . ': Vorbemerkungsblöcke');
+            foreach ($boq->getPreamble() as $text) {
+                $this->assertStringNotContainsString('/9j/', $text, basename($file) . ': Grafik im Text');
+            }
+
+            if (preg_match('#<BidCommPerm>(Yes|No)</BidCommPerm>#', $xml, $permission) === 1) {
+                $this->assertSame($permission[1] === 'Yes', $boq->isBidCommentPermitted(), basename($file) . ': BidCommPerm');
+            }
+        }
+    }
 }
