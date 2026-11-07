@@ -162,8 +162,9 @@ HTML;
      * die Rechnung danach unlesbar.
      */
     public function test_real_pdf_supporting_document_keeps_the_invoice_readable(): void {
-        if (!$this->generator->isAvailable() || !class_exists('PDFToolkit\\Helper\\PDFXrefHelper')) {
-            $this->markTestSkipped('php-pdf-toolkit >= 0.31 is not installed');
+        if (!$this->generator->isAvailable() || !class_exists('PDFToolkit\\Helper\\PDFXrefHelper')
+            || !(new ZugferdPdfParser)->isAvailable() || trim((string) shell_exec('command -v pdfinfo')) === '') {
+            $this->markTestSkipped('php-pdf-toolkit >= 0.31 mit pdfinfo und pdfdetach ist nicht verfügbar');
         }
 
         $attachment = $this->tcpdfDocument();
