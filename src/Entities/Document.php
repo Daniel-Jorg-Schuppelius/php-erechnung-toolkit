@@ -49,6 +49,13 @@ final class Document extends DocumentAbstract {
     private ?string $taxExemptionReasonCode = null;
     private ?string $remittanceInformation = null;
 
+    /** @var SupportingDocument[] */
+    private array $supportingDocuments = [];
+
+    private ?Period $invoicingPeriod = null;
+    private ?string $invoicedObjectIdentifier = null;
+    private ?string $invoicedObjectScheme = null;
+
     public function __construct(
         private string $id,
         private DateTimeImmutable $issueDate,
@@ -247,6 +254,50 @@ final class Document extends DocumentAbstract {
     public function setRemittanceInformation(string $reference): self {
         $this->remittanceInformation = $reference;
         return $this;
+    }
+
+    /**
+     * Adds an additional supporting document (BG-24).
+     */
+    public function addSupportingDocument(SupportingDocument $document): self {
+        $this->supportingDocuments[] = $document;
+        return $this;
+    }
+
+    /**
+     * @return SupportingDocument[]
+     */
+    public function getSupportingDocuments(): array {
+        return $this->supportingDocuments;
+    }
+
+    /**
+     * Sets the invoicing period (BG-14); null removes it.
+     */
+    public function setInvoicingPeriod(?Period $period): self {
+        $this->invoicingPeriod = $period;
+        return $this;
+    }
+
+    public function getInvoicingPeriod(): ?Period {
+        return $this->invoicingPeriod;
+    }
+
+    /**
+     * Sets the invoiced object identifier (BT-18) with optional scheme (BT-18-1, UNTDID 1153).
+     */
+    public function setInvoicedObject(string $identifier, ?string $scheme = null): self {
+        $this->invoicedObjectIdentifier = $identifier;
+        $this->invoicedObjectScheme = $scheme;
+        return $this;
+    }
+
+    public function getInvoicedObjectIdentifier(): ?string {
+        return $this->invoicedObjectIdentifier;
+    }
+
+    public function getInvoicedObjectScheme(): ?string {
+        return $this->invoicedObjectScheme;
     }
 
     /**

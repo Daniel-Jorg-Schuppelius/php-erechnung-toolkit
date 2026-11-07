@@ -16,8 +16,8 @@ use CommonToolkit\Enums\CurrencyCode;
 use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
-use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine};
-use ERechnungToolkit\Enums\{InvoiceType, PaymentMeansCode, TaxCategory, UnitCode};
+use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Period, SupportingDocument};
+use ERechnungToolkit\Enums\{AttachmentMimeCode, InvoiceType, PaymentMeansCode, TaxCategory, UnitCode};
 
 /**
  * Testdokumente für die Konformitätsprüfungen beider Syntaxen: eine XRechnung,
@@ -80,6 +80,79 @@ trait XRechnungDocuments {
         }
 
         return $builder->build();
+    }
+
+    /**
+     * XRechnung mit Leistungsnachweis: Rechnungszeitraum (BG-14), Objektkennung
+     * (BT-18), zwei eingebettete Unterlagen und ein Link (BG-24), Positionen mit
+     * Zeitraum (BG-26) und Ticketnummer (BT-128) sowie ein Rabatt, damit die
+     * CII-Folge Steuer → Zeitraum → Rabatt geprüft wird.
+     */
+    private function supportingDocumentXRechnung(bool $creditNote = false): Document {
+        $euro = CurrencyCode::Euro;
+        $remote = new InvoiceLine(
+            id: '1',
+            quantity: 2.5,
+            unitCode: UnitCode::HOUR,
+            netAmount: Money::of('250.00', $euro),
+            itemName: 'Fernwartung',
+            unitPrice: Money::of('100.00', $euro),
+            taxCategory: TaxCategory::STANDARD,
+            taxPercent: 19.0,
+            itemDescription: 'Fernwartung Server, drei Einsätze',
+            note: '3 Einsätze, 02.09.–09.09.2026',
+            period: Period::between(new DateTimeImmutable('2026-09-02'), new DateTimeImmutable('2026-09-09')),
+            objectIdentifier: 'TICKET-4711',
+        );
+        $travel = new InvoiceLine(
+            id: '2',
+            quantity: 1.0,
+            unitCode: UnitCode::LUMP_SUM,
+            netAmount: Money::of('50.00', $euro),
+            itemName: 'Anfahrt',
+            unitPrice: Money::of('50.00', $euro),
+            taxCategory: TaxCategory::STANDARD,
+            taxPercent: 19.0,
+            period: Period::day(new DateTimeImmutable('2026-09-02')),
+        );
+
+        $builder = ERechnungDocumentBuilder::xrechnung($creditNote ? 'GS-2026-0008' : 'XR-2026-0818', $this->leitwegId)
+            ->withIssueDate(new DateTimeImmutable('2026-10-01'))
+            ->withDueDate(new DateTimeImmutable('2026-10-31'))
+            ->withSeller('Verkäufer GmbH', 'DE123456789')
+            ->withSellerAddress('Verkäuferstraße 1', '10115', 'Berlin')
+            ->withSellerEndpoint('rechnung@verkaeufer.de', 'EM')
+            ->withSellerContact('Max Müller', '+49 30 123456', 'kontakt@verkaeufer.de')
+            ->withSellerBankAccount('DE89370400440532013000', 'COBADEFFXXX')
+            ->withBuyer('Öffentliche Verwaltung', 'DE987654321')
+            ->withBuyerAddress('Amtsweg 1', '80333', 'München')
+            ->withBuyerLeitwegId($this->leitwegId)
+            ->withPaymentMeans(PaymentMeansCode::SEPA_CREDIT_TRANSFER)
+            ->withPaymentTermsNet30()
+            ->withInvoicingPeriod(new DateTimeImmutable('2026-09-01'), new DateTimeImmutable('2026-09-30'))
+            ->withInvoicedObject('SLA-2026-01', 'AAJ')
+            ->addNote('Leistungsnachweis siehe Anlage LN-1.')
+            ->addSupportingDocument(SupportingDocument::embedded('LN-1', $this->samplePdf(), AttachmentMimeCode::PDF, 'nachweis-1.pdf', 'Leistungsnachweis September 2026'))
+            ->addSupportingDocument(SupportingDocument::embedded('LN-2', $this->sampleCsv(), AttachmentMimeCode::CSV, 'nachweis-2.csv', 'Stundenaufstellung'))
+            ->addSupportingDocument(SupportingDocument::external('LN-3', 'https://rechnung.example.org/anlage/123', 'Große Anlage'))
+            ->addInvoiceLine($remote)
+            ->addInvoiceLine($travel)
+            ->addDiscount(10.00, 'Treuerabatt');
+
+        if ($creditNote) {
+            $builder->withInvoiceType(InvoiceType::CREDIT_NOTE)
+                ->withPrecedingInvoiceReference('XR-2026-0815');
+        }
+
+        return $builder->build();
+    }
+
+    private function samplePdf(): string {
+        return "%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n";
+    }
+
+    private function sampleCsv(): string {
+        return "datum;person;minuten\n2026-09-02;MM;90\n2026-09-09;MM;60\n";
     }
 
     /**

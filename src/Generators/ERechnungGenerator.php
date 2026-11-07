@@ -13,9 +13,12 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Generators;
 
 use CommonToolkit\ValueObjects\Money;
+use DateTimeImmutable;
 use DOMDocument;
 use DOMElement;
-use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party};
+use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party, Period};
+use ERechnungToolkit\Enums\ERechnungProfile;
+use ERechnungToolkit\Helper\SupportingDocumentXml;
 use ERRORToolkit\Traits\ErrorLog;
 use RuntimeException;
 
@@ -108,6 +111,12 @@ final class ERechnungGenerator {
             $this->addUblElement($dom, $root, 'cbc:BuyerReference', $document->getBuyerReference());
         }
 
+        // InvoicePeriod (BG-14)
+        $invoicingPeriod = $document->getInvoicingPeriod();
+        if ($invoicingPeriod !== null && !$invoicingPeriod->isEmpty()) {
+            $root->appendChild($this->createUblPeriod($dom, $invoicingPeriod));
+        }
+
         // OrderReference
         if ($document->getOrderReference() !== null) {
             $orderRef = $dom->createElementNS(self::CAC_NS, 'cac:OrderReference');
@@ -129,6 +138,19 @@ final class ERechnungGenerator {
             $contractRef = $dom->createElementNS(self::CAC_NS, 'cac:ContractDocumentReference');
             $this->addUblElement($dom, $contractRef, 'cbc:ID', $document->getContractReference());
             $root->appendChild($contractRef);
+        }
+
+        // AdditionalDocumentReference: Objektkennung (BT-18) und Unterlagen (BG-24)
+        if ($document->getInvoicedObjectIdentifier() !== null) {
+            $root->appendChild($this->createUblObjectReference(
+                $dom,
+                'cac:AdditionalDocumentReference',
+                $document->getInvoicedObjectIdentifier(),
+                $document->getInvoicedObjectScheme()
+            ));
+        }
+        foreach ($document->getSupportingDocuments() as $supportingDocument) {
+            SupportingDocumentXml::ubl($root, $supportingDocument);
         }
 
         // ProjectReference
@@ -395,7 +417,7 @@ final class ERechnungGenerator {
 
         // Invoice Lines
         foreach ($document->getLines() as $line) {
-            $lineItem = $this->createCiiLineItem($dom, $line, $document->getCurrency()->value);
+            $lineItem = $this->createCiiLineItem($dom, $line, $document->getCurrency()->value, $document->getProfile());
             $transaction->appendChild($lineItem);
         }
 
@@ -426,6 +448,23 @@ final class ERechnungGenerator {
             $contractRef = $dom->createElementNS(self::RAM_NS, 'ram:ContractReferencedDocument');
             $this->addCiiElement($dom, $contractRef, 'ram:IssuerAssignedID', $document->getContractReference());
             $agreement->appendChild($contractRef);
+        }
+
+        // AdditionalReferencedDocument: Unterlagen (BG-24) und Objektkennung (BT-18).
+        // MINIMUM bis BASIC kennen das Element nicht; DocumentRulesValidator meldet das.
+        if ($document->getProfile()->supportsReferencedDocuments()) {
+            foreach ($document->getSupportingDocuments() as $supportingDocument) {
+                SupportingDocumentXml::cii($agreement, $supportingDocument);
+            }
+            if ($document->getInvoicedObjectIdentifier() !== null) {
+                $agreement->appendChild($this->createCiiObjectReference(
+                    $dom,
+                    $document->getInvoicedObjectIdentifier(),
+                    $document->getInvoicedObjectScheme()
+                ));
+            }
+        } elseif ($document->getSupportingDocuments() !== [] || $document->getInvoicedObjectIdentifier() !== null) {
+            $this->logWarning('Profil ohne AdditionalReferencedDocument: Unterlagen und Objektkennung entfallen', ['profile' => $document->getProfile()->name]);
         }
 
         $transaction->appendChild($agreement);
@@ -501,13 +540,18 @@ final class ERechnungGenerator {
             }
         }
 
+        // Rechnungszeitraum (BG-14) — XSD-Sequenz: nach ApplicableTradeTax, vor den Rabatten.
+        $invoicingPeriod = $document->getInvoicingPeriod();
+        if ($invoicingPeriod !== null && !$invoicingPeriod->isEmpty() && $document->getProfile()->supportsInvoicingPeriod()) {
+            $settlement->appendChild($this->createCiiPeriod($dom, $invoicingPeriod));
+        }
+
         // Dokument-Rabatte/-Zuschläge (BG-20/BG-21) — nach ApplicableTradeTax,
         // vor SpecifiedTradePaymentTerms (XSD-Sequenz TradeSettlementType).
         foreach ($document->getAllowanceCharges() as $ac) {
             $settlement->appendChild($this->createCiiAllowanceCharge($dom, $ac, withTax: true));
         }
 
-        // BillingPeriod (if available)
         // PaymentTerms
         if ($document->getPaymentTerms() !== null) {
             $paymentTerms = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTradePaymentTerms');
@@ -752,6 +796,21 @@ final class ERechnungGenerator {
             $this->addUblElement($dom, $lineElem, 'cbc:AccountingCost', $line->getAccountingCost());
         }
 
+        // InvoicePeriod (BG-26)
+        if ($line->getPeriod() !== null && !$line->getPeriod()->isEmpty()) {
+            $lineElem->appendChild($this->createUblPeriod($dom, $line->getPeriod()));
+        }
+
+        // DocumentReference: Objektkennung der Position (BT-128)
+        if ($line->getObjectIdentifier() !== null) {
+            $lineElem->appendChild($this->createUblObjectReference(
+                $dom,
+                'cac:DocumentReference',
+                $line->getObjectIdentifier(),
+                $line->getObjectIdentifierScheme()
+            ));
+        }
+
         // OrderLineReference
         // ItemAllowanceCharge
         // Positionsrabatte/-zuschläge ohne cac:TaxCategory (UBL-CR-558) — wie im CII-Zweig.
@@ -812,7 +871,7 @@ final class ERechnungGenerator {
         return $lineElem;
     }
 
-    private function createCiiLineItem(DOMDocument $dom, InvoiceLine $line, string $currency): DOMElement {
+    private function createCiiLineItem(DOMDocument $dom, InvoiceLine $line, string $currency, ERechnungProfile $profile): DOMElement {
         $lineItem = $dom->createElementNS(self::RAM_NS, 'ram:IncludedSupplyChainTradeLineItem');
 
         // AssociatedDocumentLineDocument
@@ -877,6 +936,11 @@ final class ERechnungGenerator {
         $this->addCiiElement($dom, $tax, 'ram:RateApplicablePercent', $this->formatAmount($line->getTaxPercent()));
         $settlement->appendChild($tax);
 
+        // Positionszeitraum (BG-26)
+        if ($line->getPeriod() !== null && !$line->getPeriod()->isEmpty() && $profile->supportsLinePeriod()) {
+            $settlement->appendChild($this->createCiiPeriod($dom, $line->getPeriod()));
+        }
+
         // Positionsrabatte/-zuschläge (BG-27/BG-28) — ohne CategoryTradeTax
         // (EN-16931-Mapping kennt die Steuerkategorie nur auf Dokumentebene).
         foreach ($line->getAllowanceCharges() as $ac) {
@@ -887,6 +951,11 @@ final class ERechnungGenerator {
         $summation = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTradeSettlementLineMonetarySummation');
         $this->addCiiElement($dom, $summation, 'ram:LineTotalAmount', $this->formatAmount($line->getNetAmount()));
         $settlement->appendChild($summation);
+
+        // Objektkennung der Position (BT-128) — in CII unter der Positionsabrechnung.
+        if ($line->getObjectIdentifier() !== null && $profile->supportsReferencedDocuments()) {
+            $settlement->appendChild($this->createCiiObjectReference($dom, $line->getObjectIdentifier(), $line->getObjectIdentifierScheme()));
+        }
 
         $lineItem->appendChild($settlement);
 
@@ -930,6 +999,61 @@ final class ERechnungGenerator {
         }
 
         return $acElem;
+    }
+
+    private function createUblPeriod(DOMDocument $dom, Period $period): DOMElement {
+        $element = $dom->createElementNS(self::CAC_NS, 'cac:InvoicePeriod');
+        if ($period->getStart() !== null) {
+            $this->addUblElement($dom, $element, 'cbc:StartDate', $period->getStart()->format('Y-m-d'));
+        }
+        if ($period->getEnd() !== null) {
+            $this->addUblElement($dom, $element, 'cbc:EndDate', $period->getEnd()->format('Y-m-d'));
+        }
+
+        return $element;
+    }
+
+    private function createUblObjectReference(DOMDocument $dom, string $tag, string $identifier, ?string $scheme): DOMElement {
+        $element = $dom->createElementNS(self::CAC_NS, $tag);
+        $id = $this->addUblElement($dom, $element, 'cbc:ID', $identifier);
+        if ($scheme !== null && $scheme !== '') {
+            $id->setAttribute('schemeID', $scheme);
+        }
+        $this->addUblElement($dom, $element, 'cbc:DocumentTypeCode', SupportingDocumentXml::DOCUMENT_TYPE_INVOICED_OBJECT);
+
+        return $element;
+    }
+
+    private function createCiiPeriod(DOMDocument $dom, Period $period): DOMElement {
+        $element = $dom->createElementNS(self::RAM_NS, 'ram:BillingSpecifiedPeriod');
+        if ($period->getStart() !== null) {
+            $this->addCiiDate($dom, $element, 'ram:StartDateTime', $period->getStart());
+        }
+        if ($period->getEnd() !== null) {
+            $this->addCiiDate($dom, $element, 'ram:EndDateTime', $period->getEnd());
+        }
+
+        return $element;
+    }
+
+    private function createCiiObjectReference(DOMDocument $dom, string $identifier, ?string $scheme): DOMElement {
+        $element = $dom->createElementNS(self::RAM_NS, 'ram:AdditionalReferencedDocument');
+        $this->addCiiElement($dom, $element, 'ram:IssuerAssignedID', $identifier);
+        $this->addCiiElement($dom, $element, 'ram:TypeCode', SupportingDocumentXml::DOCUMENT_TYPE_INVOICED_OBJECT);
+        if ($scheme !== null && $scheme !== '') {
+            $this->addCiiElement($dom, $element, 'ram:ReferenceTypeCode', $scheme);
+        }
+
+        return $element;
+    }
+
+    private function addCiiDate(DOMDocument $dom, DOMElement $parent, string $name, DateTimeImmutable $date): void {
+        $element = $dom->createElementNS(self::RAM_NS, $name);
+        $dateTimeString = $dom->createElementNS(self::UDT_NS, 'udt:DateTimeString');
+        $dateTimeString->setAttribute('format', '102');
+        $dateTimeString->textContent = $date->format('Ymd');
+        $element->appendChild($dateTimeString);
+        $parent->appendChild($element);
     }
 
     /**

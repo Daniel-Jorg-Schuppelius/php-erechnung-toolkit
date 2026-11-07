@@ -51,14 +51,14 @@
     }
   },
   "require-dev": {
-    "daniel-jorg-schuppelius/php-pdf-toolkit": "^0.8.0 || ^0.22.0 || ^0.25.0 || ^0.27.0",
+    "daniel-jorg-schuppelius/php-pdf-toolkit": "^0.8.0 || ^0.22.0 || ^0.25.0 || ^0.27.0 || ^0.31.0",
     "laravel/pint": "^1.27",
     "nyholm/psr7": "^1.8",
     "phpstan/phpstan": "^2.1",
     "phpunit/phpunit": "^11.3"
   },
   "suggest": {
-    "daniel-jorg-schuppelius/php-pdf-toolkit": "Required for ZUGFeRD/Factur-X PDF generation with embedded XML invoices",
+    "daniel-jorg-schuppelius/php-pdf-toolkit": "Required for ZUGFeRD/Factur-X PDF generation with embedded XML invoices; 0.31 or newer also embeds the supporting documents as PDF/A-3 files",
     "ext-openssl": "Required to read certificate details of Peppol SMP endpoints (SmpEndpoint::getCertificateInfo())",
     "psr/http-client-implementation": "A PSR-18 client (e.g. guzzlehttp/guzzle) for Peppol SMP lookups via Psr18SmpClient"
   },

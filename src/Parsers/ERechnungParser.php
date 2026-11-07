@@ -19,7 +19,7 @@ use DOMDocument;
 use DOMElement;
 use DOMNode;
 use DOMXPath;
-use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, MonetaryTotal, Party, PaymentTerms, PostalAddress, TaxSubtotal, TaxTotal};
+use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, MonetaryTotal, Party, PaymentTerms, Period, PostalAddress, SupportingDocument, TaxSubtotal, TaxTotal};
 use ERechnungToolkit\Enums\{AllowanceChargeReasonCode, ERechnungProfile, InvoiceType, PaymentMeansCode, TaxCategory, UnitCode};
 use ERechnungToolkit\Exceptions\{MalformedXmlException, UnsupportedFormatException};
 use ERRORToolkit\Traits\ErrorLog;
@@ -92,6 +92,29 @@ final class ERechnungParser {
     private bool $isCii = false;
     private bool $isZugferd1 = false;
     private bool $isCreditNote = false;
+
+    /** @var list<string> */
+    private array $notices = [];
+
+    private int $embeddedAttachments = 0;
+
+    /**
+     * @param int|null $maxAttachmentBytes Obergrenze je eingebettetem Anhang (dekodiert); größere bleiben ohne Inhalt
+     * @param int|null $maxAttachments Obergrenze der eingebetteten Anhänge; weitere bleiben ohne Inhalt
+     */
+    public function __construct(
+        private readonly ?int $maxAttachmentBytes = null,
+        private readonly ?int $maxAttachments = null,
+    ) {}
+
+    /**
+     * Hinweise des letzten parse()-Laufs, etwa Anhänge über den Grenzen.
+     *
+     * @return list<string>
+     */
+    public function getNotices(): array {
+        return $this->notices;
+    }
     /** @var array<string, string> */
     private array $cii = self::CII_PATHS;
 
@@ -99,6 +122,8 @@ final class ERechnungParser {
      * Parses an E-Rechnung document from XML string.
      */
     public function parse(string $xml): Document {
+        $this->notices = [];
+        $this->embeddedAttachments = 0;
         $this->dom = new DOMDocument;
 
         // Suppress warnings and handle errors properly
@@ -280,6 +305,8 @@ final class ERechnungParser {
             $document->addNote($noteNode->textContent);
         }
 
+        $this->readUblReferences($document, $root);
+
         // Allowances/Charges
         foreach ($this->nodes("{$root}/cac:AllowanceCharge") as $acNode) {
             if (!$acNode instanceof DOMElement) {
@@ -394,6 +421,11 @@ final class ERechnungParser {
         // Notes
         foreach ($this->nodes("{$header}/ram:IncludedNote/ram:Content") as $noteNode) {
             $document->addNote($noteNode->textContent);
+        }
+
+        // ZUGFeRD 1.0 führt Referenzen und Zeiträume anders; gelesen wird nur CII D16B.
+        if (!$this->isZugferd1) {
+            $this->readCiiReferences($document, $agreement, $settlement);
         }
 
         // Dokument-Rabatte/-Zuschläge (BG-20/BG-21).
@@ -613,7 +645,10 @@ final class ERechnungParser {
             sellersItemId: $sellersItemId,
             buyersItemId: $buyersItemId,
             note: $this->getNodeValue($node, 'cbc:Note'),
-            accountingCost: $this->getNodeValue($node, 'cbc:AccountingCost')
+            accountingCost: $this->getNodeValue($node, 'cbc:AccountingCost'),
+            period: $this->ublPeriod($this->firstNode('cac:InvoicePeriod', $node)),
+            objectIdentifier: $this->getNodeValue($node, "cac:DocumentReference[cbc:DocumentTypeCode='130']/cbc:ID"),
+            objectIdentifierScheme: $this->attribute($this->firstNode("cac:DocumentReference[cbc:DocumentTypeCode='130']/cbc:ID", $node), 'schemeID')
         );
 
         // Positionsrabatte/-zuschläge (BG-27/BG-28).
@@ -809,7 +844,10 @@ final class ERechnungParser {
             taxCategory: TaxCategory::tryFrom($taxCategoryCode) ?? TaxCategory::STANDARD,
             taxPercent: $taxPercent,
             itemDescription: $itemDescription,
-            sellersItemId: $sellersItemId
+            sellersItemId: $sellersItemId,
+            period: $this->isZugferd1 ? null : $this->ciiPeriod($this->firstNode("{$this->cii['lineSettlement']}/ram:BillingSpecifiedPeriod", $node)),
+            objectIdentifier: $this->isZugferd1 ? null : $this->getNodeValue($node, "{$this->cii['lineSettlement']}/ram:AdditionalReferencedDocument[ram:TypeCode='130']/ram:IssuerAssignedID"),
+            objectIdentifierScheme: $this->isZugferd1 ? null : $this->getNodeValue($node, "{$this->cii['lineSettlement']}/ram:AdditionalReferencedDocument[ram:TypeCode='130']/ram:ReferenceTypeCode")
         );
 
         // Positionsrabatte/-zuschläge (BG-27/BG-28).
@@ -891,6 +929,152 @@ final class ERechnungParser {
     /**
      * XML-Betrag -> Money, ohne float-Zwischenschritt (fehlendes Element = 0).
      */
+    /**
+     * Rechnungszeitraum (BG-14), Objektkennung (BT-18) und Unterlagen (BG-24) aus UBL.
+     * Eine AdditionalDocumentReference mit DocumentTypeCode 130 ist die Objektkennung,
+     * jede andere eine Unterlage.
+     */
+    private function readUblReferences(Document $document, string $root): void {
+        $period = $this->ublPeriod($this->firstNode("{$root}/cac:InvoicePeriod"));
+        if ($period !== null) {
+            $document->setInvoicingPeriod($period);
+        }
+
+        foreach ($this->nodes("{$root}/cac:AdditionalDocumentReference") as $node) {
+            if (!$node instanceof DOMElement) {
+                continue;
+            }
+            $reference = $this->getNodeValue($node, 'cbc:ID') ?? '';
+            if ($this->getNodeValue($node, 'cbc:DocumentTypeCode') === '130') {
+                if ($reference !== '' && $document->getInvoicedObjectIdentifier() === null) {
+                    $document->setInvoicedObject($reference, $this->attribute($this->firstNode('cbc:ID', $node), 'schemeID'));
+                }
+                continue;
+            }
+
+            $binary = $this->firstNode('cac:Attachment/cbc:EmbeddedDocumentBinaryObject', $node);
+            $document->addSupportingDocument($this->supportingDocument(
+                $reference,
+                $this->getNodeValue($node, 'cbc:DocumentDescription'),
+                $this->getNodeValue($node, 'cac:Attachment/cac:ExternalReference/cbc:URI'),
+                $binary instanceof DOMElement ? $binary : null
+            ));
+        }
+    }
+
+    /**
+     * Gegenstück zu {@see readUblReferences()} für CII: TypeCode 916 ist eine
+     * Unterlage, 130 die Objektkennung; andere Codes (etwa 50, Vergabe) bleiben außen vor.
+     */
+    private function readCiiReferences(Document $document, string $agreement, string $settlement): void {
+        $period = $this->ciiPeriod($this->firstNode("{$settlement}/ram:BillingSpecifiedPeriod"));
+        if ($period !== null) {
+            $document->setInvoicingPeriod($period);
+        }
+
+        foreach ($this->nodes("{$agreement}/ram:AdditionalReferencedDocument") as $node) {
+            if (!$node instanceof DOMElement) {
+                continue;
+            }
+            $reference = $this->getNodeValue($node, 'ram:IssuerAssignedID') ?? '';
+            $typeCode = $this->getNodeValue($node, 'ram:TypeCode');
+
+            if ($typeCode === '130') {
+                if ($reference !== '' && $document->getInvoicedObjectIdentifier() === null) {
+                    $document->setInvoicedObject($reference, $this->getNodeValue($node, 'ram:ReferenceTypeCode'));
+                }
+                continue;
+            }
+            if ($typeCode !== '916') {
+                continue;
+            }
+
+            $binary = $this->firstNode('ram:AttachmentBinaryObject', $node);
+            $document->addSupportingDocument($this->supportingDocument(
+                $reference,
+                $this->getNodeValue($node, 'ram:Name'),
+                $this->getNodeValue($node, 'ram:URIID'),
+                $binary instanceof DOMElement ? $binary : null
+            ));
+        }
+    }
+
+    /**
+     * Baut eine Unterlage; ein Anhang über den Grenzen oder mit ungültigem
+     * Base64 bleibt ohne Inhalt und hinterlässt einen Hinweis.
+     */
+    private function supportingDocument(string $reference, ?string $description, ?string $uri, ?DOMElement $binary): SupportingDocument {
+        if ($binary === null) {
+            return new SupportingDocument($reference, $description, $uri);
+        }
+
+        $mime = $binary->getAttribute('mimeCode') ?: null;
+        $filename = $binary->getAttribute('filename') ?: null;
+        $label = $reference !== '' ? $reference : ($filename ?? '?');
+
+        if ($this->maxAttachments !== null && $this->embeddedAttachments >= $this->maxAttachments) {
+            $this->notices[] = "Anhang {$label}: mehr als {$this->maxAttachments} eingebettete Anhänge, Inhalt nicht übernommen.";
+            return new SupportingDocument($reference, $description, $uri, null, $mime, $filename);
+        }
+        $this->embeddedAttachments++;
+
+        $encoded = (string) preg_replace('/\s+/', '', $binary->textContent);
+        if ($this->maxAttachmentBytes !== null && intdiv(strlen($encoded) * 3, 4) > $this->maxAttachmentBytes) {
+            $this->notices[] = "Anhang {$label}: größer als {$this->maxAttachmentBytes} Bytes, Inhalt nicht übernommen.";
+            return new SupportingDocument($reference, $description, $uri, null, $mime, $filename);
+        }
+
+        $content = base64_decode($encoded, true);
+        if ($content === false) {
+            $this->notices[] = "Anhang {$label}: kein gültiges Base64, Inhalt nicht übernommen.";
+            return new SupportingDocument($reference, $description, $uri, null, $mime, $filename);
+        }
+
+        return new SupportingDocument($reference, $description, $uri, $content, $mime, $filename);
+    }
+
+    private function ublPeriod(?DOMNode $node): ?Period {
+        if (!$node instanceof DOMElement) {
+            return null;
+        }
+
+        return new Period(
+            $this->ublDateValue($this->getNodeValue($node, 'cbc:StartDate')),
+            $this->ublDateValue($this->getNodeValue($node, 'cbc:EndDate'))
+        );
+    }
+
+    private function ciiPeriod(?DOMNode $node): ?Period {
+        if (!$node instanceof DOMElement) {
+            return null;
+        }
+
+        return new Period(
+            $this->parseCiiDate($this->getNodeValue($node, 'ram:StartDateTime/udt:DateTimeString')),
+            $this->parseCiiDate($this->getNodeValue($node, 'ram:EndDateTime/udt:DateTimeString'))
+        );
+    }
+
+    private function ublDateValue(?string $value): ?DateTimeImmutable {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        try {
+            return new DateTimeImmutable($value);
+        } catch (Exception) {
+            return null;
+        }
+    }
+
+    private function attribute(?DOMNode $node, string $name): ?string {
+        if (!$node instanceof DOMElement) {
+            return null;
+        }
+        $value = trim($node->getAttribute($name));
+
+        return $value !== '' ? $value : null;
+    }
+
     private function money(?string $value, CurrencyCode $currency): Money {
         return Money::ofNullable($value, $currency) ?? Money::zero($currency);
     }
@@ -922,55 +1106,7 @@ final class ERechnungParser {
         if ($this->isZugferd1) {
             return $this->detectZugferd1Profile($profileId);
         }
-        if ($profileId === null) {
-            return ERechnungProfile::EN16931;
-        }
 
-        // Check for exact match first
-        foreach (ERechnungProfile::cases() as $profile) {
-            if ($profileId === $profile->value) {
-                return $profile;
-            }
-        }
-
-        // Check for specific profiles (most specific first to avoid partial matches)
-        // XRechnung profiles (contains "xrechnung" keyword)
-        if (str_contains(strtolower($profileId), 'xrechnung')) {
-            if (str_contains(strtolower($profileId), 'extension') || str_contains($profileId, 'conformant')) {
-                return ERechnungProfile::XRECHNUNG_EXTENSION;
-            }
-            return ERechnungProfile::XRECHNUNG;
-        }
-
-        // Extended profile
-        if (str_contains(strtolower($profileId), 'extended')) {
-            return ERechnungProfile::EXTENDED;
-        }
-
-        // Basic profiles
-        if (str_contains(strtolower($profileId), 'basic')) {
-            return str_contains(strtolower($profileId), 'wl')
-                ? ERechnungProfile::BASIC_WL
-                : ERechnungProfile::BASIC;
-        }
-
-        // Minimum profile
-        if (str_contains(strtolower($profileId), 'minimum')) {
-            return ERechnungProfile::MINIMUM;
-        }
-
-        // Check for the KOSIT authority in the URN (XRechnung indicator).
-        // Older XRechnung 2.x files carry "xoev-de:kosit", XRechnung 3.0 files
-        // carry "xeinkauf.de:kosit" - both must be recognised when parsing.
-        if (str_contains($profileId, 'xoev-de:kosit') || str_contains($profileId, 'xeinkauf.de:kosit')) {
-            return ERechnungProfile::XRECHNUNG;
-        }
-
-        // Fallback for EN16931 (also matches partial URN)
-        if (str_contains($profileId, 'en16931') || str_contains($profileId, 'EN16931')) {
-            return ERechnungProfile::EN16931;
-        }
-
-        return ERechnungProfile::EN16931;
+        return ERechnungProfile::fromSpecificationIdentifier($profileId);
     }
 }

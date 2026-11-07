@@ -17,7 +17,7 @@ use DOMElement;
 use DOMNode;
 use DOMXPath;
 use ERechnungToolkit\Contracts\ValidatorInterface;
-use ERechnungToolkit\Enums\ValidationSeverity;
+use ERechnungToolkit\Enums\{AttachmentMimeCode, ERechnungProfile, ValidationSeverity};
 use ERechnungToolkit\Generators\UblSerializer;
 use ERechnungToolkit\Validators\{ValidationMessage, ValidationResult};
 use ERRORToolkit\Traits\ErrorLog;
@@ -107,7 +107,8 @@ final class BisValidator implements ValidatorInterface {
             $this->checkHeader($xpath, $root, $isCreditNote),
             $this->checkParties($xpath, $root),
             $this->checkTotals($xpath, $root, $lineElement),
-            $this->checkPeppolRules($xpath, $root)
+            $this->checkPeppolRules($xpath, $root),
+            $this->checkAttachments($xpath, $root)
         );
 
         if ($this->schematronValidator !== null && $this->schematronValidator->isAvailable()) {
@@ -376,6 +377,59 @@ final class BisValidator implements ValidatorInterface {
                 sprintf('Es muss genau eine Steueraufstellung mit cac:TaxSubtotal geben, gefunden: %d.', $taxTotals->length),
                 'cac:TaxTotal'
             );
+        }
+
+        return $messages;
+    }
+
+    /**
+     * Eingebettete Unterlagen (BG-24): MIME-Code aus der Peppol-Liste
+     * (PEPPOL-EN16931-CL001) und bei Verkäufer und Käufer in Deutschland
+     * eindeutige Dateinamen ohne Rücksicht auf die Schreibweise (DE-R-022).
+     *
+     * @return list<ValidationMessage>
+     */
+    private function checkAttachments(DOMXPath $xpath, DOMElement $root): array {
+        $binaries = $xpath->query('cac:AdditionalDocumentReference/cac:Attachment/cbc:EmbeddedDocumentBinaryObject', $root);
+        if ($binaries === false || $binaries->length === 0) {
+            return [];
+        }
+
+        $allowed = array_map(
+            static fn (AttachmentMimeCode $code): string => $code->value,
+            AttachmentMimeCode::allowedFor(ERechnungProfile::EN16931)
+        );
+        $german = $this->text($xpath, 'cac:AccountingSupplierParty/cac:Party/cac:PostalAddress/cac:Country/cbc:IdentificationCode', $root) === 'DE'
+            && $this->text($xpath, 'cac:AccountingCustomerParty/cac:Party/cac:PostalAddress/cac:Country/cbc:IdentificationCode', $root) === 'DE';
+
+        $messages = [];
+        $filenames = [];
+        foreach ($binaries as $binary) {
+            if (!$binary instanceof DOMElement) {
+                continue;
+            }
+
+            $mime = $binary->getAttribute('mimeCode');
+            if (!in_array($mime, $allowed, true)) {
+                $messages[] = new ValidationMessage(
+                    ValidationSeverity::ERROR,
+                    'PEPPOL-EN16931-CL001',
+                    sprintf('MIME-Code "%s" eines Anhangs ist nicht zulässig; erlaubt: %s.', $mime, implode(', ', $allowed)),
+                    'cbc:EmbeddedDocumentBinaryObject/@mimeCode'
+                );
+            }
+
+            $filename = $binary->getAttribute('filename');
+            $key = mb_strtolower($filename);
+            if ($german && $filename !== '' && isset($filenames[$key])) {
+                $messages[] = new ValidationMessage(
+                    ValidationSeverity::ERROR,
+                    'DE-R-022',
+                    sprintf('Der Dateiname "%s" eines Anhangs ist nicht eindeutig (Groß-/Kleinschreibung zählt nicht).', $filename),
+                    'cbc:EmbeddedDocumentBinaryObject/@filename'
+                );
+            }
+            $filenames[$key] = true;
         }
 
         return $messages;

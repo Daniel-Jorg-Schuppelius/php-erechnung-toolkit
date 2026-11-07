@@ -49,6 +49,52 @@ enum ERechnungProfile: string {
     case ZUGFERD1_EXTENDED = 'urn:ferd:CrossIndustryDocument:invoice:1p0:extended';
 
     /**
+     * Profile from the specification identifier (BT-24: CII
+     * GuidelineSpecifiedDocumentContextParameter/ID, UBL CustomizationID).
+     *
+     * Exact values first, then the keywords of known URNs, e.g. the Factur-X
+     * form urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:basic. A
+     * missing or unknown identifier counts as EN 16931. ZUGFeRD 1.0 names are
+     * read by the parser itself.
+     */
+    public static function fromSpecificationIdentifier(?string $identifier): self {
+        if ($identifier === null) {
+            return self::EN16931;
+        }
+
+        $exact = self::tryFrom($identifier);
+        if ($exact !== null) {
+            return $exact;
+        }
+
+        $lower = strtolower($identifier);
+
+        // Most specific first to avoid partial matches.
+        if (str_contains($lower, 'xrechnung')) {
+            return str_contains($lower, 'extension') || str_contains($identifier, 'conformant')
+                ? self::XRECHNUNG_EXTENSION
+                : self::XRECHNUNG;
+        }
+        if (str_contains($lower, 'extended')) {
+            return self::EXTENDED;
+        }
+        if (str_contains($lower, 'basic')) {
+            return str_contains($lower, 'wl') ? self::BASIC_WL : self::BASIC;
+        }
+        if (str_contains($lower, 'minimum')) {
+            return self::MINIMUM;
+        }
+
+        // KoSIT authority without the keyword: XRechnung 2.x carries
+        // "xoev-de:kosit", XRechnung 3.0 "xeinkauf.de:kosit".
+        if (str_contains($identifier, 'xoev-de:kosit') || str_contains($identifier, 'xeinkauf.de:kosit')) {
+            return self::XRECHNUNG;
+        }
+
+        return self::EN16931;
+    }
+
+    /**
      * Returns the profile name.
      */
     public function label(): string {
@@ -85,6 +131,29 @@ enum ERechnungProfile: string {
             self::ZUGFERD1_EXTENDED => self::EXTENDED,
             default => $this,
         };
+    }
+
+    /**
+     * Whether the profile carries AdditionalReferencedDocument: supporting
+     * documents (BG-24), invoiced object (BT-18) and line object (BT-128).
+     * The Factur-X schemas of MINIMUM, BASIC WL and BASIC lack the element.
+     */
+    public function supportsReferencedDocuments(): bool {
+        return in_array($this->successor(), [self::EN16931, self::EXTENDED, self::XRECHNUNG, self::XRECHNUNG_EXTENSION], true);
+    }
+
+    /**
+     * Whether the profile carries the invoicing period (BG-14); from BASIC WL on.
+     */
+    public function supportsInvoicingPeriod(): bool {
+        return $this->successor() !== self::MINIMUM;
+    }
+
+    /**
+     * Whether the profile carries invoice lines and their period (BG-26); from BASIC on.
+     */
+    public function supportsLinePeriod(): bool {
+        return !in_array($this->successor(), [self::MINIMUM, self::BASIC_WL], true);
     }
 
     /**

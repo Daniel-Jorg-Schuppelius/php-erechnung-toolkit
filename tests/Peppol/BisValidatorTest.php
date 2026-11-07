@@ -14,7 +14,8 @@ namespace Tests\Peppol;
 
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
-use ERechnungToolkit\Enums\ERechnungProfile;
+use ERechnungToolkit\Entities\SupportingDocument;
+use ERechnungToolkit\Enums\{AttachmentMimeCode, ERechnungProfile};
 use ERechnungToolkit\Peppol\{BisValidator, ParticipantId, Sbdh};
 use ERechnungToolkit\Validators\{ValidationMessage, ValidationResult};
 use Tests\Contracts\BaseTestCase;
@@ -194,5 +195,42 @@ class BisValidatorTest extends BaseTestCase {
         );
 
         $this->assertContains('TK-PEPPOL-SBDH-DOCID', $this->codes($this->validator->validateEnvelope($envelope)));
+    }
+
+    public function test_attachment_with_disallowed_mime_code_is_reported(): void {
+        $invoice = str_replace('mimeCode="text/csv"', 'mimeCode="application/msword"', $this->invoiceWithAttachments('nachweis-1.pdf', 'nachweis-2.csv'));
+
+        $this->assertContains('PEPPOL-EN16931-CL001', $this->codes($this->validator->validate($invoice)));
+    }
+
+    public function test_attachment_filenames_are_unique_between_german_parties(): void {
+        $codes = $this->codes($this->validator->validate($this->invoiceWithAttachments('Nachweis.pdf', 'nachweis.PDF')));
+
+        $this->assertContains('DE-R-022', $codes);
+        $this->assertNotContains('PEPPOL-EN16931-CL001', $codes);
+    }
+
+    public function test_attachment_filename_rule_only_applies_within_germany(): void {
+        $invoice = $this->invoiceWithAttachments('Nachweis.pdf', 'nachweis.PDF', buyerCountry: 'AT');
+
+        $this->assertNotContains('DE-R-022', $this->codes($this->validator->validate($invoice)));
+    }
+
+    private function invoiceWithAttachments(string $first, string $second, string $buyerCountry = 'DE'): string {
+        return ERechnungDocumentBuilder::create('INV-2026-002')
+            ->withIssueDate(new DateTimeImmutable('2026-10-01'))
+            ->withProfile(ERechnungProfile::XRECHNUNG)
+            ->withSeller('Muster GmbH', 'DE123456789')
+            ->withSellerAddress('Musterstraße 1', '12345', 'Berlin')
+            ->withSellerEndpoint('DE123456789', '9930')
+            ->withBuyer('Kunde AG', 'DE987654321')
+            ->withBuyerAddress('Kundenweg 2', '54321', 'München', $buyerCountry)
+            ->withBuyerEndpoint('04011000-12345-67', '0204')
+            ->withBuyerReference('04011000-12345-67')
+            ->addSupportingDocument(SupportingDocument::embedded('LN-1', "%PDF-1.4\n", AttachmentMimeCode::PDF, $first))
+            ->addSupportingDocument(SupportingDocument::embedded('LN-2', "a;b\n", AttachmentMimeCode::CSV, $second))
+            ->addLine('Beratungsleistung', 10, 150.00, 19.0)
+            ->build()
+            ->toUblXml();
     }
 }

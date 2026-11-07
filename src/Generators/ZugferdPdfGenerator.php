@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Generators;
 
-use ERechnungToolkit\Entities\Document;
+use ERechnungToolkit\Entities\{Document, SupportingDocument};
 use ERechnungToolkit\Enums\ERechnungProfile;
 use ERRORToolkit\Traits\ErrorLog;
 
@@ -90,18 +90,51 @@ final class ZugferdPdfGenerator {
         // Writer mit korrekten Optionen aufrufen
         // Dompdf wird bevorzugt (bessere CSS-Unterstützung), FPDI importiert das PDF
         $writer = $this->getWriter();
-        return $writer->createPdfString($content, array_merge($options, [
+        $writerOptions = [
             'facturx' => true,
-            'zugferd_profile' => $this->mapProfileToLevel($invoice),
-        ]));
+            'zugferd_profile' => self::conformanceLevel($invoice->getProfile()),
+        ];
+        // Eingebettete Unterlagen (BG-24) liegen schon in der CII-XML; zusätzlich als
+        // PDF/A-3-Dateien („Supplement“) für Leser, die nur das PDF öffnen.
+        if (($options['embed_supporting_documents'] ?? true) && $invoice->getProfile()->supportsReferencedDocuments()) {
+            $writerOptions['attachments'] = self::supportingAttachments($invoice->getSupportingDocuments());
+        }
+        unset($options['embed_supporting_documents']);
+
+        return $writer->createPdfString($content, array_merge($options, $writerOptions));
     }
 
     /**
-     * Mapped E-Rechnung Profile zu ZUGFeRD Level.
+     * Eingebettete Unterlagen als Option 'attachments' des ZugferdWriter
+     * (Beziehung Supplement); Links und leere Anhänge entfallen.
+     *
+     * @param iterable<SupportingDocument> $documents
+     * @return list<array{name: string, content: string, mime: string, description: string, relationship: string}>
      */
-    private function mapProfileToLevel(Document $invoice): string {
-        $profile = $invoice->getProfile();
+    public static function supportingAttachments(iterable $documents): array {
+        $attachments = [];
+        foreach ($documents as $document) {
+            $content = $document->getContent();
+            $filename = $document->getFilename();
+            if ($content === null || $content === '' || $filename === null || $filename === '') {
+                continue;
+            }
+            $attachments[] = [
+                'name' => $filename,
+                'content' => $content,
+                'mime' => $document->getMimeCode() ?? 'application/octet-stream',
+                'description' => $document->getDescription() ?? $document->getReference(),
+                'relationship' => 'Supplement',
+            ];
+        }
 
+        return $attachments;
+    }
+
+    /**
+     * ZUGFeRD-Konformitätsstufe (XMP fx:ConformanceLevel) eines Profils.
+     */
+    public static function conformanceLevel(ERechnungProfile $profile): string {
         return match ($profile) {
             ERechnungProfile::MINIMUM => self::LEVEL_MINIMUM,
             ERechnungProfile::BASIC_WL => self::LEVEL_BASIC_WL,

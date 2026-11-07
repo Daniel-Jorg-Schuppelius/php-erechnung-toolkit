@@ -44,7 +44,10 @@ final class InvoiceLine {
         private ?string $standardItemScheme = null,
         private ?string $note = null,
         private ?float $baseQuantity = null,
-        private ?string $accountingCost = null
+        private ?string $accountingCost = null,
+        private ?Period $period = null,
+        private ?string $objectIdentifier = null,
+        private ?string $objectIdentifierScheme = null
     ) {
         $this->unitCode = is_string($unitCode)
             ? (UnitCode::tryFrom($unitCode) ?? UnitCode::PIECE)
@@ -117,6 +120,21 @@ final class InvoiceLine {
 
     public function getAccountingCost(): ?string {
         return $this->accountingCost;
+    }
+
+    /** Invoice line period (BG-26). */
+    public function getPeriod(): ?Period {
+        return $this->period;
+    }
+
+    /** Invoice line object identifier (BT-128), e.g. a ticket or work order number. */
+    public function getObjectIdentifier(): ?string {
+        return $this->objectIdentifier;
+    }
+
+    /** Scheme of the line object identifier (BT-128-1, UNTDID 1153). */
+    public function getObjectIdentifierScheme(): ?string {
+        return $this->objectIdentifierScheme;
     }
 
     /**

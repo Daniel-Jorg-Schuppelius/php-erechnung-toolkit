@@ -15,7 +15,7 @@ namespace ERechnungToolkit\Builders;
 use CommonToolkit\Enums\{CountryCode, CurrencyCode};
 use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
-use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party, PaymentTerms, PostalAddress};
+use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party, PaymentTerms, Period, PostalAddress, SupportingDocument};
 use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, NoteSubjectCode, PaymentMeansCode, TaxCategory, UnitCode};
 use ERechnungToolkit\Traits\MoneyInputTrait;
 use ERRORToolkit\Traits\ErrorLog;
@@ -91,6 +91,13 @@ final class ERechnungDocumentBuilder {
 
     /** @var string[] */
     private array $notes = [];
+
+    /** @var SupportingDocument[] */
+    private array $supportingDocuments = [];
+
+    private ?Period $invoicingPeriod = null;
+    private ?string $invoicedObjectIdentifier = null;
+    private ?string $invoicedObjectScheme = null;
 
     private int $lineCounter = 0;
 
@@ -194,6 +201,31 @@ final class ERechnungDocumentBuilder {
 
     public function withPrecedingInvoiceReference(string $reference): self {
         $this->precedingInvoiceReference = $reference;
+        return $this;
+    }
+
+    /**
+     * Invoicing period (BG-14); at least one date is required (BR-CO-19).
+     */
+    public function withInvoicingPeriod(?DateTimeImmutable $start, ?DateTimeImmutable $end = null): self {
+        $this->invoicingPeriod = new Period($start, $end);
+        return $this;
+    }
+
+    /**
+     * Invoiced object identifier (BT-18) with optional scheme (BT-18-1, UNTDID 1153).
+     */
+    public function withInvoicedObject(string $identifier, ?string $scheme = null): self {
+        $this->invoicedObjectIdentifier = $identifier;
+        $this->invoicedObjectScheme = $scheme;
+        return $this;
+    }
+
+    /**
+     * Additional supporting document (BG-24), e.g. a timesheet as PDF.
+     */
+    public function addSupportingDocument(SupportingDocument $document): self {
+        $this->supportingDocuments[] = $document;
         return $this;
     }
 
@@ -586,6 +618,14 @@ final class ERechnungDocumentBuilder {
         // Remittance information (BT-83)
         if ($this->remittanceInformation !== null) {
             $document->setRemittanceInformation($this->remittanceInformation);
+        }
+
+        $document->setInvoicingPeriod($this->invoicingPeriod);
+        if ($this->invoicedObjectIdentifier !== null) {
+            $document->setInvoicedObject($this->invoicedObjectIdentifier, $this->invoicedObjectScheme);
+        }
+        foreach ($this->supportingDocuments as $supportingDocument) {
+            $document->addSupportingDocument($supportingDocument);
         }
 
         // VAT exemption reason (BT-120/BT-121) - triggers a recalculation so the

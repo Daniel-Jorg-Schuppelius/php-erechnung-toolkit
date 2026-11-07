@@ -157,6 +157,129 @@ $parsed = (new OrderParser)->parse($xml);
 > official XBestellung validation artifacts are added to `data/kosit/scenarios.xml`.
 > See [docs/XBestellung](docs/XBestellung/README.md) for details.
 
+## Supporting Documents, Periods and Object Identifiers (since 0.21.0)
+
+Timesheets and activity reports travel inside the e-invoice as **additional
+supporting documents** (BG-24): `SupportingDocument` carries the reference
+(BT-122, mandatory), a description (BT-123), an optional link (BT-124) and the
+embedded file (BT-125) with MIME code and filename. German tax law only accepts
+the embedded file as part of the invoice; a link alone does not count (BMF
+letters of 15 Oct 2025, Rn. 35, and 15 Oct 2026, Rn. 12). The time of supply
+belongs in the structured part: `Period` for the invoicing period (BG-14) and the
+line period (BG-26), next to the delivery date (BT-72).
+
+```php
+use ERechnungToolkit\Entities\{InvoiceLine, Period, SupportingDocument};
+use ERechnungToolkit\Enums\AttachmentMimeCode;
+
+$invoice = ERechnungDocumentBuilder::xrechnung('XR-2026-0818', $leitwegId)
+    // seller, buyer, payment ...
+    ->withInvoicingPeriod(new DateTimeImmutable('2026-09-01'), new DateTimeImmutable('2026-09-30'))
+    ->withInvoicedObject('SLA-2026-01')                              // BT-18
+    ->addSupportingDocument(SupportingDocument::embedded(
+        'LN-1', $pdfBytes, AttachmentMimeCode::PDF, 'nachweis-1.pdf', 'Leistungsnachweis September 2026'
+    ))
+    ->addSupportingDocument(SupportingDocument::fromFile('LN-2', '/path/stunden.csv'))
+    ->addInvoiceLine(new InvoiceLine(
+        id: '1', quantity: 2.5, unitCode: UnitCode::HOUR, /* amounts, tax ... */
+        period: Period::between(new DateTimeImmutable('2026-09-02'), new DateTimeImmutable('2026-09-09')),
+        objectIdentifier: 'TICKET-4711',                             // BT-128
+    ))
+    ->build();
+```
+
+- `AttachmentMimeCode` lists the codes every recipient must accept: PDF, PNG,
+  JPEG, CSV, XLSX, ODS (EN 16931 BR-CL-24, Peppol CL001); the XRechnung
+  extension adds `application/xml` (BR-DEX-01).
+- The generator writes BG-24 as `cac:AdditionalDocumentReference` (UBL) or
+  `ram:AdditionalReferencedDocument` with TypeCode 916 (CII); BT-18 and BT-128
+  use document type 130. Factur-X MINIMUM, BASIC WL and BASIC have no
+  referenced documents, MINIMUM no invoicing period and BASIC WL no line period
+  (`ERechnungProfile::supportsReferencedDocuments()`, `supportsInvoicingPeriod()`,
+  `supportsLinePeriod()`); the CII output leaves them out there.
+- `ERechnungParser` reads all of it back. `new ERechnungParser(maxAttachmentBytes: …, maxAttachments: …)`
+  keeps attachments over the limits without content and reports them in `getNotices()`,
+  as it does for invalid Base64.
+- `DocumentRulesValidator` checks the data model before XML exists: BR-52,
+  BR-CL-24, BR-DE-22 (ignoring case, as the rule text demands — the KoSIT
+  validator compares exactly), missing MIME code or filename, path characters,
+  empty files, extension and content that do not fit the MIME code, the profile,
+  and the period rules BR-29, BR-30, BR-CO-19, BR-CO-20 and PEPPOL-EN16931-R110/R111.
+  A link in BT-124 is reported as information.
+- Recipients set size limits, the standard does not: Base64 adds about a third
+  (`SupportingDocument::encodedSizeBytes()`).
+
+### Adding supporting documents to an existing invoice
+
+An invoice issued by another system (UBL Invoice, UBL CreditNote or CII) is
+extended in place, not regenerated: parsing into a `Document` and generating
+again would drop everything the data model does not know.
+`SupportingDocumentAugmenter` inserts the new BG-24 elements behind the existing
+ones (otherwise where UBL 2.1 or CII D16B expects them) and keeps every other
+node: number, parties, lines, taxes, payment data, foreign extensions,
+comments, processing instructions, namespace prefixes and whitespace. The new
+elements are built by the same code as in the generator
+(`Helper\SupportingDocumentXml`). The result is canonically equal to the
+original apart from the new elements; libxml may still write the XML
+declaration, quotes and empty elements in its own form.
+
+```php
+use ERechnungToolkit\Enums\AugmentFailure;
+use ERechnungToolkit\Exceptions\AugmentException;
+use ERechnungToolkit\Generators\SupportingDocumentAugmenter;
+
+$augmenter = new SupportingDocumentAugmenter();
+
+$augmenter->detectSyntax($xml);   // ERechnungSyntax::UBL_INVOICE ('ubl-invoice'), UBL_CREDIT_NOTE ('ubl-creditnote'), CII ('cii') or null
+$augmenter->isSigned($xml);       // ds:Signature anywhere in the document
+$augmenter->canAugment($xml);     // AugmentFailure or null, without documents
+
+try {
+    $xml = $augmenter->augment($xml, [
+        SupportingDocument::embedded('LN-4', $pdfBytes, AttachmentMimeCode::PDF, 'nachweis-4.pdf', 'Leistungsnachweis Oktober'),
+    ]);
+} catch (AugmentException $e) {
+    $e->getReason(); // e.g. AugmentFailure::DUPLICATE_FILENAME
+}
+```
+
+`augment()` changes nothing silently; it throws `AugmentException` with an
+`AugmentFailure` reason: `invalid_xml`, `unsupported_syntax` (anything but the
+three roots, also ZUGFeRD 1.0), `signed` (XML signature), `unsupported_profile`
+(MINIMUM, BASIC WL, BASIC — `ERechnungProfile::fromSpecificationIdentifier()`
+also reads the Factur-X form `…#compliant#urn:factur-x.eu:1p0:basic`),
+`invalid_structure`, `invalid_document` (BR-52, BR-CL-24 and the attachment
+checks of `DocumentRulesValidator`), `duplicate_filename` (BR-DE-22, ignoring
+case, against every embedded file of the invoice) and `duplicate_reference`
+(BT-122 of the existing supporting documents; the invoiced object, type 130,
+does not count).
+
+`ZugferdPdfAugmenter` does the same for a ZUGFeRD/Factur-X PDF (php-pdf-toolkit
+0.31 or newer, `pdfdetach` and `mutool`): it takes the embedded XML, extends it
+and lets `ZugferdWriter::embedIntoPdf()` write a new PDF/A-3 with the pages of
+the original unchanged, the new XML under the original name (e.g.
+`factur-x.xml`, `zugferd-invoice.xml`, `xrechnung.xml`; AFRelationship
+`Alternative`, conformance level in the XMP from the profile of the XML), the
+new embedded documents and the other files of the original as `Supplement`.
+
+```php
+use ERechnungToolkit\Generators\ZugferdPdfAugmenter;
+
+$pdfAugmenter = new ZugferdPdfAugmenter();
+$pdfAugmenter->canAugment('/path/rechnung.pdf'); // AugmentFailure or null
+$pdfBytes = $pdfAugmenter->augment('/path/rechnung.pdf', $documents);
+$pdfAugmenter->getNotices();                      // files taken over from the original
+```
+
+Additional reasons: `pdf_toolkit_unavailable`, `invalid_pdf`, `encrypted`,
+`signed` (digital signature), `no_invoice_xml`, `attachment_unreadable` (a file
+of the original could not be read and would be lost) and `pdf_write_failed`.
+Writing a new PDF loses what is not page content: bookmarks, links and other
+annotations, form fields, structure tags and the metadata of the original. Files
+taken over from the original keep name and content but lose description,
+original relationship and dates (MIME type from the content); `getNotices()`
+lists them.
+
 ## ZUGFeRD/Factur-X PDF Generation
 
 Generate PDF/A-3 invoices with embedded XML for automated processing. Requires `dschuppelius/php-pdf-toolkit`:
@@ -198,6 +321,9 @@ The generated PDF:
 - Contains the embedded XML invoice (CII format)
 - Can be processed automatically by accounting software
 - Is visually readable as a normal PDF invoice
+- Carries the supporting documents of the invoice a second time as PDF/A-3
+  files with AFRelationship `Supplement` (php-pdf-toolkit 0.31 or newer; option
+  `embed_supporting_documents`, default `true`); the CII XML holds them in any case
 
 ## Validation
 
@@ -374,7 +500,8 @@ $result = (new BisValidator)->validateEnvelope($envelope); // envelope + payload
 `BisValidator` is a **documented subset**, not a conformance statement: it covers
 the EN 16931 mandatory fields (BR-01..BR-16, BR-62/BR-63), the sum rules
 BR-CO-10/BR-CO-15 and the Peppol rules PEPPOL-EN16931-R001/-R003/-R004/-R010/
--R020/-R053 — the rules that are decidable without Schematron. For the full rule
+-R020/-R053, the MIME code list of attachments PEPPOL-EN16931-CL001 and the
+German filename rule DE-R-022 — the rules that are decidable without Schematron. For the full rule
 set inject a Schematron validator (`new BisValidator($kositValidator)`); its
 messages are merged into the same `ValidationResult`.
 

@@ -83,6 +83,10 @@ class XRechnungConformanceTest extends BaseTestCase {
             'Gutschrift CII' => ['cii', 'credit'],
             'Kleinunternehmer UBL' => ['ubl', 'small'],
             'Kleinunternehmer CII' => ['cii', 'small'],
+            'Unterlagen UBL' => ['ubl', 'supporting'],
+            'Unterlagen CII' => ['cii', 'supporting'],
+            'Unterlagen Gutschrift UBL' => ['ubl', 'supporting-credit'],
+            'Unterlagen Gutschrift CII' => ['cii', 'supporting-credit'],
         ];
     }
 
@@ -95,6 +99,8 @@ class XRechnungConformanceTest extends BaseTestCase {
         $document = match ($kind) {
             'credit' => $this->fullXRechnung(creditNote: true),
             'small' => $this->smallBusinessXRechnung(),
+            'supporting' => $this->supportingDocumentXRechnung(),
+            'supporting-credit' => $this->supportingDocumentXRechnung(creditNote: true),
             default => $this->fullXRechnung(),
         };
         $xml = $this->generate($document, cii: $syntax === 'cii');

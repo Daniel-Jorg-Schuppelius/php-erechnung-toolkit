@@ -129,6 +129,28 @@ class ERechnungEnumsTest extends BaseTestCase {
         $this->assertStringContainsString('xrechnung', strtolower(ERechnungProfile::XRECHNUNG->value));
     }
 
+    /**
+     * BT-24 in den Schreibweisen fremder Erzeuger; Parser und Ergänzung lesen das Profil gleich.
+     */
+    public function test_profile_from_specification_identifier(): void {
+        $cases = [
+            'urn:cen.eu:en16931:2017' => ERechnungProfile::EN16931,
+            'urn:factur-x.eu:1p0:minimum' => ERechnungProfile::MINIMUM,
+            'urn:factur-x.eu:1p0:basicwl' => ERechnungProfile::BASIC_WL,
+            'urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:basic' => ERechnungProfile::BASIC,
+            'urn:cen.eu:en16931:2017#conformant#urn:factur-x.eu:1p0:extended' => ERechnungProfile::EXTENDED,
+            'urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0' => ERechnungProfile::XRECHNUNG,
+            'urn:cen.eu:en16931:2017#compliant#urn:xoev-de:kosit:standard:xrechnung_2.3' => ERechnungProfile::XRECHNUNG,
+            'urn:cen.eu:en16931:2017#conformant#urn:xeinkauf.de:kosit:extension:xrechnung_3.0' => ERechnungProfile::XRECHNUNG_EXTENSION,
+            'urn:cen.eu:en16931:2017#compliant#urn:fdc:peppol.eu:2017:poacc:billing:3.0' => ERechnungProfile::EN16931,
+        ];
+        foreach ($cases as $identifier => $profile) {
+            $this->assertSame($profile, ERechnungProfile::fromSpecificationIdentifier($identifier), $identifier);
+        }
+        $this->assertSame(ERechnungProfile::EN16931, ERechnungProfile::fromSpecificationIdentifier(null));
+        $this->assertFalse(ERechnungProfile::fromSpecificationIdentifier('urn:cen.eu:en16931:2017#compliant#urn:factur-x.eu:1p0:basic')->supportsReferencedDocuments());
+    }
+
     public function test_x_rechnung_profile_uses_current_kosit_authority(): void {
         $this->assertEquals(
             'urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0',
