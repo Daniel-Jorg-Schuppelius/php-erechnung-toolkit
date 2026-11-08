@@ -89,6 +89,12 @@ final class ERechnungGenerator {
             $this->addUblElement($dom, $root, 'cbc:DueDate', $document->getDueDate()->format('Y-m-d'));
         }
 
+        // TaxPointDate: die CreditNote führt es vor dem Typcode, die Invoice nach den Bemerkungen.
+        $taxPointDate = $document->getTaxPointDate()?->format('Y-m-d');
+        if ($isCredit && $taxPointDate !== null) {
+            $this->addUblElement($dom, $root, 'cbc:TaxPointDate', $taxPointDate);
+        }
+
         // InvoiceTypeCode / CreditNoteTypeCode
         $typeTag = $isCredit ? 'cbc:CreditNoteTypeCode' : 'cbc:InvoiceTypeCode';
         $this->addUblElement($dom, $root, $typeTag, $document->getInvoiceType()->value);
@@ -98,9 +104,8 @@ final class ERechnungGenerator {
             $this->addUblElement($dom, $root, 'cbc:Note', $note);
         }
 
-        // TaxPointDate
-        if ($document->getTaxPointDate() !== null) {
-            $this->addUblElement($dom, $root, 'cbc:TaxPointDate', $document->getTaxPointDate()->format('Y-m-d'));
+        if (!$isCredit && $taxPointDate !== null) {
+            $this->addUblElement($dom, $root, 'cbc:TaxPointDate', $taxPointDate);
         }
 
         // DocumentCurrencyCode
@@ -140,7 +145,13 @@ final class ERechnungGenerator {
             $root->appendChild($contractRef);
         }
 
-        // AdditionalDocumentReference: Objektkennung (BT-18) und Unterlagen (BG-24)
+        // AdditionalDocumentReference: Projekt (BT-11, nur CreditNote), Objektkennung (BT-18) und Unterlagen (BG-24)
+        if ($isCredit && $document->getProjectReference() !== null) {
+            $projectRef = $dom->createElementNS(self::CAC_NS, 'cac:AdditionalDocumentReference');
+            $this->addUblElement($dom, $projectRef, 'cbc:ID', $document->getProjectReference());
+            $this->addUblElement($dom, $projectRef, 'cbc:DocumentTypeCode', SupportingDocumentXml::DOCUMENT_TYPE_PROJECT);
+            $root->appendChild($projectRef);
+        }
         if ($document->getInvoicedObjectIdentifier() !== null) {
             $root->appendChild($this->createUblObjectReference(
                 $dom,
@@ -154,7 +165,7 @@ final class ERechnungGenerator {
         }
 
         // ProjectReference
-        if ($document->getProjectReference() !== null) {
+        if (!$isCredit && $document->getProjectReference() !== null) {
             $projectRef = $dom->createElementNS(self::CAC_NS, 'cac:ProjectReference');
             $this->addUblElement($dom, $projectRef, 'cbc:ID', $document->getProjectReference());
             $root->appendChild($projectRef);

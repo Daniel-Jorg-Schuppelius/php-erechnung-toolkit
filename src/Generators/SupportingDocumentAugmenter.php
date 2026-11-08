@@ -259,13 +259,15 @@ final class SupportingDocumentAugmenter {
 
     /**
      * Kennungen (BT-122) der vorhandenen Unterlagen, gelesen wie im Parser:
-     * UBL jede AdditionalDocumentReference außer der Objektkennung (130), CII TypeCode 916.
+     * UBL jede AdditionalDocumentReference außer Objektkennung (130) und Projektreferenz
+     * einer CreditNote (50), CII TypeCode 916.
      *
      * @return array<string, true>
      */
     private function existingReferences(DOMXPath $xpath, ERechnungSyntax $syntax, DOMElement $parent): array {
         $expression = $syntax->isUbl()
-            ? "cac:AdditionalDocumentReference[not(normalize-space(cbc:DocumentTypeCode) = '" . SupportingDocumentXml::DOCUMENT_TYPE_INVOICED_OBJECT . "')]/cbc:ID"
+            ? "cac:AdditionalDocumentReference[not(normalize-space(cbc:DocumentTypeCode) = '" . SupportingDocumentXml::DOCUMENT_TYPE_INVOICED_OBJECT
+                . "' or normalize-space(cbc:DocumentTypeCode) = '" . SupportingDocumentXml::DOCUMENT_TYPE_PROJECT . "')]/cbc:ID"
             : "ram:AdditionalReferencedDocument[normalize-space(ram:TypeCode) = '" . SupportingDocumentXml::DOCUMENT_TYPE_SUPPORTING . "']/ram:IssuerAssignedID";
 
         $references = [];

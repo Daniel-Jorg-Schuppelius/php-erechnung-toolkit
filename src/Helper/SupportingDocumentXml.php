@@ -34,6 +34,9 @@ final class SupportingDocumentXml {
     /** UNTDID 1001: Objektkennung (BT-18, BT-128). */
     public const DOCUMENT_TYPE_INVOICED_OBJECT = '130';
 
+    /** UNTDID 1001: Projektreferenz (BT-11) in der UBL-CreditNote, die kein cac:ProjectReference kennt. */
+    public const DOCUMENT_TYPE_PROJECT = '50';
+
     /**
      * cac:AdditionalDocumentReference in DocumentReferenceType-Sequenz: ID,
      * DocumentDescription, Attachment (EmbeddedDocumentBinaryObject vor ExternalReference).

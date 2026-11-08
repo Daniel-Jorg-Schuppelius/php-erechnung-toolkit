@@ -636,6 +636,24 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertSame('XR-2026-0815', $parsed->getPrecedingInvoiceReference());
     }
 
+    public function test_ubl_credit_note_carries_project_reference_as_document_reference(): void {
+        $credit = $this->generator->generateUbl($this->fullXRechnung(creditNote: true));
+        $invoice = $this->generator->generateUbl($this->fullXRechnung());
+
+        // UBL-CreditNote: TaxPointDate vor dem Typcode, BT-11 als Dokumentart 50.
+        $this->assertStringNotContainsString('cac:ProjectReference', $credit);
+        $this->assertMatchesRegularExpression('#<cbc:TaxPointDate>2026-09-10</cbc:TaxPointDate>\s*<cbc:CreditNoteTypeCode>#', $credit);
+        $this->assertMatchesRegularExpression('#<cbc:ID[^>]*>PRJ-2026-03</cbc:ID>\s*<cbc:DocumentTypeCode[^>]*>50</cbc:DocumentTypeCode>#', $credit);
+        $this->assertStringContainsString('<cac:ProjectReference', $invoice);
+
+        foreach (['credit' => $credit, 'invoice' => $invoice] as $kind => $xml) {
+            $parsed = $this->parser->parse($xml);
+            $this->assertSame('PRJ-2026-03', $parsed->getProjectReference(), $kind);
+            $this->assertSame('2026-09-10', $parsed->getTaxPointDate()?->format('Y-m-d'), $kind);
+            $this->assertSame([], $parsed->getSupportingDocuments(), $kind);
+        }
+    }
+
     public function test_small_business_roundtrip_keeps_tax_number_apart_from_vat_id(): void {
         foreach (['ubl' => $this->generator->generateUbl(...), 'cii' => $this->generator->generateCii(...)] as $syntax => $generate) {
             $seller = $this->parser->parse($generate($this->smallBusinessXRechnung()))->getSeller();

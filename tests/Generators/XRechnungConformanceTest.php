@@ -15,7 +15,7 @@ namespace Tests\Generators;
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
 use ERechnungToolkit\Entities\Document;
-use ERechnungToolkit\Enums\PaymentMeansCode;
+use ERechnungToolkit\Enums\{ERechnungProfile, PaymentMeansCode};
 use ERechnungToolkit\Generators\ERechnungGenerator;
 use ERechnungToolkit\Validators\KositValidator;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -87,6 +87,8 @@ class XRechnungConformanceTest extends BaseTestCase {
             'Unterlagen CII' => ['cii', 'supporting'],
             'Unterlagen Gutschrift UBL' => ['ubl', 'supporting-credit'],
             'Unterlagen Gutschrift CII' => ['cii', 'supporting-credit'],
+            'Extension UBL' => ['ubl', 'extension'],
+            'Extension CII' => ['cii', 'extension'],
         ];
     }
 
@@ -101,6 +103,7 @@ class XRechnungConformanceTest extends BaseTestCase {
             'small' => $this->smallBusinessXRechnung(),
             'supporting' => $this->supportingDocumentXRechnung(),
             'supporting-credit' => $this->supportingDocumentXRechnung(creditNote: true),
+            'extension' => $this->fullXRechnung(profile: ERechnungProfile::XRECHNUNG_EXTENSION),
             default => $this->fullXRechnung(),
         };
         $xml = $this->generate($document, cii: $syntax === 'cii');
@@ -114,6 +117,9 @@ class XRechnungConformanceTest extends BaseTestCase {
             ))
         );
         $this->assertStringContainsString($syntax === 'cii' ? '(CII)' : '(UBL', (string) $result->getScenarioName());
+        if ($kind === 'extension') {
+            $this->assertStringContainsStringIgnoringCase('extension', (string) $result->getScenarioName());
+        }
     }
 
     private function generate(Document $document, bool $cii): string {

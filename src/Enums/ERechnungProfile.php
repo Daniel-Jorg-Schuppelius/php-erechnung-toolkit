@@ -36,8 +36,8 @@ enum ERechnungProfile: string {
     /** XRechnung 3.0 profile (CIUS, compliant) */
     case XRECHNUNG = 'urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0';
 
-    /** XRechnung 3.0 Extension (conformant) */
-    case XRECHNUNG_EXTENSION = 'urn:cen.eu:en16931:2017#conformant#urn:xeinkauf.de:kosit:extension:xrechnung_3.0';
+    /** XRechnung 3.0 Extension: conformant zur compliant-CIUS, Kennung wie im KoSIT-Szenario */
+    case XRECHNUNG_EXTENSION = 'urn:cen.eu:en16931:2017#compliant#urn:xeinkauf.de:kosit:xrechnung_3.0#conformant#urn:xeinkauf.de:kosit:extension:xrechnung_3.0';
 
     /** ZUGFeRD 1.0 (2014) - BASIC profile; legacy, read-only, not EN 16931 */
     case ZUGFERD1_BASIC = 'urn:ferd:CrossIndustryDocument:invoice:1p0:basic';

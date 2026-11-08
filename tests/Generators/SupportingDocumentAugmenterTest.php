@@ -276,7 +276,8 @@ class SupportingDocumentAugmenterTest extends BaseTestCase {
             'zugferd1' => '<rsm:CrossIndustryDocument xmlns:rsm="urn:ferd:CrossIndustryDocument:invoice:1p0"/>',
             'malformed' => '<Invoice xmlns="urn:oasis:names:specification:ubl:schema:xsd:Invoice-2"><cbc:ID>',
             'empty' => '',
-            'ubl-without-supplier' => $this->withoutElement($this->invoiceXml('ubl-plain'), '/*/cac:AccountingSupplierParty'),
+            // Ohne jeden Anker: die Projektreferenz wäre sonst eine gültige Einfügestelle.
+            'ubl-without-supplier' => $this->withoutElement($this->invoiceXml('ubl-plain'), '/*/cac:AccountingSupplierParty | /*/cac:ProjectReference'),
             'cii-without-agreement' => $this->withoutElement($this->invoiceXml('cii-plain'), '//ram:ApplicableHeaderTradeAgreement'),
             default => throw new \LogicException("Unbekannter Fall {$kind}"),
         };
@@ -327,6 +328,12 @@ class SupportingDocumentAugmenterTest extends BaseTestCase {
         $augmented = $this->augmenter->augment($this->invoiceXml('ubl-supporting'), [SupportingDocument::external('SLA-2026-01', 'https://example.org/sla')]);
 
         $this->assertSame(2.0, $this->xpath($augmented)->evaluate("count(/*/cac:AdditionalDocumentReference[cbc:ID='SLA-2026-01'])"));
+    }
+
+    public function test_project_reference_of_a_credit_note_is_no_conflict(): void {
+        $augmented = $this->augmenter->augment($this->invoiceXml('ubl-plain-credit'), [SupportingDocument::external('PRJ-2026-03', 'https://example.org/projekt')]);
+
+        $this->assertSame(2.0, $this->xpath($augmented)->evaluate("count(/*/cac:AdditionalDocumentReference[cbc:ID='PRJ-2026-03'])"));
     }
 
     /**

@@ -287,7 +287,8 @@ final class ERechnungParser {
             buyerReference: $this->getUblValue("{$root}/cbc:BuyerReference"),
             orderReference: $this->getUblValue("{$root}/cac:OrderReference/cbc:ID"),
             contractReference: $this->getUblValue("{$root}/cac:ContractDocumentReference/cbc:ID"),
-            projectReference: $this->getUblValue("{$root}/cac:ProjectReference/cbc:ID"),
+            projectReference: $this->getUblValue("{$root}/cac:ProjectReference/cbc:ID")
+                ?? $this->getUblValue("{$root}/cac:AdditionalDocumentReference[cbc:DocumentTypeCode='50']/cbc:ID"),
             paymentMeansCode: $this->parsePaymentMeansCode("{$root}/cac:PaymentMeans/cbc:PaymentMeansCode"),
             paymentTerms: $this->parseUblPaymentTerms("{$root}/cac:PaymentTerms"),
             deliveryDate: $this->getUblDate("{$root}/cac:Delivery/cbc:ActualDeliveryDate"),
@@ -927,12 +928,10 @@ final class ERechnungParser {
     // === Common Helpers ===
 
     /**
-     * XML-Betrag -> Money, ohne float-Zwischenschritt (fehlendes Element = 0).
-     */
-    /**
      * Rechnungszeitraum (BG-14), Objektkennung (BT-18) und Unterlagen (BG-24) aus UBL.
      * Eine AdditionalDocumentReference mit DocumentTypeCode 130 ist die Objektkennung,
-     * jede andere eine Unterlage.
+     * mit 50 die Projektreferenz einer CreditNote (liest der Konstruktor), jede andere
+     * eine Unterlage.
      */
     private function readUblReferences(Document $document, string $root): void {
         $period = $this->ublPeriod($this->firstNode("{$root}/cac:InvoicePeriod"));
@@ -949,6 +948,9 @@ final class ERechnungParser {
                 if ($reference !== '' && $document->getInvoicedObjectIdentifier() === null) {
                     $document->setInvoicedObject($reference, $this->attribute($this->firstNode('cbc:ID', $node), 'schemeID'));
                 }
+                continue;
+            }
+            if ($this->getNodeValue($node, 'cbc:DocumentTypeCode') === '50') {
                 continue;
             }
 
@@ -1075,6 +1077,9 @@ final class ERechnungParser {
         return $value !== '' ? $value : null;
     }
 
+    /**
+     * XML-Betrag -> Money, ohne float-Zwischenschritt (fehlendes Element = 0).
+     */
     private function money(?string $value, CurrencyCode $currency): Money {
         return Money::ofNullable($value, $currency) ?? Money::zero($currency);
     }

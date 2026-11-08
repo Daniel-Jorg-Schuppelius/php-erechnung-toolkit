@@ -516,16 +516,16 @@
     "packages-dev": [
         {
             "name": "daniel-jorg-schuppelius/php-pdf-toolkit",
-            "version": "v0.31.0",
+            "version": "v0.31.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit.git",
-                "reference": "f80702174b9ecca81e981e1d0c4763d3966cd5df"
+                "reference": "98951097b8bbd047db5e5b7147273d6e911ad25f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Daniel-Jorg-Schuppelius/php-pdf-toolkit/zipball/f80702174b9ecca81e981e1d0c4763d3966cd5df",
-                "reference": "f80702174b9ecca81e981e1d0c4763d3966cd5df",
+                "url": "https://api.github.com/repos/Daniel-Jorg-Schuppelius/php-pdf-toolkit/zipball/98951097b8bbd047db5e5b7147273d6e911ad25f",
+                "reference": "98951097b8bbd047db5e5b7147273d6e911ad25f",
                 "shasum": ""
             },
             "require": {
@@ -545,7 +545,8 @@
             "type": "library",
             "autoload": {
                 "files": [
-                    "src/bootstrap_fonts.php"
+                    "src/bootstrap_fonts.php",
+                    "src/bootstrap_tcpdf_paths.php"
                 ],
                 "psr-4": {
                     "PDFToolkit\\": "src/"
@@ -569,7 +570,7 @@
                 "issues": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit/issues",
                 "source": "https://github.com/Daniel-Jorg-Schuppelius/php-pdf-toolkit"
             },
-            "time": "2026-11-07T21:37:37+00:00"
+            "time": "2026-11-08T10:02:33+00:00"
         },
         {
             "name": "dompdf/dompdf",

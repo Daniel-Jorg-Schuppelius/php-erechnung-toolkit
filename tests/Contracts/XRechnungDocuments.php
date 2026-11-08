@@ -17,7 +17,7 @@ use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
 use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Period, SupportingDocument};
-use ERechnungToolkit\Enums\{AttachmentMimeCode, InvoiceType, PaymentMeansCode, TaxCategory, UnitCode};
+use ERechnungToolkit\Enums\{AttachmentMimeCode, ERechnungProfile, InvoiceType, PaymentMeansCode, TaxCategory, UnitCode};
 
 /**
  * Testdokumente für die Konformitätsprüfungen beider Syntaxen: eine XRechnung,
@@ -27,7 +27,7 @@ use ERechnungToolkit\Enums\{AttachmentMimeCode, InvoiceType, PaymentMeansCode, T
 trait XRechnungDocuments {
     private string $leitwegId = '04011000-12345-67';
 
-    private function fullXRechnung(bool $creditNote = false): Document {
+    private function fullXRechnung(bool $creditNote = false, ?ERechnungProfile $profile = null): Document {
         $euro = CurrencyCode::Euro;
         $consulting = new InvoiceLine(
             id: '1',
@@ -56,8 +56,10 @@ trait XRechnungDocuments {
             ->withIssueDate(new DateTimeImmutable('2026-09-17'))
             ->withDueDate(new DateTimeImmutable('2026-10-17'))
             ->withDeliveryDate(new DateTimeImmutable('2026-09-10'))
+            ->withTaxPointDate(new DateTimeImmutable('2026-09-10'))
             ->withOrderReference('PO-4711')
             ->withContractReference('V-2026-01')
+            ->withProjectReference('PRJ-2026-03')
             ->withSeller('Verkäufer GmbH', 'DE123456789', '201/123/45678')
             ->withSellerAddress('Verkäuferstraße 1', '10115', 'Berlin')
             ->withSellerEndpoint('rechnung@verkaeufer.de', 'EM')
@@ -77,6 +79,9 @@ trait XRechnungDocuments {
         if ($creditNote) {
             $builder->withInvoiceType(InvoiceType::CREDIT_NOTE)
                 ->withPrecedingInvoiceReference('XR-2026-0815');
+        }
+        if ($profile !== null) {
+            $builder->withProfile($profile);
         }
 
         return $builder->build();
