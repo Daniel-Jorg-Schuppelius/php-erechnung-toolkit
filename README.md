@@ -294,7 +294,7 @@ $invoice = ERechnungDocumentBuilder::xrechnung('XR-2026-0901', '04011000-12345-0
     ->addLine('Werkbank', 2, 1250.00, 0.0, UnitCode::PIECE, TaxCategory::INTRA_COMMUNITY)
     ->build();
 
-LeitwegId::of('04011000-12345-03');          // throws InvalidArgumentException with the reason
+LeitwegId::of('04011000-12345-67');          // throws InvalidArgumentException with the reason
 LeitwegId::isValid('04011000-12345-67');     // false: check digits 67, expected 03
 LeitwegId::checkDigitsFor('04011000', '12345'); // '03'
 ```
@@ -341,6 +341,52 @@ tax registration number (it is BT-30/BT-47, `getLegalRegistrationId()`); both
 parsers keep an address without street; CII writes and reads the country
 subdivision (BT-39, BT-54, BT-79); Leitweg-IDs passed to the existing entry
 points are normalized (uppercase, no whitespace).
+
+## Leitweg-ID Failure Kinds and Unit Spellings (since 0.23.0)
+
+```php
+use ERechnungToolkit\Entities\LeitwegId;
+use ERechnungToolkit\Enums\{LeitwegIdFailure, UnitCode};
+use ERechnungToolkit\Exceptions\InvalidLeitwegIdException;
+
+try {
+    LeitwegId::of('04011000-12345-67');
+} catch (InvalidLeitwegIdException $e) {   // extends InvalidArgumentException
+    $e->getReason();                        // LeitwegIdFailure::CHECK_DIGITS
+    $e->getGivenCheckDigits();              // '67'
+    $e->getExpectedCheckDigits();           // '03'
+    $e->getMessage();                       // unchanged German text
+}
+
+LeitwegId::looksLike('04011000-12345-67'); // true: meant as Leitweg-ID, check digits wrong
+LeitwegId::looksLike('PO-4711');           // false
+
+UnitCode::fromText('heures');   // UnitCode::HOUR
+UnitCode::fromText('forf.');    // UnitCode::LUMP_SUM
+UnitCode::fromText('Lump Sum'); // UnitCode::LUMP_SUM
+```
+
+- **Failure kind:** `LeitwegId::of()` and `checkDigitsFor()` throw
+  `InvalidLeitwegIdException` (a subclass of `InvalidArgumentException`, so
+  existing `catch` blocks keep working; messages are unchanged). `getReason()`
+  returns `LeitwegIdFailure`: `FORM`, `COARSE_ADDRESS_LENGTH`, `STATE_CODE`,
+  `FINE_ADDRESS` or `CHECK_DIGITS`; for `CHECK_DIGITS` the exception also
+  carries the given and the expected check digits. The enum values are stable
+  for callers that translate the reason.
+- **Shape check:** `LeitwegId::looksLike()` tells whether a value, after
+  `normalize()`, has the shape of a Leitweg-ID — state code 01–16 or 99, digits,
+  optional fine address, two check digits — without checking lengths or check
+  digits. Use it to decide whether a buyer reference is meant as a Leitweg-ID
+  and then report `of()`'s failure.
+- **Check digits:** computed by `CommonToolkit\Helper\Data\CheckDigitHelper`
+  (php-common-toolkit 2.18, ISO/IEC 7064 MOD 97-10); results are unchanged.
+- **Units:** `UnitCode::fromText()` also reads hour as *heure(s)*, *ora/ore*
+  and *hora(s)*, and lump sum as *pausch.*, *flat*, *flat rate*/*flat-rate*/
+  *flatrate*, *lump sum*/*lump-sum*, *forfait*, *forf.*, *global* and
+  *a corpo*. Runs of whitespace count as one space. None of the new words was
+  mapped to another code before.
+
+Upgrading from 0.22: requires `dschuppelius/php-common-toolkit` `^2.18`.
 
 ## ZUGFeRD/Factur-X PDF Generation
 

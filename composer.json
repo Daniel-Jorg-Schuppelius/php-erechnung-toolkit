@@ -36,7 +36,7 @@
     "php": ">=8.2 <8.6",
     "ext-dom": "*",
     "ext-libxml": "*",
-    "dschuppelius/php-common-toolkit": "^2.11",
+    "dschuppelius/php-common-toolkit": "^2.18",
     "psr/http-client": "^1.0",
     "psr/http-factory": "^1.0"
   },

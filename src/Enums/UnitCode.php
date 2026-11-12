@@ -32,7 +32,7 @@ enum UnitCode: string {
      * (Fachjargon wie „lfm", Ziffernschreibweisen wie „m2"/„m3",
      * ausgeschriebene Formen).
      *
-     * @var array<string, string> Freitext (lowercase, ohne Schlusspunkt) -> Code
+     * @var array<string, string> Freitext (lowercase, ohne Schlusspunkt, Leerraum als ein Leerzeichen) -> Code
      */
     public const TEXT_ALIAS_CODES = [
         'std' => 'HUR',
@@ -42,6 +42,12 @@ enum UnitCode: string {
         'hours' => 'HUR',
         'hr' => 'HUR',
         'hrs' => 'HUR',
+        'heure' => 'HUR',
+        'heures' => 'HUR',
+        'ora' => 'HUR',
+        'ore' => 'HUR',
+        'hora' => 'HUR',
+        'horas' => 'HUR',
         'tag' => 'DAY',
         'tage' => 'DAY',
         'day' => 'DAY',
@@ -64,6 +70,17 @@ enum UnitCode: string {
         'dtzd' => 'DZN',
         'pauschal' => 'LS',
         'pauschale' => 'LS',
+        'pausch' => 'LS',
+        'flat' => 'LS',
+        'flat rate' => 'LS',
+        'flat-rate' => 'LS',
+        'flatrate' => 'LS',
+        'lump sum' => 'LS',
+        'lump-sum' => 'LS',
+        'forfait' => 'LS',
+        'forf' => 'LS',
+        'global' => 'LS',
+        'a corpo' => 'LS',
     ];
 
     // Count units
@@ -264,9 +281,10 @@ enum UnitCode: string {
      * Löst eine Freitext-Mengeneinheit auf („Stk.", „lfm", „qm", „Stunden").
      *
      * Auflösungsreihenfolge: direkter ISO-Code -> Wortliste -> Abkürzung aus
-     * {@see abbreviation()}. Groß-/Kleinschreibung und ein Schlusspunkt sind
-     * egal; nicht Erkanntes liefert `null` statt eines geratenen Codes — ein
-     * falscher Einheitencode fällt erst beim Empfänger der Rechnung auf.
+     * {@see abbreviation()}. Groß-/Kleinschreibung, ein Schlusspunkt und
+     * mehrfacher Leerraum („lump  sum“) sind egal; nicht Erkanntes liefert
+     * `null` statt eines geratenen Codes — ein falscher Einheitencode fällt
+     * erst beim Empfänger der Rechnung auf.
      *
      * Die Stück-Familie ist der einzige Fall mit echter Wahlfreiheit: `C62`
      * (PIECE) und `H87` (UNIT_H87) meinen dasselbe, aber Bestell-XML und
@@ -286,7 +304,7 @@ enum UnitCode: string {
             return $direct;
         }
 
-        $normalized = mb_strtolower(rtrim($trimmed, '.'));
+        $normalized = mb_strtolower(rtrim(preg_replace('/\s+/u', ' ', $trimmed) ?? $trimmed, '.'));
 
         if (in_array($normalized, self::PIECE_WORDS, true)) {
             return $pieceCode;

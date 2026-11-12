@@ -13,6 +13,7 @@ declare(strict_types=1);
 namespace Tests\Enums;
 
 use ERechnungToolkit\Enums\UnitCode;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Contracts\BaseTestCase;
 
 /**
@@ -58,6 +59,41 @@ class UnitCodeFromTextTest extends BaseTestCase {
         self::assertSame(UnitCode::DAY, UnitCode::fromText('days'));
         self::assertSame(UnitCode::UNIT_H87, UnitCode::fromText('pz', UnitCode::UNIT_H87));
         self::assertSame(UnitCode::UNIT_H87, UnitCode::fromText('ud', UnitCode::UNIT_H87));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function hourSpellings(): array {
+        $spellings = ['Stunde', 'Stunden', 'Std', 'Std.', 'h', 'H.', 'hour', 'Hours', 'heure', 'Heures', 'ora', 'ORE', 'hora', 'Horas.'];
+
+        return array_combine($spellings, array_map(static fn (string $spelling): array => [$spelling], $spellings));
+    }
+
+    #[DataProvider('hourSpellings')]
+    public function test_hour_spellings_in_five_languages(string $spelling): void {
+        $this->assertSame(UnitCode::HOUR, UnitCode::fromText($spelling));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function lumpSumSpellings(): array {
+        $spellings = ['Pauschale', 'pauschal', 'pausch.', 'Pausch', 'flat', 'Flat rate', 'flat-rate', 'Flatrate', 'lump sum', "Lump \t Sum", 'lump-sum', 'forfait', 'Forf.', 'global', 'A corpo', 'LS'];
+
+        return array_combine($spellings, array_map(static fn (string $spelling): array => [$spelling], $spellings));
+    }
+
+    #[DataProvider('lumpSumSpellings')]
+    public function test_lump_sum_spellings_in_five_languages(string $spelling): void {
+        $this->assertSame(UnitCode::LUMP_SUM, UnitCode::fromText($spelling));
+    }
+
+    /** Nur ganze Wörter zählen; ähnliche Freitexte bleiben unerkannt. */
+    public function test_similar_words_are_not_guessed(): void {
+        foreach (['Globalpreis', 'flat fee', 'lumpsum', 'heur', 'or', 'a corpo misura', 'pauschal.netto'] as $text) {
+            $this->assertNull(UnitCode::fromText($text), $text);
+        }
     }
 
     public function test_unknown_and_empty_yield_null(): void {
