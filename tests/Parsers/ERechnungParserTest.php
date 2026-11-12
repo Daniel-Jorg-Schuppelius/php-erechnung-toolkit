@@ -15,7 +15,7 @@ namespace Tests\Parsers;
 use CommonToolkit\Enums\CurrencyCode;
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
-use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, PaymentMeansCode};
+use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, PaymentMeansCode, TaxCategory};
 use ERechnungToolkit\Exceptions\{MalformedXmlException, UnsupportedFormatException};
 use ERechnungToolkit\Generators\ERechnungGenerator;
 use ERechnungToolkit\Parsers\ERechnungParser;
@@ -573,6 +573,9 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertEquals('12345', $seller->getPostalAddress()->getPostalCode());
         $this->assertEquals('[Seller city]', $seller->getPostalAddress()->getCity());
         $this->assertEquals('seller@email.de', $seller->getEndpointId());
+        // PartyLegalEntity/CompanyID ist die Registernummer (BT-30); früher stand sie als Steuernummer im Ergebnis.
+        $this->assertSame('[HRA-Eintrag]', $seller->getLegalRegistrationId());
+        $this->assertNull($seller->getTaxRegistrationId());
 
         // Buyer
         $buyer = $doc->getBuyer();
@@ -623,7 +626,7 @@ class ERechnungParserTest extends BaseTestCase {
         $this->assertSame('Max Müller', $seller->getContactName());
         $this->assertSame('rechnung@verkaeufer.de', $seller->getEndpointId());
         $this->assertSame('Berlin', $seller->getPostalAddress()?->getCity());
-        $this->assertSame('04011000-12345-67', $parsed->getBuyer()->getEndpointId());
+        $this->assertSame($this->leitwegId, $parsed->getBuyer()->getEndpointId());
     }
 
     public function test_ubl_credit_note_roundtrip_keeps_due_date_from_payment_means(): void {
@@ -662,6 +665,71 @@ class ERechnungParserTest extends BaseTestCase {
             $this->assertNull($seller->getVatId(), $syntax);
             $this->assertSame('201/987/65432', $seller->getTaxRegistrationId(), $syntax);
             $this->assertSame('201/987/65432', $seller->getLegalEntityId(), $syntax);
+        }
+    }
+
+    public function test_roundtrip_keeps_deliver_to_and_exemption_code(): void {
+        foreach (['ubl' => $this->generator->generateUbl(...), 'cii' => $this->generator->generateCii(...)] as $syntax => $generate) {
+            $parsed = $this->parser->parse($generate($this->intraCommunityXRechnung(fullDeliveryParty: true)));
+
+            $delivery = $parsed->getDeliveryParty();
+            $this->assertNotNull($delivery, $syntax);
+            $this->assertSame('Lager Rotterdam', $delivery->getName(), $syntax);
+            $this->assertSame('4012345000009', $delivery->getLegalEntityId(), $syntax);
+            $this->assertSame('0088', $delivery->getLegalEntityScheme(), $syntax);
+            $address = $delivery->getPostalAddress();
+            $this->assertNotNull($address, $syntax);
+            $this->assertSame('Havenweg 5', $address->getStreetName(), $syntax);
+            $this->assertSame('3011 AA', $address->getPostalCode(), $syntax);
+            $this->assertSame('Rotterdam', $address->getCity(), $syntax);
+            $this->assertSame('Zuid-Holland', $address->getCountrySubdivision(), $syntax);
+            $this->assertSame('NL', $address->getCountryCode(), $syntax);
+            $this->assertSame('2026-11-10', $parsed->getDeliveryDate()?->format('Y-m-d'), $syntax);
+
+            $subtotal = $parsed->getTaxTotal()?->getSubtotals()[0];
+            $this->assertNotNull($subtotal, $syntax);
+            $this->assertSame(TaxCategory::INTRA_COMMUNITY, $subtotal->getCategory(), $syntax);
+            $this->assertSame('Steuerfreie innergemeinschaftliche Lieferung', $subtotal->getExemptionReason(), $syntax);
+            $this->assertSame('VATEX-EU-IC', $subtotal->getExemptionReasonCode(), $syntax);
+        }
+    }
+
+    public function test_deliver_to_address_without_street_is_read(): void {
+        $document = ERechnungDocumentBuilder::create('INV-2026-020')
+            ->withSeller('Muster GmbH', 'DE123456789')
+            ->withBuyer('Kunde AG')
+            ->withDeliveryAddress(null, '75001', 'Paris', 'FR')
+            ->addLine('Ware', 1, 100.00)
+            ->build();
+
+        foreach (['ubl' => $this->generator->generateUbl($document), 'cii' => $this->generator->generateCii($document)] as $syntax => $xml) {
+            $delivery = $this->parser->parse($xml)->getDeliveryParty();
+            $this->assertNotNull($delivery, $syntax);
+            $this->assertSame('', $delivery->getName(), $syntax);
+            $address = $delivery->getPostalAddress();
+            $this->assertNotNull($address, $syntax);
+            $this->assertNull($address->getStreetName(), $syntax);
+            $this->assertSame('Paris', $address->getCity(), $syntax);
+            $this->assertSame('FR', $address->getCountryCode(), $syntax);
+        }
+
+        $withoutDelivery = $this->parser->parse($this->generator->generateUbl($this->fullXRechnung()));
+        $this->assertNull($withoutDelivery->getDeliveryParty(), 'Nur ein Lieferdatum ist keine Lieferpartei');
+    }
+
+    public function test_legal_registration_is_read_apart_from_the_tax_number(): void {
+        foreach (['ubl' => $this->generator->generateUbl(...), 'cii' => $this->generator->generateCii(...)] as $syntax => $generate) {
+            $reverseCharge = $this->parser->parse($generate($this->reverseChargeXRechnung()));
+            $this->assertSame('HRB 98765', $reverseCharge->getBuyer()->getLegalRegistrationId(), $syntax);
+            $this->assertNull($reverseCharge->getBuyer()->getTaxRegistrationId(), $syntax);
+            $this->assertNull($reverseCharge->getBuyer()->getVatId(), $syntax);
+            $this->assertSame('VATEX-EU-AE', $reverseCharge->getTaxTotal()?->getSubtotals()[0]->getExemptionReasonCode(), $syntax);
+
+            $notSubject = $this->parser->parse($generate($this->notSubjectXRechnung()));
+            $this->assertSame('HRB 12345', $notSubject->getSeller()->getLegalRegistrationId(), $syntax);
+            $this->assertSame('201/123/45678', $notSubject->getSeller()->getTaxRegistrationId(), $syntax);
+            $this->assertSame(0.0, $notSubject->getLines()[0]->getTaxPercent(), $syntax);
+            $this->assertSame('VATEX-EU-O', $notSubject->getTaxTotal()?->getSubtotals()[0]->getExemptionReasonCode(), $syntax);
         }
     }
 }

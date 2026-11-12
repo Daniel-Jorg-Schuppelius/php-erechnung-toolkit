@@ -88,6 +88,27 @@ enum TaxCategory: string {
     }
 
     /**
+     * Whether lines, allowances and charges of this category carry a VAT rate
+     * (BT-152, BT-96, BT-103). "Not subject to VAT" carries none (BR-O-05 to
+     * BR-O-07); its VAT breakdown keeps the rate 0, which XRechnung requires (BR-DE-14).
+     */
+    public function hasRate(): bool {
+        return $this !== self::OUT_OF_SCOPE;
+    }
+
+    /**
+     * Whether a VAT breakdown of this category needs an exemption reason
+     * (BT-120 or BT-121): BR-E-10, BR-AE-10, BR-IC-10, BR-G-10, BR-O-10.
+     * All other categories must not carry one (BR-S-10, BR-Z-10, BR-AF-10, BR-AG-10).
+     */
+    public function requiresExemptionReason(): bool {
+        return match ($this) {
+            self::EXEMPT, self::REVERSE_CHARGE, self::INTRA_COMMUNITY, self::EXPORT, self::OUT_OF_SCOPE => true,
+            default => false,
+        };
+    }
+
+    /**
      * Creates from UNCL5305 code string.
      */
     public static function fromCode(string $code): ?self {

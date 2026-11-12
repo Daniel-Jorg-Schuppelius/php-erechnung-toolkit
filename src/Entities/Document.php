@@ -16,8 +16,9 @@ use CommonToolkit\Enums\CurrencyCode;
 use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Contracts\Abstracts\DocumentAbstract;
-use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, NoteSubjectCode, PaymentMeansCode};
+use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, NoteSubjectCode, PaymentMeansCode, TaxCategory};
 use ERechnungToolkit\Generators\ERechnungGenerator;
+use InvalidArgumentException;
 
 /**
  * E-Rechnung Document (EN 16931 / XRechnung / ZUGFeRD).
@@ -47,6 +48,10 @@ final class Document extends DocumentAbstract {
 
     private ?string $taxExemptionReason = null;
     private ?string $taxExemptionReasonCode = null;
+
+    /** @var array<string, array{reason: string, code: ?string}> keyed by UNCL5305 code */
+    private array $categoryTaxExemptions = [];
+
     private ?string $remittanceInformation = null;
 
     /** @var SupportingDocument[] */
@@ -231,14 +236,57 @@ final class Document extends DocumentAbstract {
     /**
      * Sets the VAT exemption reason (BT-120) and optional code (BT-121).
      *
-     * The reason is propagated to all non-taxable tax subtotals on the next
-     * recalculation of the totals.
+     * The reason is propagated to every tax subtotal whose category requires
+     * one ({@see TaxCategory::requiresExemptionReason()}) and has no reason of
+     * its own ({@see setTaxExemptionFor()}); zero rated and standard rated
+     * subtotals stay without (BR-Z-10, BR-S-10).
      */
     public function setTaxExemption(string $reason, ?string $code = null): self {
         $this->taxExemptionReason = $reason;
         $this->taxExemptionReasonCode = $code;
         $this->recalculateTotals();
         return $this;
+    }
+
+    /**
+     * Sets the VAT exemption reason (BT-120) and optional code (BT-121) of one
+     * VAT category; it takes precedence over {@see setTaxExemption()}.
+     *
+     * @throws InvalidArgumentException for categories that must not carry a reason (S, Z, L, M)
+     */
+    public function setTaxExemptionFor(TaxCategory $category, string $reason, ?string $code = null): self {
+        if (!$category->requiresExemptionReason()) {
+            throw new InvalidArgumentException("VAT category {$category->value} carries no exemption reason (BR-S-10, BR-Z-10, BR-AF-10, BR-AG-10)");
+        }
+        $this->categoryTaxExemptions[$category->value] = ['reason' => $reason, 'code' => $code];
+        $this->recalculateTotals();
+        return $this;
+    }
+
+    /**
+     * Exemption reason text (BT-120) the VAT breakdown of this category carries.
+     */
+    public function getTaxExemptionReasonFor(TaxCategory $category): ?string {
+        return $this->exemptionFor($category)['reason'];
+    }
+
+    /**
+     * Exemption reason code (BT-121) the VAT breakdown of this category carries.
+     */
+    public function getTaxExemptionReasonCodeFor(TaxCategory $category): ?string {
+        return $this->exemptionFor($category)['code'];
+    }
+
+    /**
+     * @return array{reason: ?string, code: ?string}
+     */
+    private function exemptionFor(TaxCategory $category): array {
+        if (!$category->requiresExemptionReason()) {
+            return ['reason' => null, 'code' => null];
+        }
+
+        return $this->categoryTaxExemptions[$category->value]
+            ?? ['reason' => $this->taxExemptionReason, 'code' => $this->taxExemptionReasonCode];
     }
 
     /**
@@ -357,15 +405,17 @@ final class Document extends DocumentAbstract {
             return;
         }
 
-        // Group lines by tax category and rate
+        // Group lines by tax category and rate; "not subject to VAT" has no rate (BR-O-05) and no tax (BR-O-09).
         $zero = Money::zero($this->currency);
         $taxGroups = [];
         foreach ($this->lines as $line) {
-            $key = $line->getTaxCategory()->value . '_' . $line->getTaxPercent();
+            $category = $line->getTaxCategory();
+            $percent = $category->hasRate() ? $line->getTaxPercent() : 0.0;
+            $key = $category->value . '_' . $percent;
             if (!isset($taxGroups[$key])) {
                 $taxGroups[$key] = [
-                    'category' => $line->getTaxCategory(),
-                    'percent' => $line->getTaxPercent(),
+                    'category' => $category,
+                    'percent' => $percent,
                     'amount' => $zero,
                 ];
             }
@@ -374,39 +424,39 @@ final class Document extends DocumentAbstract {
 
         // Add document level allowances/charges to tax groups
         foreach ($this->allowanceCharges as $ac) {
-            if ($ac->getTaxCategory() !== null && $ac->getTaxPercent() !== null) {
-                $key = $ac->getTaxCategory()->value . '_' . $ac->getTaxPercent();
-                if (!isset($taxGroups[$key])) {
-                    $taxGroups[$key] = [
-                        'category' => $ac->getTaxCategory(),
-                        'percent' => $ac->getTaxPercent(),
-                        'amount' => $zero,
-                    ];
-                }
-                $amount = $ac->isCharge() ? $ac->getAmount() : $ac->getAmount()->negated();
-                $taxGroups[$key]['amount'] = $taxGroups[$key]['amount']->plus($amount);
+            $category = $ac->getTaxCategory();
+            if ($category === null) {
+                continue;
             }
+            $percent = $category->hasRate() ? $ac->getTaxPercent() : 0.0;
+            if ($percent === null) {
+                continue;
+            }
+            $key = $category->value . '_' . $percent;
+            if (!isset($taxGroups[$key])) {
+                $taxGroups[$key] = [
+                    'category' => $category,
+                    'percent' => $percent,
+                    'amount' => $zero,
+                ];
+            }
+            $amount = $ac->isCharge() ? $ac->getAmount() : $ac->getAmount()->negated();
+            $taxGroups[$key]['amount'] = $taxGroups[$key]['amount']->plus($amount);
         }
 
         // Create tax subtotals
         $subtotals = [];
         foreach ($taxGroups as $group) {
             $taxableAmount = $group['amount'];
-            $taxAmount = $taxableAmount->percentage($group['percent']);
-
-            // Apply the document-level exemption reason to non-taxable categories
-            // (e.g. E - exempt §19 Kleinunternehmer, AE - reverse charge).
-            $isExempt = !$group['category']->isTaxable() || $group['percent'] === 0.0;
-            $exemptionReason = $isExempt ? $this->taxExemptionReason : null;
-            $exemptionReasonCode = $isExempt ? $this->taxExemptionReasonCode : null;
+            $exemption = $this->exemptionFor($group['category']);
 
             $subtotals[] = new TaxSubtotal(
                 $taxableAmount,
-                $taxAmount,
+                $taxableAmount->percentage($group['percent']),
                 $group['category'],
                 $group['percent'],
-                $exemptionReason,
-                $exemptionReasonCode
+                $exemption['reason'],
+                $exemption['code']
             );
         }
 
@@ -622,7 +672,7 @@ final class Document extends DocumentAbstract {
             buyer: $buyer->withLeitwegId($leitwegId),
             currency: $currency,
             profile: ERechnungProfile::XRECHNUNG,
-            buyerReference: $leitwegId
+            buyerReference: LeitwegId::normalize($leitwegId)
         );
 
         return $doc;

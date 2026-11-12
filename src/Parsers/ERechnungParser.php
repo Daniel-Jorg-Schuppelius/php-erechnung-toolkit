@@ -291,6 +291,7 @@ final class ERechnungParser {
                 ?? $this->getUblValue("{$root}/cac:AdditionalDocumentReference[cbc:DocumentTypeCode='50']/cbc:ID"),
             paymentMeansCode: $this->parsePaymentMeansCode("{$root}/cac:PaymentMeans/cbc:PaymentMeansCode"),
             paymentTerms: $this->parseUblPaymentTerms("{$root}/cac:PaymentTerms"),
+            deliveryParty: $this->parseUblDeliveryParty("{$root}/cac:Delivery"),
             deliveryDate: $this->getUblDate("{$root}/cac:Delivery/cbc:ActualDeliveryDate"),
             precedingInvoiceReference: $this->getUblValue("{$root}/cac:BillingReference/cac:InvoiceDocumentReference/cbc:ID")
         );
@@ -409,6 +410,7 @@ final class ERechnungParser {
             contractReference: $this->getCiiValue("{$agreement}/ram:ContractReferencedDocument/{$p['referenceId']}"),
             paymentMeansCode: $paymentCode ? PaymentMeansCode::fromCode($paymentCode) : null,
             paymentTerms: $paymentTermsNote !== null ? $this->paymentTermsFromNote($paymentTermsNote) : null,
+            deliveryParty: $this->parseCiiShipToParty("{$transaction}/{$p['delivery']}/ram:ShipToTradeParty"),
             deliveryDate: $deliveryDateStr ? $this->parseCiiDate($deliveryDateStr) : null,
             precedingInvoiceReference: $this->getCiiValue("{$settlement}/ram:InvoiceReferencedDocument/{$p['referenceId']}")
         );
@@ -524,10 +526,11 @@ final class ERechnungParser {
         $address = $this->parseUblAddress("{$xpath}/cac:PostalAddress");
 
         // Nach Steuerschema unterscheiden: ohne USt-IdNr. stand sonst die
-        // Steuernummer (Schema FC) als USt-IdNr. im Ergebnis.
+        // Steuernummer (Schema FC) als USt-IdNr. im Ergebnis. PartyLegalEntity/CompanyID
+        // ist die Registernummer (BT-30/BT-47), keine Steuernummer.
         $vatId = $this->getUblValue("{$xpath}/cac:PartyTaxScheme[cac:TaxScheme/cbc:ID='VAT']/cbc:CompanyID");
-        $taxId = $this->getUblValue("{$xpath}/cac:PartyTaxScheme[cac:TaxScheme/cbc:ID!='VAT']/cbc:CompanyID")
-            ?? $this->getUblValue("{$xpath}/cac:PartyLegalEntity/cbc:CompanyID");
+        $taxId = $this->getUblValue("{$xpath}/cac:PartyTaxScheme[cac:TaxScheme/cbc:ID!='VAT']/cbc:CompanyID");
+        $legalRegistrationNode = $this->firstNode("{$xpath}/cac:PartyLegalEntity/cbc:CompanyID");
 
         $identifier = $this->getUblValue("{$xpath}/cac:PartyIdentification/cbc:ID");
         $identifierNode = $this->firstNode("{$xpath}/cac:PartyIdentification/cbc:ID");
@@ -555,18 +558,41 @@ final class ERechnungParser {
             endpointScheme: $endpointScheme,
             contactName: $contactName,
             contactPhone: $contactPhone,
-            contactEmail: $contactEmail
+            contactEmail: $contactEmail,
+            legalRegistrationId: $legalRegistrationNode !== null ? trim($legalRegistrationNode->textContent) : null,
+            legalRegistrationScheme: $this->attribute($legalRegistrationNode, 'schemeID')
         );
     }
 
+    /**
+     * Lieferpartei (BG-13): Ortskennung (BT-71), Anschrift (BG-15) und Name (BT-70).
+     */
+    private function parseUblDeliveryParty(string $xpath): ?Party {
+        $locationId = $this->firstNode("{$xpath}/cac:DeliveryLocation/cbc:ID");
+        $address = $this->parseUblAddress("{$xpath}/cac:DeliveryLocation/cac:Address");
+        $name = $this->getUblValue("{$xpath}/cac:DeliveryParty/cac:PartyName/cbc:Name");
+        if ($locationId === null && $address === null && $name === null) {
+            return null;
+        }
+
+        return new Party(
+            name: $name ?? '',
+            postalAddress: $address,
+            legalEntityId: $locationId !== null ? trim($locationId->textContent) : null,
+            legalEntityScheme: $this->attribute($locationId, 'schemeID')
+        );
+    }
+
+    /**
+     * Anschrift ab dem Element, nicht ab der Straße: BT-35, BT-50 und BT-75 sind optional.
+     */
     private function parseUblAddress(string $xpath): ?PostalAddress {
-        $street = $this->getUblValue("{$xpath}/cbc:StreetName");
-        if ($street === null) {
+        if ($this->firstNode($xpath) === null) {
             return null;
         }
 
         return new PostalAddress(
-            streetName: $street,
+            streetName: $this->getUblValue("{$xpath}/cbc:StreetName"),
             additionalStreetName: $this->getUblValue("{$xpath}/cbc:AdditionalStreetName"),
             postalCode: $this->getUblValue("{$xpath}/cbc:PostalZone"),
             city: $this->getUblValue("{$xpath}/cbc:CityName"),
@@ -674,14 +700,14 @@ final class ERechnungParser {
             $taxAmount = $this->money($this->getNodeValue($subNode, 'cbc:TaxAmount'), $currency);
             $categoryCode = $this->getNodeValue($subNode, 'cac:TaxCategory/cbc:ID');
             $percent = (float) ($this->getNodeValue($subNode, 'cac:TaxCategory/cbc:Percent') ?? '0');
-            $exemptionReason = $this->getNodeValue($subNode, 'cac:TaxCategory/cbc:TaxExemptionReason');
 
             $subtotals[] = new TaxSubtotal(
                 taxableAmount: $taxableAmount,
                 taxAmount: $taxAmount,
                 category: TaxCategory::tryFrom($categoryCode ?? 'S') ?? TaxCategory::STANDARD,
                 percent: $percent,
-                exemptionReason: $exemptionReason
+                exemptionReason: $this->getNodeValue($subNode, 'cac:TaxCategory/cbc:TaxExemptionReason'),
+                exemptionReasonCode: $this->getNodeValue($subNode, 'cac:TaxCategory/cbc:TaxExemptionReasonCode')
             );
         }
 
@@ -756,15 +782,8 @@ final class ERechnungParser {
 
     private function parseCiiParty(string $xpath): Party {
         $name = $this->getCiiValue("{$xpath}/ram:Name") ?? '';
-
-        $street = $this->getCiiValue("{$xpath}/ram:PostalTradeAddress/ram:LineOne");
-        $address = $street !== null ? new PostalAddress(
-            streetName: $street,
-            additionalStreetName: $this->getCiiValue("{$xpath}/ram:PostalTradeAddress/ram:LineTwo"),
-            postalCode: $this->getCiiValue("{$xpath}/ram:PostalTradeAddress/ram:PostcodeCode"),
-            city: $this->getCiiValue("{$xpath}/ram:PostalTradeAddress/ram:CityName"),
-            country: $this->getCiiValue("{$xpath}/ram:PostalTradeAddress/ram:CountryID")
-        ) : null;
+        $address = $this->parseCiiAddress("{$xpath}/ram:PostalTradeAddress");
+        $legalRegistrationNode = $this->firstNode("{$xpath}/ram:SpecifiedLegalOrganization/ram:ID");
 
         $vatId = $this->getCiiValue("{$xpath}/ram:SpecifiedTaxRegistration/ram:ID[@schemeID='VA']")
             ?? $this->getCiiValue("{$xpath}/ram:SpecifiedTaxRegistration/ram:ID[not(@schemeID)]");
@@ -796,7 +815,46 @@ final class ERechnungParser {
             endpointScheme: $endpointScheme,
             contactName: $contactName,
             contactPhone: $contactPhone,
-            contactEmail: $contactEmail
+            contactEmail: $contactEmail,
+            legalRegistrationId: $legalRegistrationNode !== null ? trim($legalRegistrationNode->textContent) : null,
+            legalRegistrationScheme: $this->attribute($legalRegistrationNode, 'schemeID')
+        );
+    }
+
+    /**
+     * Anschrift ab dem Element, nicht ab der Straße: BT-35, BT-50 und BT-75 sind optional.
+     */
+    private function parseCiiAddress(string $xpath): ?PostalAddress {
+        if ($this->firstNode($xpath) === null) {
+            return null;
+        }
+
+        return new PostalAddress(
+            streetName: $this->getCiiValue("{$xpath}/ram:LineOne"),
+            additionalStreetName: $this->getCiiValue("{$xpath}/ram:LineTwo"),
+            postalCode: $this->getCiiValue("{$xpath}/ram:PostcodeCode"),
+            city: $this->getCiiValue("{$xpath}/ram:CityName"),
+            countrySubdivision: $this->getCiiValue("{$xpath}/ram:CountrySubDivisionName"),
+            country: $this->getCiiValue("{$xpath}/ram:CountryID")
+        );
+    }
+
+    /**
+     * Lieferpartei (BG-13): Ortskennung (BT-71, mit Schema als GlobalID), Name
+     * (BT-70) und Anschrift (BG-15).
+     */
+    private function parseCiiShipToParty(string $xpath): ?Party {
+        if ($this->firstNode($xpath) === null) {
+            return null;
+        }
+        $globalId = $this->firstNode("{$xpath}/ram:GlobalID");
+        $locationId = $globalId ?? $this->firstNode("{$xpath}/ram:ID");
+
+        return new Party(
+            name: $this->getCiiValue("{$xpath}/ram:Name") ?? '',
+            postalAddress: $this->parseCiiAddress("{$xpath}/ram:PostalTradeAddress"),
+            legalEntityId: $locationId !== null ? trim($locationId->textContent) : null,
+            legalEntityScheme: $this->attribute($globalId, 'schemeID')
         );
     }
 
@@ -895,14 +953,14 @@ final class ERechnungParser {
             $taxableAmount = $this->money($this->getNodeValue($taxNode, 'ram:BasisAmount'), $currency);
             $categoryCode = $this->getNodeValue($taxNode, 'ram:CategoryCode');
             $percent = (float) ($this->getNodeValue($taxNode, $this->cii['percent']) ?? '0');
-            $exemptionReason = $this->getNodeValue($taxNode, 'ram:ExemptionReason');
 
             $subtotals[] = new TaxSubtotal(
                 taxableAmount: $taxableAmount,
                 taxAmount: $taxAmount,
                 category: TaxCategory::tryFrom($categoryCode ?? 'S') ?? TaxCategory::STANDARD,
                 percent: $percent,
-                exemptionReason: $exemptionReason
+                exemptionReason: $this->getNodeValue($taxNode, 'ram:ExemptionReason'),
+                exemptionReasonCode: $this->getNodeValue($taxNode, 'ram:ExemptionReasonCode')
             );
         }
 

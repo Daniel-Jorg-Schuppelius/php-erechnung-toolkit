@@ -89,6 +89,16 @@ class XRechnungConformanceTest extends BaseTestCase {
             'Unterlagen Gutschrift CII' => ['cii', 'supporting-credit'],
             'Extension UBL' => ['ubl', 'extension'],
             'Extension CII' => ['cii', 'extension'],
+            'Innergemeinschaftlich mit Lieferland UBL' => ['ubl', 'intra-community'],
+            'Innergemeinschaftlich mit Lieferland CII' => ['cii', 'intra-community'],
+            'Innergemeinschaftlich mit Lieferort UBL' => ['ubl', 'intra-community-location'],
+            'Innergemeinschaftlich mit Lieferort CII' => ['cii', 'intra-community-location'],
+            'Nicht steuerbar UBL' => ['ubl', 'not-subject'],
+            'Nicht steuerbar CII' => ['cii', 'not-subject'],
+            'Reverse Charge mit Registernummer UBL' => ['ubl', 'reverse-charge'],
+            'Reverse Charge mit Registernummer CII' => ['cii', 'reverse-charge'],
+            'Gemischte Kategorien UBL' => ['ubl', 'mixed'],
+            'Gemischte Kategorien CII' => ['cii', 'mixed'],
         ];
     }
 
@@ -104,6 +114,11 @@ class XRechnungConformanceTest extends BaseTestCase {
             'supporting' => $this->supportingDocumentXRechnung(),
             'supporting-credit' => $this->supportingDocumentXRechnung(creditNote: true),
             'extension' => $this->fullXRechnung(profile: ERechnungProfile::XRECHNUNG_EXTENSION),
+            'intra-community' => $this->intraCommunityXRechnung(),
+            'intra-community-location' => $this->intraCommunityXRechnung(fullDeliveryParty: true),
+            'not-subject' => $this->notSubjectXRechnung(),
+            'reverse-charge' => $this->reverseChargeXRechnung(),
+            'mixed' => $this->mixedCategoriesXRechnung(),
             default => $this->fullXRechnung(),
         };
         $xml = $this->generate($document, cii: $syntax === 'cii');
@@ -120,6 +135,21 @@ class XRechnungConformanceTest extends BaseTestCase {
         if ($kind === 'extension') {
             $this->assertStringContainsStringIgnoringCase('extension', (string) $result->getScenarioName());
         }
+    }
+
+    /**
+     * Gegenprobe: ohne Lieferanschrift weist KoSIT die innergemeinschaftliche
+     * Lieferung nach BR-IC-12 ab — der Fall, den die Lieferanschrift schließt.
+     */
+    public function test_intra_community_supply_without_delivery_country_is_rejected(): void {
+        if (!$this->validator->isAvailable()) {
+            $this->markTestSkipped('KoSIT-Validator nicht verfügbar (Java-Laufzeit fehlt).');
+        }
+
+        $result = $this->validator->validate($this->generate($this->intraCommunityXRechnung(withDeliveryAddress: false), cii: false));
+
+        $this->assertFalse($result->isValid());
+        $this->assertContains('BR-IC-12', array_map(static fn ($e): string => $e->getCode(), $result->getErrors()));
     }
 
     private function generate(Document $document, bool $cii): string {

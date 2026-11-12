@@ -18,14 +18,16 @@ use DOMNode;
 use DOMXPath;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
 use ERechnungToolkit\Entities\{Document, Party, PostalAddress};
-use ERechnungToolkit\Enums\ERechnungProfile;
+use ERechnungToolkit\Enums\{ERechnungProfile, TaxCategory};
 use ERechnungToolkit\Generators\ERechnungGenerator;
-use Tests\Contracts\BaseTestCase;
+use Tests\Contracts\{BaseTestCase, XRechnungDocuments};
 
 /**
  * Tests for E-Rechnung XML Generator.
  */
 class ERechnungGeneratorTest extends BaseTestCase {
+    use XRechnungDocuments;
+
     private ERechnungGenerator $generator;
     private Document $testDocument;
 
@@ -491,5 +493,140 @@ class ERechnungGeneratorTest extends BaseTestCase {
             ->addInvoiceLine($line)
             ->addDiscount(10.00)
             ->build();
+    }
+
+    public function test_deliver_to_address_and_location_are_emitted(): void {
+        $document = $this->intraCommunityXRechnung(fullDeliveryParty: true);
+
+        $ubl = $this->xpathFor($this->generator->generateUbl($document));
+        $delivery = '/ubl:Invoice/cac:Delivery';
+        $this->assertSame(['cbc:ActualDeliveryDate', 'cac:DeliveryLocation', 'cac:DeliveryParty'], $this->childNames($ubl, $delivery));
+        $this->assertSame('4012345000009', $ubl->evaluate("string({$delivery}/cac:DeliveryLocation/cbc:ID[@schemeID='0088'])"));
+        $this->assertSame('NL', $ubl->evaluate("string({$delivery}/cac:DeliveryLocation/cac:Address/cac:Country/cbc:IdentificationCode)"));
+        $this->assertSame('Rotterdam', $ubl->evaluate("string({$delivery}/cac:DeliveryLocation/cac:Address/cbc:CityName)"));
+        $this->assertSame('3011 AA', $ubl->evaluate("string({$delivery}/cac:DeliveryLocation/cac:Address/cbc:PostalZone)"));
+        $this->assertSame('Zuid-Holland', $ubl->evaluate("string({$delivery}/cac:DeliveryLocation/cac:Address/cbc:CountrySubentity)"));
+        $this->assertSame('Lager Rotterdam', $ubl->evaluate("string({$delivery}/cac:DeliveryParty/cac:PartyName/cbc:Name)"));
+
+        $cii = $this->xpathFor($this->generator->generateCii($document));
+        $delivery = '//ram:ApplicableHeaderTradeDelivery';
+        $this->assertSame(['ram:ShipToTradeParty', 'ram:ActualDeliverySupplyChainEvent'], $this->childNames($cii, $delivery));
+        $this->assertSame('4012345000009', $cii->evaluate("string({$delivery}/ram:ShipToTradeParty/ram:GlobalID[@schemeID='0088'])"));
+        $this->assertSame('Lager Rotterdam', $cii->evaluate("string({$delivery}/ram:ShipToTradeParty/ram:Name)"));
+        $this->assertSame('NL', $cii->evaluate("string({$delivery}/ram:ShipToTradeParty/ram:PostalTradeAddress/ram:CountryID)"));
+        $this->assertSame('Zuid-Holland', $cii->evaluate("string({$delivery}/ram:ShipToTradeParty/ram:PostalTradeAddress/ram:CountrySubDivisionName)"));
+    }
+
+    public function test_deliver_to_address_without_name_leaves_out_the_delivery_party(): void {
+        $document = ERechnungDocumentBuilder::create('INV-2026-010')
+            ->withSeller('Muster GmbH', 'DE123456789')
+            ->withBuyer('Kunde AG')
+            ->withDeliveryAddress(null, '75001', 'Paris', 'FR')
+            ->addLine('Ware', 1, 100.00)
+            ->build();
+
+        $ubl = $this->xpathFor($this->generator->generateUbl($document));
+        $this->assertSame(['cac:DeliveryLocation'], $this->childNames($ubl, '/ubl:Invoice/cac:Delivery'));
+        $this->assertSame(0.0, $ubl->evaluate('count(//cac:DeliveryLocation/cac:Address/cbc:StreetName)'));
+        $this->assertSame('FR', $ubl->evaluate('string(//cac:DeliveryLocation/cac:Address/cac:Country/cbc:IdentificationCode)'));
+
+        $cii = $this->xpathFor($this->generator->generateCii($document));
+        $this->assertSame(['ram:PostalTradeAddress'], $this->childNames($cii, '//ram:ShipToTradeParty'));
+    }
+
+    public function test_minimum_profile_leaves_out_the_ship_to_party(): void {
+        $document = ERechnungDocumentBuilder::zugferd('ZF-2026-010', ERechnungProfile::MINIMUM)
+            ->withSeller('Muster GmbH', 'DE123456789')
+            ->withBuyer('Kunde AG')
+            ->withDeliveryAddress('Havenweg 5', '3011 AA', 'Rotterdam', 'NL')
+            ->addLine('Ware', 1, 100.00)
+            ->build();
+
+        $this->assertStringNotContainsString('ShipToTradeParty', $this->generator->generateCii($document));
+    }
+
+    public function test_not_subject_to_vat_carries_rates_only_in_the_breakdown(): void {
+        $document = $this->notSubjectXRechnung();
+
+        $ubl = $this->xpathFor($this->generator->generateUbl($document));
+        $this->assertSame(0.0, $ubl->evaluate('count(//cac:ClassifiedTaxCategory/cbc:Percent)'), 'BR-O-05');
+        $this->assertSame(0.0, $ubl->evaluate('count(/ubl:Invoice/cac:AllowanceCharge/cac:TaxCategory/cbc:Percent)'), 'BR-O-06, BR-O-07');
+        $this->assertSame(2.0, $ubl->evaluate("count(/ubl:Invoice/cac:AllowanceCharge/cac:TaxCategory[cbc:ID='O'])"));
+        $this->assertSame('0.00', $ubl->evaluate('string(//cac:TaxSubtotal/cac:TaxCategory/cbc:Percent)'), 'BR-DE-14');
+        $this->assertSame('VATEX-EU-O', $ubl->evaluate('string(//cac:TaxSubtotal/cac:TaxCategory/cbc:TaxExemptionReasonCode)'));
+
+        $cii = $this->xpathFor($this->generator->generateCii($document));
+        $this->assertSame(0.0, $cii->evaluate('count(//ram:SpecifiedLineTradeSettlement/ram:ApplicableTradeTax/ram:RateApplicablePercent)'));
+        $this->assertSame(0.0, $cii->evaluate('count(//ram:CategoryTradeTax/ram:RateApplicablePercent)'));
+        $this->assertSame('0.00', $cii->evaluate('string(//ram:ApplicableHeaderTradeSettlement/ram:ApplicableTradeTax/ram:RateApplicablePercent)'));
+        $this->assertSame('VATEX-EU-O', $cii->evaluate('string(//ram:ApplicableHeaderTradeSettlement/ram:ApplicableTradeTax/ram:ExemptionReasonCode)'));
+    }
+
+    public function test_legal_registration_identifiers_are_emitted(): void {
+        $document = ERechnungDocumentBuilder::create('INV-2026-011')
+            ->withSeller('Muster GmbH', 'DE123456789')
+            ->withSellerLegalRegistration('HRB 12345')
+            ->withBuyer('Bau GmbH')
+            ->withBuyerLegalRegistration('5790000435968', '0088')
+            ->addLine('Bauleistung', 1, 100.00, 0.0, null, TaxCategory::REVERSE_CHARGE)
+            ->withTaxExemptionReason('Steuerschuldnerschaft des Leistungsempfängers')
+            ->build();
+
+        $ubl = $this->xpathFor($this->generator->generateUbl($document));
+        $buyer = '/ubl:Invoice/cac:AccountingCustomerParty/cac:Party';
+        $this->assertSame('5790000435968', $ubl->evaluate("string({$buyer}/cac:PartyLegalEntity/cbc:CompanyID[@schemeID='0088'])"));
+        $this->assertSame(0.0, $ubl->evaluate("count({$buyer}/cac:PartyTaxScheme)"), 'BT-47 ist keine Steuernummer');
+        $this->assertSame('HRB 12345', $ubl->evaluate('string(/ubl:Invoice/cac:AccountingSupplierParty/cac:Party/cac:PartyLegalEntity/cbc:CompanyID[not(@schemeID)])'));
+
+        $cii = $this->xpathFor($this->generator->generateCii($document));
+        $this->assertSame(['ram:Name', 'ram:SpecifiedLegalOrganization'], $this->childNames($cii, '//ram:BuyerTradeParty'));
+        $this->assertSame('5790000435968', $cii->evaluate("string(//ram:BuyerTradeParty/ram:SpecifiedLegalOrganization/ram:ID[@schemeID='0088'])"));
+        $this->assertSame('HRB 12345', $cii->evaluate('string(//ram:SellerTradeParty/ram:SpecifiedLegalOrganization/ram:ID)'));
+    }
+
+    public function test_exemption_reason_per_category_skips_zero_and_standard_rate(): void {
+        $document = $this->mixedCategoriesXRechnung();
+
+        $ubl = $this->xpathFor($this->generator->generateUbl($document));
+        $category = static fn (string $code): string => "//cac:TaxSubtotal/cac:TaxCategory[cbc:ID='{$code}']";
+        foreach (['S', 'Z'] as $code) {
+            $this->assertSame(0.0, $ubl->evaluate("count({$category($code)}/cbc:TaxExemptionReason | {$category($code)}/cbc:TaxExemptionReasonCode)"), $code);
+        }
+        $this->assertSame('Steuerfreie Heilbehandlung nach § 4 Nr. 14 UStG', $ubl->evaluate("string({$category('E')}/cbc:TaxExemptionReason)"));
+        $this->assertSame('VATEX-EU-132-1C', $ubl->evaluate("string({$category('E')}/cbc:TaxExemptionReasonCode)"));
+
+        $cii = $this->xpathFor($this->generator->generateCii($document));
+        $tax = static fn (string $code): string => "//ram:ApplicableHeaderTradeSettlement/ram:ApplicableTradeTax[ram:CategoryCode='{$code}']";
+        foreach (['S', 'Z'] as $code) {
+            $this->assertSame(0.0, $cii->evaluate("count({$tax($code)}/ram:ExemptionReason | {$tax($code)}/ram:ExemptionReasonCode)"), $code);
+        }
+        $this->assertSame('VATEX-EU-132-1C', $cii->evaluate("string({$tax('E')}/ram:ExemptionReasonCode)"));
+    }
+
+    private function xpathFor(string $xml): DOMXPath {
+        $dom = new DOMDocument;
+        $dom->loadXML($xml);
+        $xpath = new DOMXPath($dom);
+        $xpath->registerNamespace('ubl', 'urn:oasis:names:specification:ubl:schema:xsd:Invoice-2');
+        $xpath->registerNamespace('cac', 'urn:oasis:names:specification:ubl:schema:xsd:CommonAggregateComponents-2');
+        $xpath->registerNamespace('cbc', 'urn:oasis:names:specification:ubl:schema:xsd:CommonBasicComponents-2');
+        $xpath->registerNamespace('rsm', 'urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100');
+        $xpath->registerNamespace('ram', 'urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100');
+
+        return $xpath;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function childNames(DOMXPath $xpath, string $query): array {
+        $nodes = $xpath->query("{$query}/*");
+        $this->assertNotFalse($nodes, $query);
+        $names = [];
+        foreach ($nodes as $node) {
+            $names[] = $node->nodeName;
+        }
+
+        return $names;
     }
 }

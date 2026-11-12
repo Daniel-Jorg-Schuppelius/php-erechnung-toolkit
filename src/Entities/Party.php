@@ -33,7 +33,9 @@ final class Party {
         private ?string $iban = null,
         private ?string $bic = null,
         private ?string $bankName = null,
-        private ?string $paymentAccountName = null
+        private ?string $paymentAccountName = null,
+        private ?string $legalRegistrationId = null,
+        private ?string $legalRegistrationScheme = null
     ) {
         // Format IBAN if provided (remove spaces, uppercase)
         if ($this->iban !== null) {
@@ -82,6 +84,21 @@ final class Party {
      */
     public function getLegalEntityScheme(): ?string {
         return $this->legalEntityScheme;
+    }
+
+    /**
+     * Legal registration identifier (BT-30 seller, BT-47 buyer), e.g. the
+     * commercial register number — not the tax number (BT-32).
+     */
+    public function getLegalRegistrationId(): ?string {
+        return $this->legalRegistrationId;
+    }
+
+    /**
+     * ISO 6523 scheme of the legal registration identifier (BT-30-1, BT-47-1).
+     */
+    public function getLegalRegistrationScheme(): ?string {
+        return $this->legalRegistrationScheme;
     }
 
     /**
@@ -157,10 +174,11 @@ final class Party {
     }
 
     /**
-     * Creates a party with Leitweg-ID (for XRechnung to public sector).
+     * Creates a party with Leitweg-ID (for XRechnung to public sector), normalized
+     * by {@see LeitwegId::normalize()}; {@see LeitwegId::of()} checks it.
      */
     public function withLeitwegId(string $leitwegId): self {
-        return $this->withEndpoint($leitwegId, '0204');
+        return $this->withEndpoint(LeitwegId::normalize($leitwegId), LeitwegId::ICD);
     }
 
     /**
@@ -172,6 +190,18 @@ final class Party {
         $clone = clone $this;
         $clone->legalEntityId = $identifier;
         $clone->legalEntityScheme = $scheme;
+        return $clone;
+    }
+
+    /**
+     * Rechtliche Registrierung (BT-30 beim Verkäufer, BT-47 beim Käufer),
+     * optional mit ISO-6523-Schema. Beim Käufer ohne USt-IdNr. ersetzt sie in
+     * der Steuerschuldumkehr die USt-IdNr. (BR-AE-02 bis BR-AE-04).
+     */
+    public function withLegalRegistration(string $identifier, ?string $scheme = null): self {
+        $clone = clone $this;
+        $clone->legalRegistrationId = $identifier;
+        $clone->legalRegistrationScheme = $scheme;
         return $clone;
     }
 

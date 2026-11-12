@@ -13,9 +13,13 @@ declare(strict_types=1);
 namespace Tests\Builders;
 
 use CommonToolkit\Enums\{CountryCode, CurrencyCode};
+use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
-use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, PaymentMeansCode, UnitCode};
+use ERechnungToolkit\Entities\{AllowanceCharge, Document, Party, PostalAddress};
+use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, PaymentMeansCode, TaxCategory, UnitCode};
+use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Contracts\BaseTestCase;
 
 /**
@@ -303,5 +307,134 @@ class ERechnungDocumentBuilderTest extends BaseTestCase {
 
         // Gross: 2508.95 + 476.70 = 2985.65
         $this->assertSame('2985.65', $document->getGrossAmount()->getAmount());
+    }
+
+    public function test_builder_with_delivery_address_and_legal_registrations(): void {
+        $document = $this->minimalBuilder()
+            ->withSellerLegalRegistration('HRB 12345', '0002')
+            ->withBuyerLegalRegistration('HRB 98765')
+            ->withDeliveryAddress('Havenweg 5', '3011 AA', 'Rotterdam', CountryCode::Netherlands, 'Tor 3', 'Lager Rotterdam')
+            ->build();
+
+        $delivery = $document->getDeliveryParty();
+        $this->assertNotNull($delivery);
+        $this->assertSame('Lager Rotterdam', $delivery->getName());
+        $address = $delivery->getPostalAddress();
+        $this->assertNotNull($address);
+        $this->assertSame('NL', $address->getCountryCode());
+        $this->assertSame('Tor 3', $address->getAdditionalStreetName());
+        $this->assertSame('HRB 12345', $document->getSeller()->getLegalRegistrationId());
+        $this->assertSame('0002', $document->getSeller()->getLegalRegistrationScheme());
+        $this->assertSame('HRB 98765', $document->getBuyer()->getLegalRegistrationId());
+        $this->assertNull($document->getBuyer()->getLegalRegistrationScheme());
+        $this->assertNull($document->getBuyer()->getTaxRegistrationId());
+    }
+
+    public function test_builder_with_delivery_party(): void {
+        $party = new Party(name: 'Baustelle Nord', postalAddress: new PostalAddress(city: 'Hamburg', postalCode: '20095', country: 'DE'), legalEntityId: '4012345000009', legalEntityScheme: '0088');
+
+        $this->assertSame($party, $this->minimalBuilder()->withDeliveryParty($party)->build()->getDeliveryParty());
+    }
+
+    public function test_delivery_address_needs_an_iso_country_code(): void {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('BT-80');
+        $this->minimalBuilder()->withDeliveryAddress('Havenweg 5', '3011 AA', 'Rotterdam', 'Niederlande');
+    }
+
+    /**
+     * @return array<string, array{TaxCategory}>
+     */
+    public static function categoriesWithoutReason(): array {
+        return [
+            'S' => [TaxCategory::STANDARD],
+            'Z' => [TaxCategory::ZERO_RATED],
+            'L' => [TaxCategory::IGIC],
+            'M' => [TaxCategory::IPSI],
+        ];
+    }
+
+    #[DataProvider('categoriesWithoutReason')]
+    public function test_exemption_reason_is_refused_for_categories_without_one(TaxCategory $category): void {
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage("VAT category {$category->value}");
+        $this->minimalBuilder()->withTaxExemptionReasonFor($category, 'Grund');
+    }
+
+    public function test_exemption_reason_per_category_wins_over_the_common_reason(): void {
+        $document = $this->minimalBuilder()
+            ->withTaxExemptionReason('Steuerfrei', 'VATEX-EU-132')
+            ->withTaxExemptionReasonFor(TaxCategory::REVERSE_CHARGE, 'Steuerschuldnerschaft des Leistungsempfängers', 'VATEX-EU-AE')
+            ->addLine('Bauleistung', 1, 100.00, 0.0, null, TaxCategory::REVERSE_CHARGE)
+            ->addLine('Heilbehandlung', 1, 50.00, 0.0, null, TaxCategory::EXEMPT)
+            ->addLine('Photovoltaik', 1, 80.00, 0.0, null, TaxCategory::ZERO_RATED)
+            ->build();
+
+        $reasons = $this->reasonsByCategory($document);
+        $this->assertSame(['Steuerschuldnerschaft des Leistungsempfängers', 'VATEX-EU-AE'], $reasons['AE']);
+        $this->assertSame(['Steuerfrei', 'VATEX-EU-132'], $reasons['E']);
+        // BR-Z-10: früher erhielt auch der Nullsatz den Grund für alle Kategorien.
+        $this->assertSame([null, null], $reasons['Z']);
+        $this->assertNull($document->getTaxExemptionReasonFor(TaxCategory::ZERO_RATED));
+        $this->assertSame('VATEX-EU-AE', $document->getTaxExemptionReasonCodeFor(TaxCategory::REVERSE_CHARGE));
+    }
+
+    public function test_exemption_reason_per_category_survives_a_later_allowance(): void {
+        $document = $this->minimalBuilder()
+            ->withTaxExemptionReasonFor(TaxCategory::OUT_OF_SCOPE, 'Nicht steuerbar', 'VATEX-EU-O')
+            ->addLine('Beratung', 2, 100.00, 0.0, UnitCode::HOUR, TaxCategory::OUT_OF_SCOPE)
+            ->build();
+        $document->addAllowanceCharge(AllowanceCharge::discount(Money::of('10.00', CurrencyCode::Euro), 'Rabatt', taxCategory: TaxCategory::OUT_OF_SCOPE, taxPercent: null));
+
+        $subtotals = $document->getTaxTotal()?->getSubtotals() ?? [];
+        $this->assertCount(1, $subtotals, 'Rabatt ohne Satz fällt in denselben Aufriss');
+        $this->assertSame('190.00', $subtotals[0]->getTaxableAmount()->getAmount());
+        $this->assertSame('VATEX-EU-O', $subtotals[0]->getExemptionReasonCode());
+    }
+
+    public function test_not_subject_lines_carry_no_tax_even_with_a_rate(): void {
+        $document = $this->minimalBuilder()
+            ->addLine('Beratung', 1, 100.00, 19.0, null, TaxCategory::OUT_OF_SCOPE)
+            ->addLine('Reisekosten', 1, 50.00, 0.0, null, TaxCategory::OUT_OF_SCOPE)
+            ->build();
+
+        $subtotals = $document->getTaxTotal()?->getSubtotals() ?? [];
+        $this->assertCount(1, $subtotals);
+        $this->assertSame(0.0, $subtotals[0]->getPercent());
+        $this->assertSame('0.00', $document->getTaxAmount()->getAmount());
+    }
+
+    public function test_leitweg_id_is_normalized_but_not_rejected(): void {
+        $document = ERechnungDocumentBuilder::xrechnung('XR-1', ' 991-33333test-33 ')
+            ->withSeller('Muster GmbH', 'DE123456789')
+            ->withBuyer('Bundesamt')
+            ->withBuyerLeitwegId("991\u{2013}33333test\u{2013}33")
+            ->addLine('Beratung', 1, 100.00)
+            ->build();
+
+        $this->assertSame('991-33333TEST-33', $document->getBuyerReference());
+        $this->assertSame('991-33333TEST-33', $document->getBuyer()->getEndpointId());
+        $this->assertSame('0204', $document->getBuyer()->getEndpointScheme());
+        // Bestehende Aufrufer mit falscher Prüfziffer bleiben lauffähig; der Validator warnt.
+        $this->assertSame('04011000-12345-67', ERechnungDocumentBuilder::xrechnung('XR-2', '04011000-12345-67')->withSeller('A', 'DE1')->withBuyer('B')->build()->getBuyerReference());
+    }
+
+    private function minimalBuilder(): ERechnungDocumentBuilder {
+        return ERechnungDocumentBuilder::create('INV-2026-100')
+            ->withIssueDate(new DateTimeImmutable('2026-11-12'))
+            ->withSeller('Muster GmbH', 'DE123456789')
+            ->withBuyer('Kunde AG');
+    }
+
+    /**
+     * @return array<string, array{?string, ?string}>
+     */
+    private function reasonsByCategory(Document $document): array {
+        $reasons = [];
+        foreach ($document->getTaxTotal()?->getSubtotals() ?? [] as $subtotal) {
+            $reasons[$subtotal->getCategory()->value] = [$subtotal->getExemptionReason(), $subtotal->getExemptionReasonCode()];
+        }
+
+        return $reasons;
     }
 }

@@ -351,4 +351,21 @@ class ERechnungDocumentTest extends BaseTestCase {
         $this->assertSame('0.00', $reverseCharge->getTaxAmount()->getAmount());
         $this->assertTrue($reverseCharge->isExempt());
     }
+
+    public function test_document_refuses_an_exemption_reason_for_zero_rated(): void {
+        $document = new Document('INV-1', new DateTimeImmutable('2026-11-12'), InvoiceType::INVOICE, $this->seller, $this->buyer, CurrencyCode::Euro);
+
+        $this->expectException(\InvalidArgumentException::class);
+        $document->setTaxExemptionFor(TaxCategory::ZERO_RATED, 'Nullsatz');
+    }
+
+    public function test_party_keeps_the_legal_registration_apart_from_the_identifier(): void {
+        $party = $this->buyer->withIdentifier('K-4711')->withLegalRegistration('HRB 98765', '0002');
+
+        $this->assertSame('K-4711', $party->getLegalEntityId());
+        $this->assertSame('HRB 98765', $party->getLegalRegistrationId());
+        $this->assertSame('0002', $party->getLegalRegistrationScheme());
+        $this->assertNull($this->buyer->getLegalRegistrationId(), 'with…() liefert eine Kopie');
+        $this->assertSame('991-33333TEST-33', $this->buyer->withLeitwegId(' 991-33333test-33')->getEndpointId());
+    }
 }

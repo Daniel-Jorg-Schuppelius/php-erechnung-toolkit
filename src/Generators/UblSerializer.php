@@ -105,9 +105,15 @@ final class UblSerializer {
             $partyElem->appendChild($partyTaxSchemeFc);
         }
 
-        // PartyLegalEntity
+        // PartyLegalEntity with the legal registration identifier (BT-30/BT-47)
         $partyLegal = $dom->createElementNS(self::CAC_NS, 'cac:PartyLegalEntity');
         $this->element($dom, $partyLegal, 'cbc:RegistrationName', $party->getName());
+        if ($party->getLegalRegistrationId() !== null) {
+            $companyId = $this->element($dom, $partyLegal, 'cbc:CompanyID', $party->getLegalRegistrationId());
+            if ($party->getLegalRegistrationScheme() !== null) {
+                $companyId->setAttribute('schemeID', $party->getLegalRegistrationScheme());
+            }
+        }
         $partyElem->appendChild($partyLegal);
 
         // Contact
@@ -129,10 +135,11 @@ final class UblSerializer {
     }
 
     /**
-     * Builds a cac:PostalAddress element.
+     * Builds a cac:PostalAddress element, or another element of the UBL
+     * AddressType such as the deliver-to address `cac:Address` (BG-15).
      */
-    public function postalAddress(DOMDocument $dom, PostalAddress $address): DOMElement {
-        $postalAddr = $dom->createElementNS(self::CAC_NS, 'cac:PostalAddress');
+    public function postalAddress(DOMDocument $dom, PostalAddress $address, string $tag = 'cac:PostalAddress'): DOMElement {
+        $postalAddr = $dom->createElementNS(self::CAC_NS, $tag);
 
         if ($address->getStreetName() !== null) {
             $this->element($dom, $postalAddr, 'cbc:StreetName', $address->getStreetName());
@@ -161,7 +168,7 @@ final class UblSerializer {
     /**
      * Builds a cac:AllowanceCharge element (document or line level). Line-level
      * allowances pass `$withTax = false`: EN 16931 carries no tax category there
-     * (UBL-CR-558).
+     * (UBL-CR-558). "Not subject to VAT" carries no rate (BR-O-06, BR-O-07).
      */
     public function allowanceCharge(DOMDocument $dom, AllowanceCharge $ac, string $currency, bool $withTax = true): DOMElement {
         $elem = $dom->createElementNS(self::CAC_NS, 'cac:AllowanceCharge');
@@ -190,7 +197,7 @@ final class UblSerializer {
         if ($withTax && $ac->getTaxCategory() !== null) {
             $taxCategory = $dom->createElementNS(self::CAC_NS, 'cac:TaxCategory');
             $this->element($dom, $taxCategory, 'cbc:ID', $ac->getTaxCategory()->value);
-            if ($ac->getTaxPercent() !== null) {
+            if ($ac->getTaxPercent() !== null && $ac->getTaxCategory()->hasRate()) {
                 $this->element($dom, $taxCategory, 'cbc:Percent', $this->amount($ac->getTaxPercent()));
             }
             $taxScheme = $dom->createElementNS(self::CAC_NS, 'cac:TaxScheme');

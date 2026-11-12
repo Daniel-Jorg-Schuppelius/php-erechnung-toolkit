@@ -15,7 +15,7 @@ namespace ERechnungToolkit\Builders;
 use CommonToolkit\Enums\{CountryCode, CurrencyCode};
 use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
-use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party, PaymentTerms, Period, PostalAddress, SupportingDocument};
+use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, LeitwegId, Party, PaymentTerms, Period, PostalAddress, SupportingDocument};
 use ERechnungToolkit\Enums\{ERechnungProfile, InvoiceType, NoteSubjectCode, PaymentMeansCode, TaxCategory, UnitCode};
 use ERechnungToolkit\Traits\MoneyInputTrait;
 use ERRORToolkit\Traits\ErrorLog;
@@ -62,12 +62,18 @@ final class ERechnungDocumentBuilder {
     private ?string $sellerEndpointScheme = null;
     private ?string $sellerIdentifier = null;
     private ?string $sellerIdentifierScheme = null;
+    private ?string $sellerLegalRegistrationId = null;
+    private ?string $sellerLegalRegistrationScheme = null;
 
     private ?string $buyerName = null;
     private ?string $buyerVatId = null;
     private ?PostalAddress $buyerAddress = null;
     private ?string $buyerEndpointId = null;
     private ?string $buyerEndpointScheme = null;
+    private ?string $buyerLegalRegistrationId = null;
+    private ?string $buyerLegalRegistrationScheme = null;
+
+    private ?Party $deliveryParty = null;
 
     private ?DateTimeImmutable $dueDate = null;
     private ?DateTimeImmutable $taxPointDate = null;
@@ -82,6 +88,9 @@ final class ERechnungDocumentBuilder {
     private ?string $remittanceInformation = null;
     private ?string $taxExemptionReason = null;
     private ?string $taxExemptionReasonCode = null;
+
+    /** @var array<string, array{category: TaxCategory, reason: string, code: ?string}> */
+    private array $categoryTaxExemptions = [];
 
     /** @var InvoiceLine[] */
     private array $lines = [];
@@ -114,12 +123,13 @@ final class ERechnungDocumentBuilder {
     }
 
     /**
-     * Creates a builder for an XRechnung invoice.
+     * Creates a builder for an XRechnung invoice; the Leitweg-ID (BT-10) is
+     * normalized by {@see LeitwegId::normalize()}, not checked.
      */
     public static function xrechnung(string $id, string $leitwegId): self {
         return (new self($id))
             ->withProfile(ERechnungProfile::XRECHNUNG)
-            ->withBuyerReference($leitwegId);
+            ->withBuyerReference(LeitwegId::normalize($leitwegId));
     }
 
     /**
@@ -294,6 +304,16 @@ final class ERechnungDocumentBuilder {
         return $this;
     }
 
+    /**
+     * Rechtliche Registrierung des Verkäufers (BT-30), etwa die
+     * Handelsregisternummer, optional mit ISO-6523-Schema (BT-30-1).
+     */
+    public function withSellerLegalRegistration(string $identifier, ?string $scheme = null): self {
+        $this->sellerLegalRegistrationId = $identifier;
+        $this->sellerLegalRegistrationScheme = $scheme;
+        return $this;
+    }
+
     // === Buyer ===
 
     public function withBuyer(string $name, ?string $vatId = null): self {
@@ -326,12 +346,71 @@ final class ERechnungDocumentBuilder {
     }
 
     /**
-     * Sets buyer with Leitweg-ID (for XRechnung).
+     * Rechtliche Registrierung des Käufers (BT-47), optional mit
+     * ISO-6523-Schema (BT-47-1). Bei Steuerschuldumkehr (§ 13b UStG) an einen
+     * Käufer ohne USt-IdNr. ersetzt sie BT-48 (BR-AE-02 bis BR-AE-04).
+     */
+    public function withBuyerLegalRegistration(string $identifier, ?string $scheme = null): self {
+        $this->buyerLegalRegistrationId = $identifier;
+        $this->buyerLegalRegistrationScheme = $scheme;
+        return $this;
+    }
+
+    /**
+     * Sets buyer with Leitweg-ID (for XRechnung) as electronic address (BT-49)
+     * and buyer reference (BT-10), normalized by {@see LeitwegId::normalize()}.
+     * {@see \ERechnungToolkit\Validators\DocumentRulesValidator} warns about an invalid one.
      */
     public function withBuyerLeitwegId(string $leitwegId): self {
+        $leitwegId = LeitwegId::normalize($leitwegId);
         $this->buyerEndpointId = $leitwegId;
-        $this->buyerEndpointScheme = '0204';
+        $this->buyerEndpointScheme = LeitwegId::ICD;
         $this->buyerReference = $leitwegId;
+        return $this;
+    }
+
+    // === Delivery ===
+
+    /**
+     * Lieferanschrift (BG-15) mit Lieferland (BT-80), optional mit dem Namen
+     * des Empfängers (BT-70). Ersetzt eine zuvor gesetzte Lieferpartei.
+     *
+     * Das Lieferland ist Pflicht (BR-57) und bei innergemeinschaftlicher
+     * Lieferung gefordert (BR-IC-12); XRechnung verlangt zur Anschrift auch Ort
+     * und Postleitzahl (BR-DE-10, BR-DE-11).
+     *
+     * @throws \InvalidArgumentException if the country is no ISO 3166-1 alpha-2 code
+     */
+    public function withDeliveryAddress(
+        ?string $street,
+        ?string $postalCode,
+        ?string $city,
+        CountryCode|string $country,
+        ?string $additionalLine = null,
+        ?string $name = null
+    ): self {
+        if (is_string($country) && CountryCode::tryFrom($country) === null) {
+            self::logErrorAndThrow(\InvalidArgumentException::class, "Deliver to country code (BT-80) is no ISO 3166-1 alpha-2 code: {$country}");
+        }
+        $this->deliveryParty = new Party(
+            name: $name ?? '',
+            postalAddress: new PostalAddress(
+                streetName: $street,
+                additionalStreetName: $additionalLine,
+                postalCode: $postalCode,
+                city: $city,
+                country: $country
+            )
+        );
+        return $this;
+    }
+
+    /**
+     * Lieferpartei (BG-13): Name (BT-70), Ortskennung aus der Parteikennung
+     * mit Schema (BT-71) und Anschrift (BG-15). Ein leerer Name entfällt.
+     */
+    public function withDeliveryParty(Party $party): self {
+        $this->deliveryParty = $party;
         return $this;
     }
 
@@ -390,6 +469,23 @@ final class ERechnungDocumentBuilder {
     public function withTaxExemptionReason(string $reason, ?string $code = null): self {
         $this->taxExemptionReason = $reason;
         $this->taxExemptionReasonCode = $code;
+        return $this;
+    }
+
+    /**
+     * Befreiungsgrund (BT-120) und optionaler Code (BT-121) für den
+     * Steueraufriss einer Kategorie; er geht {@see withTaxExemptionReason()} vor.
+     *
+     * Nur E, AE, K, G und O tragen einen Grund; S, Z, L und M bleiben ohne
+     * (BR-S-10, BR-Z-10, BR-AF-10, BR-AG-10).
+     *
+     * @throws \InvalidArgumentException for a category that carries no exemption reason
+     */
+    public function withTaxExemptionReasonFor(TaxCategory $category, string $reason, ?string $code = null): self {
+        if (!$category->requiresExemptionReason()) {
+            self::logErrorAndThrow(\InvalidArgumentException::class, "VAT category {$category->value} carries no exemption reason (BR-S-10, BR-Z-10, BR-AF-10, BR-AG-10)");
+        }
+        $this->categoryTaxExemptions[$category->value] = ['category' => $category, 'reason' => $reason, 'code' => $code];
         return $this;
     }
 
@@ -567,7 +663,9 @@ final class ERechnungDocumentBuilder {
             iban: $this->sellerIban,
             bic: $this->sellerBic,
             bankName: $this->sellerBankName,
-            paymentAccountName: $this->sellerAccountHolderName
+            paymentAccountName: $this->sellerAccountHolderName,
+            legalRegistrationId: $this->sellerLegalRegistrationId,
+            legalRegistrationScheme: $this->sellerLegalRegistrationScheme
         );
 
         // Build buyer party
@@ -576,7 +674,9 @@ final class ERechnungDocumentBuilder {
             postalAddress: $this->buyerAddress,
             vatId: $this->buyerVatId,
             endpointId: $this->buyerEndpointId,
-            endpointScheme: $this->buyerEndpointScheme
+            endpointScheme: $this->buyerEndpointScheme,
+            legalRegistrationId: $this->buyerLegalRegistrationId,
+            legalRegistrationScheme: $this->buyerLegalRegistrationScheme
         );
 
         // Create document
@@ -596,6 +696,7 @@ final class ERechnungDocumentBuilder {
             projectReference: $this->projectReference,
             paymentMeansCode: $this->paymentMeansCode,
             paymentTerms: $this->paymentTerms,
+            deliveryParty: $this->deliveryParty,
             deliveryDate: $this->deliveryDate,
             precedingInvoiceReference: $this->precedingInvoiceReference
         );
@@ -628,10 +729,13 @@ final class ERechnungDocumentBuilder {
             $document->addSupportingDocument($supportingDocument);
         }
 
-        // VAT exemption reason (BT-120/BT-121) - triggers a recalculation so the
-        // reason is propagated to the exempt tax subtotals.
+        // VAT exemption reasons (BT-120/BT-121) - each call recalculates, so the
+        // reasons reach the tax subtotals.
         if ($this->taxExemptionReason !== null) {
             $document->setTaxExemption($this->taxExemptionReason, $this->taxExemptionReasonCode);
+        }
+        foreach ($this->categoryTaxExemptions as $exemption) {
+            $document->setTaxExemptionFor($exemption['category'], $exemption['reason'], $exemption['code']);
         }
 
         return $document;

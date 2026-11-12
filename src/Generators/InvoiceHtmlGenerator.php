@@ -523,7 +523,9 @@ CSS;
         );
 
         $addressBlock = Element::withAttributes('div', ['class' => 'address-block']);
-        $addressBlock = $addressBlock->withChild(Element::create('strong', $deliveryParty->getName()));
+        if ($deliveryParty->getName() !== '') {
+            $addressBlock = $addressBlock->withChild(Element::create('strong', $deliveryParty->getName()));
+        }
         foreach ($this->formatAddressLines($address) as $line) {
             $addressBlock = $addressBlock->withChild(Element::create('div', $line));
         }

@@ -137,4 +137,14 @@ class CiiSchemaValidatorTest extends BaseTestCase {
 
         return $node instanceof \DOMNode ? $node->textContent : null;
     }
+
+    public function test_deliver_to_legal_registration_and_not_subject_invoices_are_schema_valid(): void {
+        foreach ([
+            'K' => $this->intraCommunityXRechnung(fullDeliveryParty: true),
+            'O' => $this->notSubjectXRechnung(),
+            'AE' => $this->reverseChargeXRechnung(),
+        ] as $kind => $document) {
+            $this->assertSame([], $this->validator->validate($this->generator->generateCii($document)), $kind);
+        }
+    }
 }

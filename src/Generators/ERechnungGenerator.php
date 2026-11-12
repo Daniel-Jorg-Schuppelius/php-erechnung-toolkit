@@ -16,7 +16,7 @@ use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use DOMDocument;
 use DOMElement;
-use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party, Period};
+use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party, Period, PostalAddress};
 use ERechnungToolkit\Enums\ERechnungProfile;
 use ERechnungToolkit\Helper\SupportingDocumentXml;
 use ERRORToolkit\Traits\ErrorLog;
@@ -181,12 +181,15 @@ final class ERechnungGenerator {
         $this->addUblParty($dom, $customerParty, $document->getBuyer());
         $root->appendChild($customerParty);
 
-        // Delivery
-        if ($document->getDeliveryDate() !== null || $document->getDeliveryParty() !== null) {
-            $delivery = $dom->createElementNS(self::CAC_NS, 'cac:Delivery');
-            if ($document->getDeliveryDate() !== null) {
-                $this->addUblElement($dom, $delivery, 'cbc:ActualDeliveryDate', $document->getDeliveryDate()->format('Y-m-d'));
-            }
+        // Delivery (BG-13): Lieferdatum (BT-72), Lieferort (BT-71, BG-15), Empfänger (BT-70)
+        $delivery = $dom->createElementNS(self::CAC_NS, 'cac:Delivery');
+        if ($document->getDeliveryDate() !== null) {
+            $this->addUblElement($dom, $delivery, 'cbc:ActualDeliveryDate', $document->getDeliveryDate()->format('Y-m-d'));
+        }
+        if ($document->getDeliveryParty() !== null) {
+            $this->addUblDeliverTo($dom, $delivery, $document->getDeliveryParty());
+        }
+        if ($delivery->hasChildNodes()) {
             $root->appendChild($delivery);
         }
 
@@ -271,6 +274,7 @@ final class ERechnungGenerator {
 
                 $taxCategory = $dom->createElementNS(self::CAC_NS, 'cac:TaxCategory');
                 $this->addUblElement($dom, $taxCategory, 'cbc:ID', $subtotal->getCategory()->value);
+                // BT-119 auch bei „nicht steuerbar“: EN 16931 erlaubt das Weglassen (BR-48), XRechnung verlangt ihn (BR-DE-14).
                 $this->addUblElement($dom, $taxCategory, 'cbc:Percent', $this->formatAmount($subtotal->getPercent()));
 
                 if ($subtotal->getExemptionReasonCode() !== null) {
@@ -480,8 +484,15 @@ final class ERechnungGenerator {
 
         $transaction->appendChild($agreement);
 
-        // ApplicableHeaderTradeDelivery
+        // ApplicableHeaderTradeDelivery — XSD-Sequenz: ShipToTradeParty vor ActualDeliverySupplyChainEvent.
         $delivery = $dom->createElementNS(self::RAM_NS, 'ram:ApplicableHeaderTradeDelivery');
+        if ($document->getDeliveryParty() !== null) {
+            if ($document->getProfile()->supportsDeliverTo()) {
+                $delivery->appendChild($this->createCiiShipToParty($dom, $document->getDeliveryParty()));
+            } else {
+                $this->logWarning('Profil ohne Lieferpartei: Lieferort und Lieferanschrift entfallen', ['profile' => $document->getProfile()->name]);
+            }
+        }
         if ($document->getDeliveryDate() !== null) {
             $occurrence = $dom->createElementNS(self::RAM_NS, 'ram:ActualDeliverySupplyChainEvent');
             $occurrenceDateTime = $dom->createElementNS(self::RAM_NS, 'ram:OccurrenceDateTime');
@@ -546,6 +557,7 @@ final class ERechnungGenerator {
                 if ($subtotal->getExemptionReasonCode() !== null) {
                     $this->addCiiElement($dom, $tax, 'ram:ExemptionReasonCode', $subtotal->getExemptionReasonCode());
                 }
+                // BT-119 auch bei „nicht steuerbar“ (BR-DE-14), wie im UBL-Zweig.
                 $this->addCiiElement($dom, $tax, 'ram:RateApplicablePercent', $this->formatAmount($subtotal->getPercent()));
                 $settlement->appendChild($tax);
             }
@@ -703,8 +715,8 @@ final class ERechnungGenerator {
 
     /**
      * CII-Partei in XSD-Sequenz (TradePartyType D16B): ID, Name,
-     * DefinedTradeContact, PostalTradeAddress, URIUniversalCommunication,
-     * SpecifiedTaxRegistration.
+     * SpecifiedLegalOrganization, DefinedTradeContact, PostalTradeAddress,
+     * URIUniversalCommunication, SpecifiedTaxRegistration.
      */
     private function addCiiParty(DOMDocument $dom, DOMElement $parent, Party $party): void {
         if ($party->getLegalEntityId() !== null) {
@@ -715,6 +727,16 @@ final class ERechnungGenerator {
         }
 
         $this->addCiiElement($dom, $parent, 'ram:Name', $party->getName());
+
+        // Rechtliche Registrierung (BT-30/BT-47)
+        if ($party->getLegalRegistrationId() !== null) {
+            $legalOrganization = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedLegalOrganization');
+            $legalId = $this->addCiiElement($dom, $legalOrganization, 'ram:ID', $party->getLegalRegistrationId());
+            if ($party->getLegalRegistrationScheme() !== null) {
+                $legalId->setAttribute('schemeID', $party->getLegalRegistrationScheme());
+            }
+            $parent->appendChild($legalOrganization);
+        }
 
         if ($party->hasContactInfo()) {
             $contact = $dom->createElementNS(self::RAM_NS, 'ram:DefinedTradeContact');
@@ -735,24 +757,7 @@ final class ERechnungGenerator {
         }
 
         if ($party->getPostalAddress() !== null) {
-            $address = $dom->createElementNS(self::RAM_NS, 'ram:PostalTradeAddress');
-            $addr = $party->getPostalAddress();
-            if ($addr->getPostalCode() !== null) {
-                $this->addCiiElement($dom, $address, 'ram:PostcodeCode', $addr->getPostalCode());
-            }
-            if ($addr->getStreetName() !== null) {
-                $this->addCiiElement($dom, $address, 'ram:LineOne', $addr->getStreetName());
-            }
-            if ($addr->getAdditionalStreetName() !== null) {
-                $this->addCiiElement($dom, $address, 'ram:LineTwo', $addr->getAdditionalStreetName());
-            }
-            if ($addr->getCity() !== null) {
-                $this->addCiiElement($dom, $address, 'ram:CityName', $addr->getCity());
-            }
-            if ($addr->getCountryCode() !== null) {
-                $this->addCiiElement($dom, $address, 'ram:CountryID', $addr->getCountryCode());
-            }
-            $parent->appendChild($address);
+            $parent->appendChild($this->createCiiAddress($dom, $party->getPostalAddress()));
         }
 
         if ($party->hasEndpoint()) {
@@ -775,6 +780,88 @@ final class ERechnungGenerator {
             $taxIdFc = $this->addCiiElement($dom, $taxRegFc, 'ram:ID', $party->getTaxRegistrationId());
             $taxIdFc->setAttribute('schemeID', 'FC');
             $parent->appendChild($taxRegFc);
+        }
+    }
+
+    /**
+     * CII-Anschrift (`ram:PostalTradeAddress`) in XSD-Sequenz: PostcodeCode,
+     * LineOne, LineTwo, CityName, CountryID, CountrySubDivisionName.
+     */
+    private function createCiiAddress(DOMDocument $dom, PostalAddress $addr): DOMElement {
+        $address = $dom->createElementNS(self::RAM_NS, 'ram:PostalTradeAddress');
+        if ($addr->getPostalCode() !== null) {
+            $this->addCiiElement($dom, $address, 'ram:PostcodeCode', $addr->getPostalCode());
+        }
+        if ($addr->getStreetName() !== null) {
+            $this->addCiiElement($dom, $address, 'ram:LineOne', $addr->getStreetName());
+        }
+        if ($addr->getAdditionalStreetName() !== null) {
+            $this->addCiiElement($dom, $address, 'ram:LineTwo', $addr->getAdditionalStreetName());
+        }
+        if ($addr->getCity() !== null) {
+            $this->addCiiElement($dom, $address, 'ram:CityName', $addr->getCity());
+        }
+        if ($addr->getCountryCode() !== null) {
+            $this->addCiiElement($dom, $address, 'ram:CountryID', $addr->getCountryCode());
+        }
+        if ($addr->getCountrySubdivision() !== null) {
+            $this->addCiiElement($dom, $address, 'ram:CountrySubDivisionName', $addr->getCountrySubdivision());
+        }
+
+        return $address;
+    }
+
+    /**
+     * Lieferpartei (BG-13) als `ram:ShipToTradeParty`: Ortskennung (BT-71) mit
+     * Schema als GlobalID, sonst als ID; Name (BT-70); Anschrift (BG-15).
+     */
+    private function createCiiShipToParty(DOMDocument $dom, Party $party): DOMElement {
+        $shipTo = $dom->createElementNS(self::RAM_NS, 'ram:ShipToTradeParty');
+        $locationId = $party->getLegalEntityId();
+        if ($locationId !== null) {
+            $scheme = $party->getLegalEntityScheme();
+            $id = $this->addCiiElement($dom, $shipTo, $scheme !== null ? 'ram:GlobalID' : 'ram:ID', $locationId);
+            if ($scheme !== null) {
+                $id->setAttribute('schemeID', $scheme);
+            }
+        }
+        if ($party->getName() !== '') {
+            $this->addCiiElement($dom, $shipTo, 'ram:Name', $party->getName());
+        }
+        if ($party->getPostalAddress() !== null) {
+            $shipTo->appendChild($this->createCiiAddress($dom, $party->getPostalAddress()));
+        }
+
+        return $shipTo;
+    }
+
+    /**
+     * Lieferort (BT-71, BG-15) und Empfänger (BT-70) in der UBL-Sequenz von
+     * cac:Delivery: DeliveryLocation vor DeliveryParty.
+     */
+    private function addUblDeliverTo(DOMDocument $dom, DOMElement $delivery, Party $party): void {
+        $locationId = $party->getLegalEntityId();
+        $address = $party->getPostalAddress();
+        if ($locationId !== null || $address !== null) {
+            $location = $dom->createElementNS(self::CAC_NS, 'cac:DeliveryLocation');
+            if ($locationId !== null) {
+                $id = $this->addUblElement($dom, $location, 'cbc:ID', $locationId);
+                if ($party->getLegalEntityScheme() !== null) {
+                    $id->setAttribute('schemeID', $party->getLegalEntityScheme());
+                }
+            }
+            if ($address !== null) {
+                $location->appendChild($this->ubl()->postalAddress($dom, $address, 'cac:Address'));
+            }
+            $delivery->appendChild($location);
+        }
+
+        if ($party->getName() !== '') {
+            $deliveryParty = $dom->createElementNS(self::CAC_NS, 'cac:DeliveryParty');
+            $partyName = $dom->createElementNS(self::CAC_NS, 'cac:PartyName');
+            $this->addUblElement($dom, $partyName, 'cbc:Name', $party->getName());
+            $deliveryParty->appendChild($partyName);
+            $delivery->appendChild($deliveryParty);
         }
     }
 
@@ -861,7 +948,9 @@ final class ERechnungGenerator {
         // ClassifiedTaxCategory
         $taxCategory = $dom->createElementNS(self::CAC_NS, 'cac:ClassifiedTaxCategory');
         $this->addUblElement($dom, $taxCategory, 'cbc:ID', $line->getTaxCategory()->value);
-        $this->addUblElement($dom, $taxCategory, 'cbc:Percent', $this->formatAmount($line->getTaxPercent()));
+        if ($line->getTaxCategory()->hasRate()) {
+            $this->addUblElement($dom, $taxCategory, 'cbc:Percent', $this->formatAmount($line->getTaxPercent()));
+        }
         $taxScheme = $dom->createElementNS(self::CAC_NS, 'cac:TaxScheme');
         $this->addUblElement($dom, $taxScheme, 'cbc:ID', 'VAT');
         $taxCategory->appendChild($taxScheme);
@@ -944,7 +1033,9 @@ final class ERechnungGenerator {
         $tax = $dom->createElementNS(self::RAM_NS, 'ram:ApplicableTradeTax');
         $this->addCiiElement($dom, $tax, 'ram:TypeCode', 'VAT');
         $this->addCiiElement($dom, $tax, 'ram:CategoryCode', $line->getTaxCategory()->value);
-        $this->addCiiElement($dom, $tax, 'ram:RateApplicablePercent', $this->formatAmount($line->getTaxPercent()));
+        if ($line->getTaxCategory()->hasRate()) {
+            $this->addCiiElement($dom, $tax, 'ram:RateApplicablePercent', $this->formatAmount($line->getTaxPercent()));
+        }
         $settlement->appendChild($tax);
 
         // Positionszeitraum (BG-26)
@@ -1003,7 +1094,7 @@ final class ERechnungGenerator {
             $categoryTax = $dom->createElementNS(self::RAM_NS, 'ram:CategoryTradeTax');
             $this->addCiiElement($dom, $categoryTax, 'ram:TypeCode', 'VAT');
             $this->addCiiElement($dom, $categoryTax, 'ram:CategoryCode', $ac->getTaxCategory()->value);
-            if ($ac->getTaxPercent() !== null) {
+            if ($ac->getTaxPercent() !== null && $ac->getTaxCategory()->hasRate()) {
                 $this->addCiiElement($dom, $categoryTax, 'ram:RateApplicablePercent', $this->formatAmount($ac->getTaxPercent()));
             }
             $acElem->appendChild($categoryTax);

@@ -157,6 +157,14 @@ enum ERechnungProfile: string {
     }
 
     /**
+     * Whether the profile carries the deliver-to party and address (BT-70,
+     * BT-71, BG-15); from BASIC WL on.
+     */
+    public function supportsDeliverTo(): bool {
+        return $this->successor() !== self::MINIMUM;
+    }
+
+    /**
      * Checks if this profile is XRechnung compliant.
      */
     public function isXRechnung(): bool {

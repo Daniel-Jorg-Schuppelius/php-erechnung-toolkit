@@ -319,4 +319,23 @@ class ERechnungEnumsTest extends BaseTestCase {
         $delivery = NoteSubjectCode::forDeliveryConditions();
         $this->assertSame(NoteSubjectCode::AAN, $delivery);
     }
+
+    public function test_tax_category_rate_and_exemption_reason_rules(): void {
+        foreach (TaxCategory::cases() as $category) {
+            $this->assertSame($category !== TaxCategory::OUT_OF_SCOPE, $category->hasRate(), $category->value);
+        }
+
+        $withReason = array_values(array_filter(TaxCategory::cases(), static fn (TaxCategory $c): bool => $c->requiresExemptionReason()));
+        $this->assertSame(
+            [TaxCategory::EXEMPT, TaxCategory::REVERSE_CHARGE, TaxCategory::INTRA_COMMUNITY, TaxCategory::EXPORT, TaxCategory::OUT_OF_SCOPE],
+            $withReason
+        );
+    }
+
+    public function test_profile_supports_deliver_to_from_basic_wl_on(): void {
+        $this->assertFalse(ERechnungProfile::MINIMUM->supportsDeliverTo());
+        $this->assertTrue(ERechnungProfile::BASIC_WL->supportsDeliverTo());
+        $this->assertTrue(ERechnungProfile::XRECHNUNG->supportsDeliverTo());
+        $this->assertTrue(ERechnungProfile::ZUGFERD1_BASIC->supportsDeliverTo());
+    }
 }

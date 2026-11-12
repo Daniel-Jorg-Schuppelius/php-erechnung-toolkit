@@ -13,17 +13,20 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Validators;
 
 use CommonToolkit\Helper\FileSystem\File;
-use ERechnungToolkit\Entities\{Document, Period, SupportingDocument};
+use ERechnungToolkit\Entities\{Document, LeitwegId, Period, SupportingDocument};
 use ERechnungToolkit\Enums\{AttachmentMimeCode, ERechnungProfile, ValidationSeverity};
+use InvalidArgumentException;
 
 /**
  * Prüft rechnungsbegründende Unterlagen (BG-24), Zeiträume (BG-14, BG-26) und
- * Objektkennungen (BT-18, BT-128) am Datenmodell, bevor XML entsteht.
+ * Objektkennungen (BT-18, BT-128) am Datenmodell, bevor XML entsteht, dazu die
+ * Leitweg-ID eines Käufers mit Schema 0204 (BT-49, BT-10).
  *
  * Codes folgen dem KoSIT-Regelwerk (BR-52, BR-CL-24, BR-DE-22, BR-29, BR-30,
  * BR-CO-19, BR-CO-20, PEPPOL-EN16931-R110/R111); TK-* sind Prüfungen des
  * Toolkits. BR-DE-22 vergleicht ohne Rücksicht auf Groß-/Kleinschreibung, wie
- * es der Regeltext verlangt — der KoSIT-Validator vergleicht exakt.
+ * es der Regeltext verlangt — der KoSIT-Validator vergleicht exakt. Die
+ * Leitweg-ID prüft der KoSIT-Validator gar nicht; TK-LEITWEG-ID ist daher eine Warnung.
  */
 final class DocumentRulesValidator {
     public const SCENARIO = 'EN 16931 Unterlagen, Zeiträume und Objektkennungen (Toolkit)';
@@ -35,6 +38,7 @@ final class DocumentRulesValidator {
             ...$this->checkProfile($document),
             ...$this->checkSupportingDocuments($document->getSupportingDocuments(), $document->getProfile()),
             ...$this->checkPeriods($document),
+            ...$this->checkLeitwegId($document),
         ]);
     }
 
@@ -217,6 +221,37 @@ final class DocumentRulesValidator {
             }
             if ($invoicingPeriod !== null && !$invoicingPeriod->isEmpty()) {
                 $messages = [...$messages, ...$this->checkWithin($invoicingPeriod, $period, $lineLabel)];
+            }
+        }
+
+        return $messages;
+    }
+
+    /**
+     * Elektronische Adresse (BT-49) und Käuferreferenz (BT-10) eines Käufers mit
+     * Schema 0204 nach der Leitweg-ID-Formatspezifikation 2.0.2 ({@see LeitwegId}).
+     *
+     * @return list<ValidationMessage>
+     */
+    private function checkLeitwegId(Document $document): array {
+        $buyer = $document->getBuyer();
+        if ($buyer->getEndpointScheme() !== LeitwegId::ICD) {
+            return [];
+        }
+
+        $values = [];
+        foreach (['BT-49' => $buyer->getEndpointId(), 'BT-10' => $document->getBuyerReference()] as $term => $value) {
+            if ($value !== null && $value !== '') {
+                $values[$value][] = $term;
+            }
+        }
+
+        $messages = [];
+        foreach ($values as $value => $terms) {
+            try {
+                LeitwegId::of((string) $value);
+            } catch (InvalidArgumentException $e) {
+                $messages[] = $this->warning('TK-LEITWEG-ID', 'Keine gültige Leitweg-ID (' . implode(', ', $terms) . '): ' . $e->getMessage());
             }
         }
 

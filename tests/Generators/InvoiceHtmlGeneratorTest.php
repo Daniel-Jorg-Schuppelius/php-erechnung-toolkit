@@ -150,6 +150,22 @@ class InvoiceHtmlGeneratorTest extends TestCase {
         $this->assertStringContainsString('COBADEFFXXX', $html);
     }
 
+    public function test_delivery_address_without_name_renders_no_empty_heading(): void {
+        $invoice = ERechnungDocumentBuilder::create('INV-2026-002')
+            ->withIssueDate(new DateTimeImmutable('2026-11-12'))
+            ->withSeller('Test GmbH', 'DE123456789')
+            ->withBuyer('Kunde AG')
+            ->withDeliveryAddress('Havenweg 5', '3011 AA', 'Rotterdam', 'NL')
+            ->addLine('Test', 1, 100.00)
+            ->build();
+
+        $html = $this->generator->generate($invoice);
+
+        $this->assertStringContainsString('Lieferadresse:', $html);
+        $this->assertStringContainsString('Havenweg 5', $html);
+        $this->assertStringNotContainsString('<strong></strong>', $html);
+    }
+
     private function createTestInvoice(): \ERechnungToolkit\Entities\Document {
         return ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-25'))

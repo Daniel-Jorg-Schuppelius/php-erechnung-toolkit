@@ -16,7 +16,7 @@ use CommonToolkit\Enums\CurrencyCode;
 use CommonToolkit\ValueObjects\Money;
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\ERechnungDocumentBuilder;
-use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Period, SupportingDocument};
+use ERechnungToolkit\Entities\{AllowanceCharge, Document, InvoiceLine, Party, Period, PostalAddress, SupportingDocument};
 use ERechnungToolkit\Enums\{AttachmentMimeCode, ERechnungProfile, InvoiceType, PaymentMeansCode, TaxCategory, UnitCode};
 
 /**
@@ -25,7 +25,7 @@ use ERechnungToolkit\Enums\{AttachmentMimeCode, ERechnungProfile, InvoiceType, P
  * CII-Schema festgelegt ist.
  */
 trait XRechnungDocuments {
-    private string $leitwegId = '04011000-12345-67';
+    private string $leitwegId = '04011000-12345-03';
 
     private function fullXRechnung(bool $creditNote = false, ?ERechnungProfile $profile = null): Document {
         $euro = CurrencyCode::Euro;
@@ -183,5 +183,134 @@ trait XRechnungDocuments {
             ->withTaxExemptionReason('Kein Ausweis von Umsatzsteuer, da Kleinunternehmer gemäß § 19 UStG')
             ->addLine('Reparatur', 1, 180.00, 0.0, UnitCode::LUMP_SUM, TaxCategory::EXEMPT)
             ->build();
+    }
+
+    /**
+     * Innergemeinschaftliche Lieferung (K) mit Lieferland (BT-80, BR-IC-12),
+     * Lieferdatum (BR-IC-11), USt-IdNrn. beider Seiten (BR-IC-02) und eigenem
+     * Befreiungsgrund samt Code. Ohne Lieferanschrift scheitert KoSIT an BR-IC-12.
+     * `$fullDeliveryParty` setzt die Lieferpartei mit Ortskennung (BT-71, GLN) und
+     * Region statt der einfachen Anschrift.
+     */
+    private function intraCommunityXRechnung(bool $withDeliveryAddress = true, bool $fullDeliveryParty = false): Document {
+        $builder = $this->publicBuyerBuilder('XR-2026-0901')
+            ->withSeller('Verkäufer GmbH', 'DE123456789')
+            ->withBuyer('Koper B.V.', 'NL123456789B01')
+            ->withBuyerAddress('Kerkstraat 1', '1012 AB', 'Amsterdam', 'NL')
+            ->withTaxExemptionReasonFor(TaxCategory::INTRA_COMMUNITY, 'Steuerfreie innergemeinschaftliche Lieferung', 'VATEX-EU-IC')
+            ->addLine('Werkbank', 2, 1250.00, 0.0, UnitCode::PIECE, TaxCategory::INTRA_COMMUNITY);
+
+        if ($fullDeliveryParty) {
+            $builder->withDeliveryParty(new Party(
+                name: 'Lager Rotterdam',
+                postalAddress: new PostalAddress(
+                    streetName: 'Havenweg 5',
+                    postalCode: '3011 AA',
+                    city: 'Rotterdam',
+                    countrySubdivision: 'Zuid-Holland',
+                    country: 'NL'
+                ),
+                legalEntityId: '4012345000009',
+                legalEntityScheme: '0088'
+            ));
+        } elseif ($withDeliveryAddress) {
+            $builder->withDeliveryAddress('Havenweg 5', '3011 AA', 'Rotterdam', 'NL', name: 'Lager Rotterdam');
+        }
+
+        $document = $builder->build();
+        $document->addAllowanceCharge(AllowanceCharge::discount(
+            Money::of('50.00', CurrencyCode::Euro),
+            'Rabatt',
+            taxCategory: TaxCategory::INTRA_COMMUNITY,
+            taxPercent: 0.0,
+        ));
+
+        return $document;
+    }
+
+    /**
+     * Nicht steuerbare Leistung (O) an einen Käufer im Drittland: keine
+     * USt-IdNrn. (BR-O-02), Verkäufer über Steuernummer und Registernummer
+     * (BT-30, BR-CO-26), kein Satz an Positionen, Rabatt und Zuschlag
+     * (BR-O-05 bis BR-O-07), Befreiungsgrund (BR-O-10).
+     */
+    private function notSubjectXRechnung(): Document {
+        $euro = CurrencyCode::Euro;
+        $consulting = new InvoiceLine(
+            id: '1',
+            quantity: 8.0,
+            unitCode: UnitCode::HOUR,
+            netAmount: Money::of('900.00', $euro),
+            itemName: 'Beratung',
+            unitPrice: Money::of('120.00', $euro),
+            taxCategory: TaxCategory::OUT_OF_SCOPE,
+            taxPercent: 0.0,
+        );
+        $consulting->addAllowanceCharge(AllowanceCharge::discount(
+            Money::of('60.00', $euro),
+            'Rabatt',
+            taxCategory: TaxCategory::OUT_OF_SCOPE,
+            taxPercent: 0.0,
+        ));
+
+        $document = $this->publicBuyerBuilder('XR-2026-0902')
+            ->withSeller('Verkäufer GmbH', '', '201/123/45678')
+            ->withSellerLegalRegistration('HRB 12345')
+            ->withBuyer('Client Inc.')
+            ->withBuyerAddress('1 Main Street', '10001', 'New York', 'US')
+            ->withTaxExemptionReasonFor(TaxCategory::OUT_OF_SCOPE, 'Nicht im Inland steuerbare Leistung', 'VATEX-EU-O')
+            ->addInvoiceLine($consulting)
+            ->build();
+        $document->addAllowanceCharge(AllowanceCharge::discount(Money::of('20.00', $euro), 'Treuerabatt', taxCategory: TaxCategory::OUT_OF_SCOPE, taxPercent: 0.0));
+        $document->addAllowanceCharge(AllowanceCharge::surcharge(Money::of('15.00', $euro), 'Reisekosten', taxCategory: TaxCategory::OUT_OF_SCOPE, taxPercent: null));
+
+        return $document;
+    }
+
+    /**
+     * Steuerschuldumkehr nach § 13b UStG an einen Käufer ohne USt-IdNr.: die
+     * Registernummer BT-47 erfüllt BR-AE-02. Der Grund kommt über den
+     * bisherigen Weg „ein Grund für alles“.
+     */
+    private function reverseChargeXRechnung(): Document {
+        return $this->publicBuyerBuilder('XR-2026-0903')
+            ->withSeller('Verkäufer GmbH', 'DE123456789')
+            ->withBuyer('Baubetrieb Muster GmbH')
+            ->withBuyerLegalRegistration('HRB 98765')
+            ->withBuyerAddress('Bauhofweg 2', '80333', 'München')
+            ->withTaxExemptionReason('Steuerschuldnerschaft des Leistungsempfängers (§ 13b UStG)', 'VATEX-EU-AE')
+            ->addLine('Elektroinstallation Rohbau', 1, 4800.00, 0.0, UnitCode::LUMP_SUM, TaxCategory::REVERSE_CHARGE)
+            ->build();
+    }
+
+    /**
+     * Regelsatz, Nullsatz und Befreiung nebeneinander: der Grund für alle Kategorien
+     * erreicht weder Z (BR-Z-10) noch S (BR-S-10); E trägt seinen eigenen.
+     */
+    private function mixedCategoriesXRechnung(): Document {
+        return $this->publicBuyerBuilder('XR-2026-0904')
+            ->withSeller('Verkäufer GmbH', 'DE123456789')
+            ->withBuyer('Öffentliche Verwaltung')
+            ->withBuyerAddress('Amtsweg 1', '80333', 'München')
+            ->withTaxExemptionReason('Steuerfrei')
+            ->withTaxExemptionReasonFor(TaxCategory::EXEMPT, 'Steuerfreie Heilbehandlung nach § 4 Nr. 14 UStG', 'VATEX-EU-132-1C')
+            ->addLine('Wartung', 1, 300.00, 19.0, UnitCode::LUMP_SUM)
+            ->addLine('Photovoltaikmodul', 2, 200.00, 0.0, UnitCode::PIECE, TaxCategory::ZERO_RATED)
+            ->addLine('Therapieeinheit', 1, 90.00, 0.0, UnitCode::PIECE, TaxCategory::EXEMPT)
+            ->build();
+    }
+
+    private function publicBuyerBuilder(string $id): ERechnungDocumentBuilder {
+        return ERechnungDocumentBuilder::xrechnung($id, $this->leitwegId)
+            ->withIssueDate(new DateTimeImmutable('2026-11-12'))
+            ->withDueDate(new DateTimeImmutable('2026-12-12'))
+            ->withDeliveryDate(new DateTimeImmutable('2026-11-10'))
+            ->withSellerAddress('Verkäuferstraße 1', '10115', 'Berlin')
+            ->withSellerEndpoint('rechnung@verkaeufer.de', 'EM')
+            ->withSellerContact('Max Müller', '+49 30 123456', 'kontakt@verkaeufer.de')
+            ->withSellerBankAccount('DE89370400440532013000', 'COBADEFFXXX')
+            ->withBuyerLeitwegId($this->leitwegId)
+            ->withPaymentMeans(PaymentMeansCode::SEPA_CREDIT_TRANSFER)
+            ->withPaymentTermsNet30();
     }
 }

@@ -15,14 +15,17 @@ namespace Tests\Validators;
 use DateTimeImmutable;
 use ERechnungToolkit\Builders\{DespatchAdviceBuilder, ERechnungDocumentBuilder, OrderBuilder};
 use ERechnungToolkit\Enums\{TaxCategory, UnitCode};
+use ERechnungToolkit\Generators\ERechnungGenerator;
 use ERechnungToolkit\Validators\UblSchemaValidator;
-use Tests\Contracts\BaseTestCase;
+use Tests\Contracts\{BaseTestCase, XRechnungDocuments};
 
 /**
  * XSD-Schema-Validierung der erzeugten UBL-Dokumente gegen die gebündelten
  * offiziellen OASIS-UBL-2.1-Schemas (reine libxml-Prüfung, kein Java).
  */
 class UblSchemaValidatorTest extends BaseTestCase {
+    use XRechnungDocuments;
+
     private UblSchemaValidator $validator;
 
     protected function setUp(): void {
@@ -101,5 +104,16 @@ class UblSchemaValidatorTest extends BaseTestCase {
         $errors = $this->validator->validate('<?xml version="1.0"?><Foo xmlns="urn:example"/>');
         $this->assertNotEmpty($errors);
         $this->assertStringContainsString('Foo', $errors[0]);
+    }
+
+    public function test_deliver_to_legal_registration_and_not_subject_invoices_are_schema_valid(): void {
+        $generator = new ERechnungGenerator;
+        foreach ([
+            'K' => $this->intraCommunityXRechnung(fullDeliveryParty: true),
+            'O' => $this->notSubjectXRechnung(),
+            'AE' => $this->reverseChargeXRechnung(),
+        ] as $kind => $document) {
+            $this->assertSame([], $this->validator->validate($generator->generateUbl($document)), $kind);
+        }
     }
 }

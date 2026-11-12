@@ -164,4 +164,52 @@ class DocumentRulesValidatorTest extends BaseTestCase {
     private function codes(ValidationResult $result): array {
         return array_values(array_map(static fn (ValidationMessage $m): string => $m->getCode(), $result->getMessages()));
     }
+
+    public function test_invalid_leitweg_id_of_a_0204_buyer_is_a_warning(): void {
+        $valid = $this->leitwegDocument('04011000-12345-03');
+        $this->assertNotContains('TK-LEITWEG-ID', $this->codes($this->validator->validate($valid)));
+
+        $result = $this->validator->validate($this->leitwegDocument('04011000-12345-67'));
+        $this->assertTrue($result->isValid(), 'Eine falsche Leitweg-ID ist eine Warnung, kein Fehler');
+        $this->assertSame(['TK-LEITWEG-ID'], $this->codes($result));
+        $this->assertSame(ValidationSeverity::WARNING, $result->getMessages()[0]->getSeverity());
+        $this->assertStringContainsString('BT-49, BT-10', $result->getMessages()[0]->getText());
+        $this->assertStringContainsString('erwartet 03', $result->getMessages()[0]->getText());
+    }
+
+    public function test_buyer_reference_is_checked_apart_from_the_endpoint(): void {
+        $document = $this->leitwegDocument('04011000-12345-03');
+        $mismatch = ERechnungDocumentBuilder::xrechnung('XR-2', 'PO-4711')
+            ->withSeller('Verkäufer GmbH', 'DE123456789')
+            ->withBuyer('Öffentliche Verwaltung')
+            ->withBuyerEndpoint('04011000-12345-03', '0204')
+            ->addLine('Beratung', 1, 100.00)
+            ->build();
+
+        $this->assertSame([], $this->codes($this->validator->validate($document)));
+        $result = $this->validator->validate($mismatch);
+        $this->assertSame(['TK-LEITWEG-ID'], $this->codes($result));
+        $this->assertStringContainsString('(BT-10)', $result->getMessages()[0]->getText());
+    }
+
+    public function test_buyer_without_scheme_0204_is_not_checked(): void {
+        $document = ERechnungDocumentBuilder::create('RE-3')
+            ->withSeller('Verkäufer GmbH', 'DE123456789')
+            ->withBuyer('Kunde AG')
+            ->withBuyerReference('04011000-12345-67')
+            ->withBuyerEndpoint('kunde@example.org', 'EM')
+            ->addLine('Beratung', 1, 100.00)
+            ->build();
+
+        $this->assertSame([], $this->codes($this->validator->validate($document)));
+    }
+
+    private function leitwegDocument(string $leitwegId): Document {
+        return ERechnungDocumentBuilder::xrechnung('XR-1', $leitwegId)
+            ->withSeller('Verkäufer GmbH', 'DE123456789')
+            ->withBuyer('Öffentliche Verwaltung')
+            ->withBuyerLeitwegId($leitwegId)
+            ->addLine('Beratung', 1, 100.00)
+            ->build();
+    }
 }

@@ -12,6 +12,7 @@ declare(strict_types=1);
 
 namespace ERechnungToolkit\Peppol;
 
+use ERechnungToolkit\Entities\LeitwegId;
 use InvalidArgumentException;
 use Stringable;
 
@@ -218,9 +219,12 @@ final class ParticipantId implements Stringable {
         return new self(self::ICD_DE_VAT . ':' . strtoupper(preg_replace('/\s+/', '', $vatId) ?? $vatId));
     }
 
-    /** Teilnehmerkennung aus einer Leitweg-ID (ICD 0204). */
+    /**
+     * Teilnehmerkennung aus einer Leitweg-ID (ICD 0204), normalisiert nach
+     * {@see LeitwegId::normalize()}. Die Prüfziffer prüft {@see LeitwegId::of()}.
+     */
     public static function leitwegId(string $leitwegId): self {
-        return new self(self::ICD_LEITWEG_ID . ':' . trim($leitwegId));
+        return new self(self::ICD_LEITWEG_ID . ':' . LeitwegId::normalize($leitwegId));
     }
 
     /** Teilnehmerkennung aus einer GLN (ICD 0088). */

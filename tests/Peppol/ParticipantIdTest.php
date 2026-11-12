@@ -98,4 +98,10 @@ class ParticipantIdTest extends BaseTestCase {
         // Der Originalwert bleibt für die Anzeige erhalten.
         $this->assertSame('9930:DE123456789', $upper->getValue());
     }
+
+    public function test_leitweg_id_factory_normalizes_without_checking(): void {
+        $this->assertSame('0204:991-33333TEST-33', ParticipantId::leitwegId("991\u{2013}33333test-33")->getValue());
+        // Die Prüfziffer prüft LeitwegId::of(); die Fabrik bleibt für Bestandsaufrufer nachsichtig.
+        $this->assertSame('0204:04011000-12345-67', ParticipantId::leitwegId('04011000-12345-67')->getValue());
+    }
 }

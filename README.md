@@ -280,6 +280,68 @@ taken over from the original keep name and content but lose description,
 original relationship and dates (MIME type from the content); `getNotices()`
 lists them.
 
+## Deliver-to, VAT Categories, Registration Identifiers and Leitweg-ID (since 0.22.0)
+
+```php
+use ERechnungToolkit\Entities\LeitwegId;
+use ERechnungToolkit\Enums\TaxCategory;
+
+$invoice = ERechnungDocumentBuilder::xrechnung('XR-2026-0901', '04011000-12345-03')
+    // seller, buyer, payment ...
+    ->withDeliveryAddress('Havenweg 5', '3011 AA', 'Rotterdam', 'NL', name: 'Lager Rotterdam') // BG-15, BT-80, BT-70
+    ->withTaxExemptionReasonFor(TaxCategory::INTRA_COMMUNITY, 'Steuerfreie innergemeinschaftliche Lieferung', 'VATEX-EU-IC')
+    ->withBuyerLegalRegistration('HRB 98765')                                                   // BT-47
+    ->addLine('Werkbank', 2, 1250.00, 0.0, UnitCode::PIECE, TaxCategory::INTRA_COMMUNITY)
+    ->build();
+
+LeitwegId::of('04011000-12345-03');          // throws InvalidArgumentException with the reason
+LeitwegId::isValid('04011000-12345-67');     // false: check digits 67, expected 03
+LeitwegId::checkDigitsFor('04011000', '12345'); // '03'
+```
+
+- **Deliver-to (BG-13):** `withDeliveryAddress()` sets the deliver-to address
+  (BG-15) with the country code BT-80 that intra-community supplies need
+  (BR-IC-12; BR-57 makes it mandatory for every address). XRechnung also wants
+  city and post code (BR-DE-10, BR-DE-11). `withDeliveryParty(Party)` adds the
+  location identifier BT-71 from the party identifier and scheme. UBL writes
+  `cac:Delivery/cac:DeliveryLocation` and `cac:DeliveryParty`, CII
+  `ram:ShipToTradeParty` (not in Factur-X MINIMUM, see
+  `ERechnungProfile::supportsDeliverTo()`).
+- **Not subject to VAT (`O`):** lines, allowances and charges carry no VAT rate
+  (BR-O-05 to BR-O-07, `TaxCategory::hasRate()`); the VAT breakdown keeps the
+  rate 0, which XRechnung requires (BR-DE-14). The totals count `O` without tax
+  even if a line carries a rate.
+- **Exemption reason per category:** `withTaxExemptionReasonFor()` (or
+  `Document::setTaxExemptionFor()`) sets BT-120/BT-121 for one category. The
+  common `withTaxExemptionReason()` stays as the default for the categories
+  without their own reason. Only E, AE, K, G and O carry a reason
+  (`TaxCategory::requiresExemptionReason()`); S, Z, L and M never do (BR-S-10,
+  BR-Z-10, BR-AF-10, BR-AG-10) — the per-category call throws for them.
+- **Legal registration identifier (BT-30, BT-47):** `Party::withLegalRegistration()`,
+  `withSellerLegalRegistration()`, `withBuyerLegalRegistration()`; UBL
+  `cac:PartyLegalEntity/cbc:CompanyID`, CII `ram:SpecifiedLegalOrganization/ram:ID`.
+  For reverse charge to a buyer without VAT identifier BT-47 fulfils BR-AE-02.
+- **Parser:** reads BG-13 into `getDeliveryParty()`, BT-121 into
+  `TaxSubtotal::getExemptionReasonCode()` and BT-30/BT-47 into
+  `Party::getLegalRegistrationId()`.
+- **Leitweg-ID:** `LeitwegId` checks the format specification 2.0.2 of 28 July
+  2021 (KoSIT): coarse address of 2, 3, 5, 8, 9 or 12 digits starting with a
+  state code 01–16 or 99, optional fine address of up to 30 characters A–Z/0–9,
+  two check digits ISO/IEC 7064 Mod 97-10, hyphens as separators.
+  `LeitwegId::normalize()` uppercases, removes whitespace and turns typographic
+  dashes into hyphens. `ParticipantId::leitwegId()`, `Party::withLeitwegId()`,
+  `withBuyerLeitwegId()` and the `xrechnung()` factories normalize but do not
+  reject; `DocumentRulesValidator` reports an invalid Leitweg-ID of a buyer
+  addressed with scheme 0204 (BT-49, BT-10) as warning `TK-LEITWEG-ID`.
+
+Upgrading from 0.21: `withTaxExemptionReason()` no longer reaches zero-rated
+breakdowns (it made them fail BR-Z-10); `O` lines and allowances lose their
+rate; the UBL parser no longer reads `cac:PartyLegalEntity/cbc:CompanyID` as
+tax registration number (it is BT-30/BT-47, `getLegalRegistrationId()`); both
+parsers keep an address without street; CII writes and reads the country
+subdivision (BT-39, BT-54, BT-79); Leitweg-IDs passed to the existing entry
+points are normalized (uppercase, no whitespace).
+
 ## ZUGFeRD/Factur-X PDF Generation
 
 Generate PDF/A-3 invoices with embedded XML for automated processing. Requires `dschuppelius/php-pdf-toolkit`:
