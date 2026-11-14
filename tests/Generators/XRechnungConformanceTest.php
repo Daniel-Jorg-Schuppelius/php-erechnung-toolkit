@@ -138,6 +138,56 @@ class XRechnungConformanceTest extends BaseTestCase {
     }
 
     /**
+     * Fälligkeit (BT-9) ohne Zahlungsbedingungen (BT-20): CII trägt BT-9 nur
+     * im Block SpecifiedTradePaymentTerms. Fehlte er, schlug BR-CO-25 an -
+     * so erzeugte der CKonverter-Core bis 0.23.0 jede Rechnung mit
+     * Zahlungsziel in Tagen.
+     *
+     * @return array<string, array{string}>
+     */
+    public static function syntaxes(): array {
+        return ['UBL' => ['ubl'], 'CII' => ['cii']];
+    }
+
+    #[DataProvider('syntaxes')]
+    public function test_due_date_without_payment_terms_is_kosit_valid(string $syntax): void {
+        if (!$this->validator->isAvailable()) {
+            $this->markTestSkipped('KoSIT-Validator nicht verfügbar (Java-Laufzeit fehlt).');
+        }
+
+        $document = ERechnungDocumentBuilder::create('XR-2026-0816')
+            ->withProfile(ERechnungProfile::XRECHNUNG)
+            ->withIssueDate(new DateTimeImmutable('2026-11-14'))
+            ->withDueDate(new DateTimeImmutable('2026-11-28'))
+            ->withSeller('Verkäufer GmbH', 'DE123456789')
+            ->withSellerAddress('Verkäuferstraße 1', '10115', 'Berlin')
+            ->withSellerEndpoint('seller@example.com', 'EM')
+            ->withSellerContact('Max Müller', '+49 30 123456', 'kontakt@verkaeufer.de')
+            ->withSellerBankAccount('DE89370400440532013000')
+            ->withBuyer('Kunde AG')
+            ->withBuyerAddress('Nebenweg 2', '80331', 'München')
+            ->withBuyerEndpoint('eingang@kunde.example', 'EM')
+            ->withBuyerReference('K-4711')
+            ->addLine('Beratung', 2, 100.00)
+            ->build();
+
+        $this->assertNull($document->getPaymentTerms());
+        $xml = $this->generate($document, cii: $syntax === 'cii');
+        $result = $this->validator->validate($xml);
+
+        $this->assertTrue(
+            $result->isValid(),
+            "{$syntax} ist nicht valide: " . implode('; ', array_map(
+                static fn ($e) => $e->getCode() . ' ' . $e->getText(),
+                [...$result->getErrors(), ...$result->getWarnings()]
+            ))
+        );
+        if ($syntax === 'cii') {
+            $this->assertMatchesRegularExpression('/<ram:DueDateDateTime[ >]/', $xml);
+        }
+    }
+
+    /**
      * Gegenprobe: ohne Lieferanschrift weist KoSIT die innergemeinschaftliche
      * Lieferung nach BR-IC-12 ab — der Fall, den die Lieferanschrift schließt.
      */

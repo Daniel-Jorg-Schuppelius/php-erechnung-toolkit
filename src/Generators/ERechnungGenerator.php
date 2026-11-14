@@ -575,10 +575,13 @@ final class ERechnungGenerator {
             $settlement->appendChild($this->createCiiAllowanceCharge($dom, $ac, withTax: true));
         }
 
-        // PaymentTerms
-        if ($document->getPaymentTerms() !== null) {
+        // PaymentTerms — die Fälligkeit (BT-9) steht in CII nur hier. Eine
+        // Rechnung mit Fälligkeit, aber ohne Zahlungsbedingungen braucht den
+        // Block trotzdem, sonst fehlt BT-9 und BR-CO-25 schlägt an (UBL trägt
+        // BT-9 als cbc:DueDate im Kopf).
+        if ($document->getPaymentTerms() !== null || $document->getDueDate() !== null) {
             $paymentTerms = $dom->createElementNS(self::RAM_NS, 'ram:SpecifiedTradePaymentTerms');
-            if ($document->getPaymentTerms()->getNote() !== null) {
+            if ($document->getPaymentTerms()?->getNote() !== null) {
                 $this->addCiiElement($dom, $paymentTerms, 'ram:Description', $document->getPaymentTerms()->getNote());
             }
             if ($document->getDueDate() !== null) {
