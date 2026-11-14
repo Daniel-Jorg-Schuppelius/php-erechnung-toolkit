@@ -166,6 +166,75 @@ class InvoiceHtmlGeneratorTest extends TestCase {
         $this->assertStringNotContainsString('<strong></strong>', $html);
     }
 
+    public function test_meta_section_names_each_value_by_its_meaning(): void {
+        $invoice = ERechnungDocumentBuilder::create('INV-2026-003')
+            ->withIssueDate(new DateTimeImmutable('2026-11-14'))
+            ->withDeliveryDate(new DateTimeImmutable('2026-11-10'))
+            ->withSeller('Test GmbH', 'DE123456789')
+            ->withSellerAddress('Musterstraße 1', '12345', 'Musterstadt')
+            ->withBuyer('Kunde AG', 'DE987654321')
+            ->withBuyerAddress('Kundenweg 42', '54321', 'Kundenstadt')
+            ->withBuyerReference('K-4711')
+            ->withBuyerEndpoint('eingang@kunde.example', 'EM')
+            ->addLine('Test', 1, 100.00)
+            ->build();
+
+        $html = $this->generator->generate($invoice);
+
+        // Die Referenz ist keine Leitweg-ID, die Adresse keine Kundennummer
+        $this->assertStringContainsString('Ihre Referenz', $html);
+        $this->assertStringNotContainsString('Leitweg-ID', $html);
+        $this->assertStringNotContainsString('Kunden-Nr.', $html);
+        // "Ihre" USt-IdNr. ist die des Käufers, die eigene steht daneben
+        $this->assertMatchesRegularExpression('/Ihre USt-IdNr\..*Unsere USt-IdNr\..*DE987654321.*DE123456789/s', $html);
+        // Leistungsdatum (§ 14 Abs. 4 Nr. 6 UStG)
+        $this->assertStringContainsString('Leistungsdatum', $html);
+        $this->assertStringContainsString('10.11.2026', $html);
+    }
+
+    public function test_meta_section_shows_a_leitweg_id_and_a_tax_number(): void {
+        $invoice = ERechnungDocumentBuilder::create('INV-2026-004')
+            ->withIssueDate(new DateTimeImmutable('2026-11-14'))
+            ->withInvoicingPeriod(new DateTimeImmutable('2026-10-01'), new DateTimeImmutable('2026-10-31'))
+            ->withSeller('Klein GmbH', '', '30/123/45678')
+            ->withSellerAddress('Musterstraße 1', '12345', 'Musterstadt')
+            ->withBuyer('Stadt Musterhausen')
+            ->withBuyerAddress('Rathausplatz 1', '12345', 'Musterhausen')
+            ->withBuyerLeitwegId('04011000-12345-67')
+            ->addLine('Test', 1, 100.00)
+            ->build();
+
+        $html = $this->generator->generate($invoice);
+
+        $this->assertStringContainsString('Leitweg-ID', $html);
+        $this->assertStringContainsString('Steuernummer', $html);
+        $this->assertStringContainsString('30/123/45678', $html);
+        $this->assertStringNotContainsString('Ihre USt-IdNr.', $html);
+        $this->assertStringContainsString('Leistungszeitraum', $html);
+        $this->assertStringContainsString('01.10.2026 - 31.10.2026', $html);
+    }
+
+    public function test_payment_line_without_bic_and_bank_has_no_empty_brackets(): void {
+        $invoice = ERechnungDocumentBuilder::create('INV-2026-005')
+            ->withIssueDate(new DateTimeImmutable('2026-11-14'))
+            ->withSeller('Test GmbH', 'DE123456789')
+            ->withSellerAddress('Musterstraße 1', '12345', 'Musterstadt')
+            ->withSellerBankAccount('DE89370400440532013000')
+            ->withBuyer('Kunde AG')
+            ->withBuyerAddress('Kundenweg 42', '54321', 'Kundenstadt')
+            ->addLine('Test', 1, 100.00)
+            ->build();
+
+        $html = $this->generator->generate($invoice);
+
+        $this->assertStringContainsString('IBAN', $html);
+        $this->assertStringNotContainsString('BIC', $html);
+        $this->assertStringNotContainsString('()', $html);
+        // Ohne Kontakt keine leeren Zeilen "Tel: -" und "E-Mail: -"
+        $this->assertStringNotContainsString('Tel:', $html);
+        $this->assertStringNotContainsString('E-Mail:', $html);
+    }
+
     private function createTestInvoice(): \ERechnungToolkit\Entities\Document {
         return ERechnungDocumentBuilder::create('INV-2026-001')
             ->withIssueDate(new DateTimeImmutable('2026-01-25'))

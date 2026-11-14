@@ -13,7 +13,7 @@ declare(strict_types=1);
 namespace ERechnungToolkit\Generators;
 
 use CommonToolkit\Entities\HTML\{Document as HtmlDocument, Element};
-use ERechnungToolkit\Entities\{Document, InvoiceLine, PostalAddress, TaxSubtotal};
+use ERechnungToolkit\Entities\{Document, InvoiceLine, LeitwegId, PostalAddress, TaxSubtotal};
 use ERechnungToolkit\Enums\NoteSubjectCode;
 
 /**
@@ -243,8 +243,8 @@ CSS;
         $seller = $invoice->getSeller();
         $sellerAddress = $seller->getPostalAddress();
 
-        $sellerPhone = $seller->getContactPhone() ?? '-';
-        $sellerEmail = $seller->getContactEmail() ?? '-';
+        $sellerPhone = trim((string) $seller->getContactPhone());
+        $sellerEmail = trim((string) $seller->getContactEmail());
 
         // Container
         $container = Element::withAttributes('div', ['style' => 'text-align: right; font-size: 9pt; line-height: 150%;']);
@@ -263,9 +263,13 @@ CSS;
         // Leerzeile
         $container = $container->withChild(Element::create('div', '')->withStyle('height: 10pt;'));
 
-        // Kontakt
-        $container = $container->withChild(Element::create('div', "Tel: {$sellerPhone}"));
-        $container = $container->withChild(Element::create('div', "E-Mail: {$sellerEmail}"));
+        // Kontakt: nur, was angegeben ist
+        if ($sellerPhone !== '') {
+            $container = $container->withChild(Element::create('div', "Tel: {$sellerPhone}"));
+        }
+        if ($sellerEmail !== '') {
+            $container = $container->withChild(Element::create('div', "E-Mail: {$sellerEmail}"));
+        }
 
         return $container;
     }
@@ -322,16 +326,14 @@ CSS;
     }
 
     /**
-     * Erstellt den Meta-Bereich (Kundennr., Bestellnr., etc.).
+     * Erstellt den Meta-Bereich: nur Angaben, die die Rechnung trägt, jede
+     * unter ihrer Bedeutung. Die Käuferreferenz (BT-10) heißt Leitweg-ID nur,
+     * wenn sie eine ist; die eigene USt-IdNr. bzw. Steuernummer und das
+     * Leistungsdatum gehören nach § 14 Abs. 4 UStG auf jede Rechnung.
      */
     private function createMetaSection(Document $invoice): Element {
         $seller = $invoice->getSeller();
         $buyer = $invoice->getBuyer();
-
-        $customerNumber = $buyer->getEndpointId() ?? $invoice->getBuyerReference() ?? '-';
-        $orderReference = $invoice->getOrderReference() ?? '-';
-        $buyerReference = $invoice->getBuyerReference() ?? '';
-        $sellerVatId = $seller->getVatId() ?? '-';
 
         $paymentTermsShort = 'Fällig bei Erhalt';
         if ($invoice->getDueDate()) {
@@ -339,23 +341,27 @@ CSS;
             $paymentTermsShort = "{$days} Tage netto";
         }
 
-        // Header-Zeile
-        $headerRow = Element::withChildren('tr', [
-            Element::create('th', 'Kunden-Nr.'),
-            Element::create('th', 'Bestell-Nr.'),
-            Element::create('th', 'Leitweg-ID'),
-            Element::create('th', 'Ihre USt-IdNr.'),
-            Element::create('th', 'Zahlungsbedingungen'),
-        ]);
+        $buyerReference = $invoice->getBuyerReference();
+        $period = $invoice->getInvoicingPeriod();
+        $periodText = $period === null || $period->isEmpty()
+            ? null
+            : trim(($period->getStart()?->format('d.m.Y') ?? '') . ' - ' . ($period->getEnd()?->format('d.m.Y') ?? ''), ' -');
 
-        // Daten-Zeile
-        $dataRow = Element::withChildren('tr', [
-            Element::create('td', $customerNumber),
-            Element::create('td', $orderReference),
-            Element::create('td', $buyerReference),
-            Element::create('td', $sellerVatId),
-            Element::create('td', $paymentTermsShort),
-        ]);
+        /** @var array<string, ?string> $fields Überschrift => Wert; leere entfallen */
+        $fields = [
+            $buyerReference !== null && LeitwegId::looksLike($buyerReference) ? 'Leitweg-ID' : 'Ihre Referenz' => $buyerReference,
+            'Bestell-Nr.' => $invoice->getOrderReference(),
+            'Ihre USt-IdNr.' => $buyer->getVatId(),
+            $seller->getVatId() !== null && $seller->getVatId() !== '' ? 'Unsere USt-IdNr.' : 'Steuernummer' => $seller->getVatId() !== null && $seller->getVatId() !== ''
+                ? $seller->getVatId()
+                : $seller->getTaxRegistrationId(),
+            $periodText !== null ? 'Leistungszeitraum' : 'Leistungsdatum' => $periodText ?? $invoice->getDeliveryDate()?->format('d.m.Y'),
+            'Zahlungsbedingungen' => $paymentTermsShort,
+        ];
+        $fields = array_filter($fields, static fn (?string $value): bool => $value !== null && trim($value) !== '');
+
+        $headerRow = Element::withChildren('tr', array_map(static fn (string $label): Element => Element::create('th', $label), array_keys($fields)));
+        $dataRow = Element::withChildren('tr', array_map(static fn (string $value): Element => Element::create('td', $value), array_values($fields)));
 
         $table = Element::withChildren('table', [$headerRow, $dataRow]);
 
@@ -543,15 +549,22 @@ CSS;
             return null;
         }
 
-        $bankName = $seller->getBankName() ?? '';
+        // Leere BIC und Bank entfallen, statt als "BIC: ()" zu erscheinen
+        $text = "{$seller->getName()}, IBAN: {$seller->getIban()}";
+        $bic = trim((string) $seller->getBic());
+        if ($bic !== '') {
+            $text .= ", BIC: {$bic}";
+        }
+        $bankName = trim((string) $seller->getBankName());
+        if ($bankName !== '') {
+            $text .= " ({$bankName})";
+        }
 
         $container = Element::withAttributes('div', ['class' => 'payment-section']);
 
         $paragraph = Element::withAttributes('p', []);
         $paragraph = $paragraph->withChild(Element::create('strong', 'Zahlung: '));
-        $paragraph = $paragraph->withChild(
-            Element::create('span', "{$seller->getName()}, IBAN: {$seller->getIban()}, BIC: {$seller->getBic()} ({$bankName})")
-        );
+        $paragraph = $paragraph->withChild(Element::create('span', $text));
 
         $container = $container->withChild($paragraph);
         return $container;
