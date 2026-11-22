@@ -29,7 +29,8 @@ use DOMDocument;
  * unzulässige Elemente enthalten.
  */
 final class CiiSchemaValidator {
-    public const NAMESPACE = 'urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100';
+    /** XML-Namensraum von CII. Bis 0.23.x hiess die Konstante NAMESPACE - der Name ist ab PHP 8.6 deprecated. */
+    public const XML_NAMESPACE = 'urn:un:unece:uncefact:data:standard:CrossIndustryInvoice:100';
 
     private const ROOT = 'CrossIndustryInvoice';
 
@@ -51,8 +52,8 @@ final class CiiSchemaValidator {
     /**
      * Ob Wurzelelement und Namensraum ein CII-Dokument beschreiben.
      */
-    public function supports(string $rootLocalName, ?string $namespace = self::NAMESPACE): bool {
-        return $rootLocalName === self::ROOT && $namespace === self::NAMESPACE;
+    public function supports(string $rootLocalName, ?string $namespace = self::XML_NAMESPACE): bool {
+        return $rootLocalName === self::ROOT && $namespace === self::XML_NAMESPACE;
     }
 
     /**

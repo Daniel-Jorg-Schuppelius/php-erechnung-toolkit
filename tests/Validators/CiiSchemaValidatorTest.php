@@ -130,7 +130,7 @@ class CiiSchemaValidatorTest extends BaseTestCase {
         $dom = new \DOMDocument;
         $dom->loadXML($xml);
         $xpath = new \DOMXPath($dom);
-        $xpath->registerNamespace('rsm', CiiSchemaValidator::NAMESPACE);
+        $xpath->registerNamespace('rsm', CiiSchemaValidator::XML_NAMESPACE);
         $xpath->registerNamespace('ram', 'urn:un:unece:uncefact:data:standard:ReusableAggregateBusinessInformationEntity:100');
         $nodes = $xpath->query($query);
         $node = $nodes !== false ? $nodes->item(0) : null;
